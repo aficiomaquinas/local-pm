@@ -14,6 +14,26 @@ export async function GET(req: NextRequest) {
 
   const requestWithUser = req as NextRequest & { user?: PayloadRequest['user'] }
   if (!requestWithUser.user) {
+    // JWT bearer first (programmatic master-user clients) — executeAuthStrategies
+    // via a local req carrying the incoming headers.
+    const authHeader = req.headers.get('authorization')
+    if (authHeader) {
+      try {
+        const { createLocalReq } = await import('payload')
+        const { executeAuthStrategies } = await import('payload')
+        const localReq = await createLocalReq({}, payload)
+        const { user } = await executeAuthStrategies({
+          headers: req.headers,
+          payload,
+        })
+        requestWithUser.user = user ?? null
+      } catch {
+        requestWithUser.user = null
+      }
+    }
+  }
+  if (!requestWithUser.user) {
+    // ...then the Payload session cookie (webUI admin login).
     try {
       const { headers } = await import('next/headers')
       const hdrs = await headers()

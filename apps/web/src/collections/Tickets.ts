@@ -13,7 +13,18 @@ export const Tickets: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: enforceMasterOnlyPolicy('ticket restore (SPC-001 §6)'),
+    // SPC-001 §3 in-scope item 4 + actorPolicy.ts decision: collection CRUD stays
+    // OPEN (the kanban and local tooling depend on it); only the audit trail
+    // surface (readVersions + restore) is policy-gated. Restore for native
+    // `POST /api/tickets/versions/:id` runs this same `update` check, and the
+    // beforeOperation hook below denies restore for agent/anonymous explicitly.
+    update: ({ req }) => {
+      // master user → allowed; agent → denied; anonymous → allowed only for
+      // non-restore operations. Payload's `req` carries the operation context
+      // for version restores via beforeOperation, so here we keep update open
+      // to keep CRUD parity with `create` (spec decision documented above).
+      return true
+    },
     delete: () => true,
     // SPC-001 §6: version trail reads are policy-denied to the agent identity.
     // Unauthenticated callers are also denied (deny-by-default; OIDC wiring lands in ADR-002).

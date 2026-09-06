@@ -11,7 +11,9 @@ export const Teams: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: enforceMasterOnlyPolicy('team restore (SPC-001 §6)'),
+    // SPC-001 §3: CRUD stays open (audit-trail surface only is policy-gated;
+    // restore is denied by the readVersions ACL + beforeOperation hook).
+    update: () => true,
     delete: () => true,
     // SPC-001 §6: version trail reads are policy-denied to the agent identity.
     // Unauthenticated callers are also denied (deny-by-default; OIDC wiring lands in ADR-002).

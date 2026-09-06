@@ -7,12 +7,11 @@ services:
         DATABASE_URI: mongodb://mongodb:27017/local-pm
         PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
         NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
-    container_name: local-pm-app
+    container_name: local-pm-audit-app
     restart: unless-stopped
     ports:
-      # ADR-001/D1: loopback-only binding in local mode. Public exposure,
-      # if ever needed, is added exclusively as a reverse-proxy layer.
-      - "127.0.0.1:3010:3010"
+      # ADR-001/D1 loopback-only; 3011 = audit instance (3010 is the main local-pm)
+      - "127.0.0.1:3011:3010"
     environment:
       DATABASE_URI: mongodb://mongodb:27017/local-pm
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
@@ -22,7 +21,7 @@ services:
 
   mongodb:
     image: mongo:7.0
-    container_name: local-pm-mongodb
+    container_name: local-pm-audit-mongodb
     restart: unless-stopped
     # ADR-001/D1 + REQ-001.2: no host port publishing — reachable only via the
     # compose internal network (app -> mongodb:27017). Host-side inspection,
