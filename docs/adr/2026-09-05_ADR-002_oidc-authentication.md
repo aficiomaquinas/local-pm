@@ -5,327 +5,330 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`) |
 | **ID** | ADR-002 |
 | **Date** | 2026-09-05 |
-| **Status** | PROPOSED — pending user review. Sin commit de implementación; este ADR no implementa nada. |
+| **Status** | PROPOSED — pending user review. No implementation commit; this ADR implements nothing. |
 | **Context docs** | [REQ-002 — distinguished actor credentials & role policy](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001 — local-first, loopback-only, two-identity provisioning](2026-09-05_ADR-001_local-first-loopback-binding.md) · [SPC-001 — Audit trail & restore, §6 Access policy](../specs/2026-09-05_SPC-001_audit-trail-restore.md) |
 
 ---
 
 ## Context
 
-### Estado actual (verificado en código, 2026-09-05)
+### Current state (verified in code, 2026-09-05)
 
-- Las tres colecciones (`Projects`, `Teams`, `Tickets` en `src/collections/`) declaran
-  `access: { read/create/update/delete: () => true }`: **no existe autenticación**; `req.user`
-  es `undefined` en toda operación REST/MCP. `src/payload.config.ts` no registra ninguna
-  colección auth-enabled.
-- El MCP server (`mcp-server/`) se conecta con `LOCAL_PM_URL` únicamente, sin credenciales:
-  hoy un agente y el operador son indistinguibles en la capa de aplicación.
-- Payload registra el autor de un cambio a partir del usuario autenticado de la request: sin
-  auth, la atribución exigida por REQ-002.2 es imposible (constatación de REQ-002, «Estado actual»).
+- The three collections (`Projects`, `Teams`, `Tickets` in `src/collections/`) declare
+  `access: { read/create/update/delete: () => true }`: **there is no authentication**; `req.user`
+  is `undefined` on every REST/MCP operation. `src/payload.config.ts` registers no
+  auth-enabled collection.
+- The MCP server (`mcp-server/`) connects with `LOCAL_PM_URL` only, no credentials:
+  today an agent and the operator are indistinguishable at the application layer.
+- Payload records the author of a change from the request's authenticated user: without
+  auth, the attribution required by REQ-002.2 is impossible (REQ-002 finding, "Current state").
 
-### Modelo vigente y su dirección
+### Current model and its direction
 
-ADR-001 (ACCEPTED) fijó el provisionamiento de **dos identidades** — un single master user
-(humano) y un single master agent user (automatización), con credenciales distinguidas — y el
-perímetro loopback-only. REQ-002 hace normativo el resultado: credenciales inequívocas por actor
-(REQ-002.1), atribución sin ambigüedad (REQ-002.2) y exclusión por policy del agente respecto de
-audit trails y rollbacks (REQ-002.4; normativa en §6 del spec SPC-001).
+ADR-001 (ACCEPTED) established **two-identity** provisioning — a single master user
+(human) and a single master agent user (automation), with distinguished credentials — and the
+loopback-only perimeter. REQ-002 makes the outcome normative: unambiguous per-actor credentials
+(REQ-002.1), unambiguous attribution (REQ-002.2) and policy-based exclusion of agents from
+audit trails and rollbacks (REQ-002.4; normative in §6 of spec SPC-001).
 
-El operador plantea ahora un salto de nivel: adoptar un modelo de autenticación **OIDC-compliant,
-estándar y probado**, delegando la autenticación a un OIDC server externo a la app, con la
-consiguiente revisión del modelo de identidades (de 1 humano + 1 agente hacia **múltiples humanos
-y múltiples agentes**).
+The operator now raises the bar: adopt an **OIDC-compliant, standard, proven**
+authentication model, delegating authentication to an OIDC server external to the app, with the
+consequent revision of the identity model (from 1 human + 1 agent to **multiple humans and
+multiple agents**).
 
-### Consecuencias que este ADR debe resolver
+### Consequences this ADR must resolve
 
-1. La delegación a un IdP externo exige un modelo de datos de identidad en Payload (linkage a
-   `iss`/`sub` del token), no solo un login alternativo.
-2. REQ-002.4 debe seguir garantizado **bajo el nuevo esquema**: la exclusión del agente del trail
-   pasa a expresarse contra roles derivados de claims del token.
-3. Con N humanos y N agentes aparecen boundaries de datos (¿por grupos?) y la pregunta del
-   super-admin (¿panel separado o vista dentro del admin existente?).
-4. El provider OIDC **no** se elige aquí: el sistema debe ser agnóstico respecto de si el issuer
-   es un servicio self-hosted ya provisionado (o cloud), parametrizable por entorno; y debe existir
-   una vía de bootstrap mínimo sin webui para desarrollo.
+1. Delegating to an external IdP requires an identity data model in Payload (linkage to
+   token `iss`/`sub`), not just an alternative login.
+2. REQ-002.4 must remain guaranteed **under the new scheme**: the agent's exclusion from the
+   trail becomes expressed against roles derived from token claims.
+3. With N humans and N agents, data boundaries appear (by groups?) and the super-admin
+   question (separate panel or a view inside the existing admin?).
+4. The OIDC provider is **not** chosen here: the system must be agnostic as to whether the issuer
+   is an already-provisioned self-hosted service (or cloud), parameterizable per environment; and a
+   minimal no-webui bootstrap path must exist for development.
 
 ## Decision
 
-Propuesta (status PROPOSED, sujeta a revisión del usuario):
+Proposal (status PROPOSED, subject to user review):
 
-- **D1 — Autenticación OIDC-compliant delegada.** Payload no autentica credenciales propias:
-  valida tokens emitidos por un issuer OIDC configurable (`OIDC_ISSUER`, `OIDC_CLIENT_ID`,
-  `OIDC_CLIENT_SECRET` por env, discovery `.well-known/openid-configuration`). La app es un
-  relying party estándar; **la elección del provider queda fuera de este ADR** (authentik,
-  auth0, keycloak, better-auth, zitadel, etc. no se deciden): cualquier issuer compliant con
-  los flujos D2/D3 debe funcionar sin cambio de código.
-- **D2 — Humanos: Authorization Code flow + PKCE**, con cookies de sesión HTTP-only de Payload
-  tras validar el token (la app es server-rendered; no hay SPA separada que sufra intercepción de
-  código). Los claims del ID/access token (`sub`, `iss`, `groups`/`roles`) resuelven la identidad
-  y los roles de aplicación.
-- **D3 — Agentes: client credentials grant** (OAuth 2.0, RFC 6749 §4.4) para M2M: cada agente es
-  un client confidencial con su propio `client_id`/`client_secret` y obtiene access tokens
-  cortos; sin refresh tokens en este flujo. El agente **nunca** usa credenciales de un humano
-  (REQ-002.1).
-- **D4 — Actor type como claim de primera clase.** El rol de aplicación se deriva de claims del
-  token (`groups`/`roles`) con mapping explícito a un enum cerrado `AppRole` (`superadmin`,
-  `human`, `agent`); el tipo de actor (`human|agent`) es un campo persistido en la identidad de
-  Payload, no inferible del token en caliente a posteriori. El mapping es configuración, no código:
-  cambiar de provider no exige tocar las ACLs.
-- **D5 — readVersions exclusivo de humanos; restore igual.** La ACL `readVersions` de las tres
-  colecciones y la operación de restore (`POST /api/{slug}/versions/:id`) niegan todo rol `agent`,
-  sin excepción, cumpliendo REQ-002.4 y el §6 del spec SPC-001. Es tamper-evidence operativa: un
-  agente con capacidad de reescribir historia anula el propósito del audit trail.
-- **D6 — Provider OIDC mínimo self-bootstrapable solo para dev.** Como **opción de bootstrap en
-  desarrollo** (no como elección de proveedor), se documenta el perfil de un provider sin webui,
-  arrancable con config estática y clientes pre-declarados (el caso de dex, config-driven y sin
-  GUI administrativa), de modo que `docker compose up` en modo dev baste para probar el flujo
-  completo sin depender del IdP productivo ya provisionado.
-- **D7 — Super-admin como vista/ACL dentro del admin único** (no panel separado): ver sección
-  «Super admin recommendation».
+- **D1 — Delegated OIDC-compliant authentication.** Payload does not authenticate its own
+  credentials: it validates tokens issued by a configurable OIDC issuer (`OIDC_ISSUER`,
+  `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` via env, `.well-known/openid-configuration` discovery).
+  The app is a standard relying party; **provider choice is out of this ADR's scope** (authentik,
+  auth0, keycloak, better-auth, zitadel, etc. are not decided): any issuer compliant with
+  the D2/D3 flows must work without code changes.
+- **D2 — Humans: Authorization Code flow + PKCE**, with Payload HTTP-only session cookies
+  after token validation (the app is server-rendered; there is no separate SPA exposed to
+  code interception). ID/access token claims (`sub`, `iss`, `groups`/`roles`) resolve identity
+  and application roles.
+- **D3 — Agents: client credentials grant** (OAuth 2.0, RFC 6749 §4.4) for M2M: each agent is
+  a confidential client with its own `client_id`/`client_secret` and obtains short-lived
+  access tokens; no refresh tokens in this flow. An agent **never** uses a human's
+  credentials (REQ-002.1).
+- **D4 — Actor type as a first-class claim.** The application role derives from token claims
+  (`groups`/`roles`) with an explicit mapping to a closed `AppRole` enum (`superadmin`,
+  `human`, `agent`); the actor type (`human|agent`) is a persisted field on the Payload
+  identity, not inferred from the token after the fact. The mapping is configuration, not code:
+  switching providers requires no ACL changes.
+- **D5 — readVersions human-exclusive; restore likewise.** The `readVersions` ACL of the three
+  collections and the restore operation (`POST /api/{slug}/versions/:id`) deny every `agent` role,
+  without exception, fulfilling REQ-002.4 and §6 of spec SPC-001. This is operational
+  tamper-evidence: an agent able to rewrite history nullifies the audit trail's purpose.
+- **D6 — Minimal self-bootstrapable OIDC provider for dev only.** As a **development bootstrap
+  option** (not a provider choice), this ADR documents the profile of a no-webui provider,
+  startable with static config and pre-declared clients (dex's case: config-driven, no
+  administrative GUI), so that `docker compose up` in dev mode suffices to exercise the full
+  flow without depending on the already-provisioned production IdP.
+- **D7 — Super-admin as a view/ACL inside the single admin** (no separate panel): see the
+  "Super admin recommendation" section.
 
 ## Data Model
 
-El modelo de datos propuesto (contratos TypeScript; las colecciones concretas y `payload-types.ts`
-se generan al implementar — este ADR no implementa):
+The proposed data model (TypeScript contracts; the concrete collections and `payload-types.ts`
+are generated at implementation time — this ADR implements nothing):
 
 ```ts
 // ── Tipos de identidad ──────────────────────────────────────────────────────
 
-/** Rol de aplicación (cerrado). Derivado de claims del token en cada login/exchange. */
+/** Application role (closed). Derived from token claims on every login/exchange. */
 export type AppRole = 'superadmin' | 'human' | 'agent'
 
-/** Naturaleza del actor, persistida. Conduce las ACLs estructurales (REQ-002.4). */
+/** Actor nature, persisted. Drives the structural ACLs (REQ-002.4). */
 export type ActorType = 'human' | 'agent'
 
-/** Canal de entrada, para atribución inequívoca (REQ-002.2). */
+/** Entry channel, for unambiguous attribution (REQ-002.2). */
 export type AuthChannel = 'webui' | 'mcp' | 'rest'
 
-/** Identidad externa OIDC: el par (iss, sub) es la clave única e inmutable del actor. */
+/** External OIDC identity: the (iss, sub) pair is the actor's unique, immutable key. */
 export interface OidcIdentity {
-  /** Issuer Identifier del token (https, exacto tal como lo emite el provider). */
+  /** Token Issuer Identifier (https, exact as emitted by the provider). */
   iss: string
-  /** Subject del token, único dentro del issuer. */
+  /** Token Subject, unique within the issuer. */
   sub: string
-  /** Grupos/roles crudos recibidos en el login (auditoría del mapping). */
+  /** Raw groups/roles received at login (mapping audit). */
   rawGroups: string[]
 }
 
-/** Documento de la colección auth-enabled `users` (Payload). */
+/** Document of the auth-enabled `users` collection (Payload). */
 export interface LocalPmUser {
   id: string
-  email?: string            // los agentes M2M pueden no tener email real
+  email?: string            // M2M agents may have no real email
   name?: string
-  actorType: ActorType      // 'human' | 'agent' — no se deriva en caliente
-  roles: AppRole[]          // derivado de claims por el mapping D4
-  identity: OidcIdentity | null  // null solo en migración temporal (fase 1 → 2)
-  active: boolean           // kill-switch local sin esperar al IdP
-  // Campos auth nativos de Payload (hash/salt/email) presentes según estrategia
+  actorType: ActorType      // 'human' | 'agent' — never inferred on the fly
+  roles: AppRole[]          // derived from claims via the D4 mapping
+  identity: OidcIdentity | null  // null only during temporary migration (phase 1 → 2)
+  active: boolean           // local kill-switch without waiting on the IdP
+  // Native Payload auth fields (hash/salt/email) present per strategy
 }
 
-/** Claims mínimos que la app exige poder leer del token (config por provider). */
+/** Minimum claims the app must be able to read from the token (per-provider config). */
 export interface OidcClaimsMapping {
-  groupsClaim: string       // p.ej. 'groups' | 'roles' | 'local_pm_roles'
-  roles: Record<string, AppRole>  // claim value → AppRole (config, no código)
-  superAdminGroup: string   // grupo que mapea a 'superadmin'
-  agentClientIds: string[]  // client_id que la app reconoce como actores agente
+  groupsClaim: string       // e.g. 'groups' | 'roles' | 'local_pm_roles'
+  roles: Record<string, AppRole>  // claim value → AppRole (config, not code)
+  superAdminGroup: string   // group mapping to 'superadmin'
+  agentClientIds: string[]  // client_id values the app recognizes as agent actors
 }
 
-/** Resolución de actor para una request autenticada (lo que verán las ACLs). */
+/** Actor resolution for an authenticated request (what the ACLs see). */
 export interface AuthenticatedActor {
   user: LocalPmUser
   roles: readonly AppRole[]
-  isAgent: boolean          // azúcar de `roles.includes('agent')` para ACLs
-  channel: AuthChannel      // webui | mcp | rest — estampado en auditoría
+  isAgent: boolean          // sugar for `roles.includes('agent')` in ACLs
+  channel: AuthChannel      // webui | mcp | rest — stamped into audit
 }
 ```
 
-Cambios de fondo respecto del modelo 1+1 de ADR-001/REQ-002:
+Structural changes relative to the ADR-001/REQ-002 1+1 model:
 
-1. **Linkage `(iss, sub)`**: la unicidad del actor pasa a ser `(identity.iss, identity.sub)`
-   (índice único compuesto en Mongo). El email deja de ser la clave de identidad; es un atributo.
-2. **De 1+1 a N+N**: nada en el modelo acota la cantidad de `LocalPmUser`; el «single master» de
-   ADR-001 pasa a ser caso particular (el primer usuario provisto, rol `superadmin` o `human`
-   según decisión de provisionamiento — ver Open questions). La unicidad y distinción de
-   credenciales de REQ-002.1 se conserva: cada actor tiene su client/identidad propia.
-3. **Roles derivados, tipo persistido**: `roles` se re-deriva del token en cada autenticación
-   (revocación efectiva al expirar el token), pero `actorType` es persistido: las garantías
-   estructurales de REQ-002.4 no dependen de que el IdP emita o no un claim en un momento dado.
-4. **Atribución**: el par `(actor, channel)` queda disponible en `req.user` + `req` para que el
-   módulo de audit trail (SPC-001, gap G-1) estampe autor y canal sin ambigüedad (REQ-002.2).
+1. **`(iss, sub)` linkage**: actor uniqueness becomes `(identity.iss, identity.sub)`
+   (composite unique index in Mongo). Email stops being the identity key; it is an attribute.
+2. **From 1+1 to N+N**: nothing in the model bounds the number of `LocalPmUser`; ADR-001's
+   "single master" becomes a special case (the first provisioned user, role `superadmin` or
+   `human` per provisioning decision — see Open questions). REQ-002.1's credential uniqueness
+   and distinction are preserved: every actor has its own client/identity.
+3. **Derived roles, persisted type**: `roles` re-derives from the token on every
+   authentication (effective revocation on token expiry), but `actorType` is persisted: the
+   structural guarantees of REQ-002.4 do not depend on whether the IdP emits a claim at a
+   given moment.
+4. **Attribution**: the `(actor, channel)` pair becomes available in `req.user` + `req` so the
+   audit trail module (SPC-001, gap G-1) can stamp author and channel unambiguously (REQ-002.2).
 
 ## ACL mapping
 
-Mapa normativo REQ-002.4 / SPC-001 §6 → roles propuestos:
+Normative map REQ-002.4 / SPC-001 §6 → proposed roles:
 
-| Operación (Payload) | `agent` | `human` | `superadmin` | Norma |
+| Operation (Payload) | `agent` | `human` | `superadmin` | Norm |
 |---|---|---|---|---|
-| `read` (projects/teams/tickets) | ✓ | ✓ | ✓ | REQ-002.1 (identificado) |
+| `read` (projects/teams/tickets) | ✓ | ✓ | ✓ | REQ-002.1 (identified) |
 | `create/update/delete` (colecciones de negocio) | ✓ | ✓ | ✓ | REQ-002.1 |
 | `readVersions` (GET `/api/{slug}/versions*`) | **✗ DENIED** | ✓ | ✓ | REQ-002.4, SPC-001 §6 |
 | Restore (`POST /api/{slug}/versions/:id`) | **✗ DENIED** | ✓ | ✓ | REQ-002.4, SPC-001 §6 |
 | `admin` (acceso al Admin Panel) | ✗ | ✓ | ✓ | Decision D7 |
-| Gestión de `users` (invitar, activar/desactivar) | ✗ | ✗ | ✓ | Boundary de administración |
-| Mapping de claims → roles (config) | — | — | — | Decision D4 |
+| `users` management (invite, activate/deactivate) | ✗ | ✗ | ✓ | Administration boundary |
+| Claims → roles mapping (config) | — | — | — | Decision D4 |
 
 Notas:
 
-- La denegación al agente es **por policy (ACL), no por convención**: con credencial de agente
-  válida, `readVersions` y restore responden denegado. SPC-001 §7.7 ya exige ese test.
-- Con boundaries por grupos (fase 3, Migration path), `read` de colecciones de negocio puede
-  devolver **query constraints** (Payload soporta devolver una query en lugar de boolean,
-  restringiendo documentos por grupo del actor) en lugar de `true` global.
-- `create/update/delete` de negocio sigue permitido a agentes: es su función (mutaciones de
-  tickets/projects/teams por MCP/REST, REQ-002 «Modelo de provisionamiento»). La línea divisoria
-  es la historia, no la operación.
+- The agent denial is **by policy (ACL), not by convention**: with a valid agent credential,
+  `readVersions` and restore respond denied. SPC-001 §7.7 already mandates that test.
+- With group-based boundaries (phase 3, Migration path), business-collection `read` may
+  return **query constraints** (Payload supports returning a query instead of a boolean,
+  restricting documents by the actor's group) instead of a global `true`.
+- Business `create/update/delete` remains allowed for agents: that is their function (ticket/
+  project/team mutations via MCP/REST, REQ-002 "Provisioning model"). The dividing line is the
+  history, not the operation.
 
 ## Code impact
 
-Áreas de cambio identificadas (sin implementar):
+Identified change areas (not implemented):
 
-1. **Estrategia de autenticación en Payload.** Payload 3.x soporta colecciones auth-enabled con
-   estrategias custom (`auth.strategies`, `authenticate` que recibe headers y devuelve el usuario
-   de Payload o null) y `disableLocalStrategy` cuando la estrategia nativa email/password no se
-   usa. Propuesta: colección `users` auth-enabled con estrategia OIDC que valida el token
-   (firma vía JWKS del issuer, `iss`, `aud`, expiración) y resuelve `AuthenticatedActor`; se
-   conserva el flujo de cookies HTTP-only de Payload para la sesión del admin.
-   Alternativa integradora: plugin comunitario `payload-plugin-oidc` existe (sign-in con provider
-   propio, botón en login, creación opcional de usuario, callback configurable), pero su alcance
-   cubre el login humano y no el client-credentials de agentes ni el mapping de roles de este
-   ADR; su mantenimiento y compatibilidad con Payload 3.x deben evaluarse en implementación.
-2. **Endpoints de callback / exchange** (rutas Next.js server-side): authorization code + PKCE
-   para humanos; validación de bearer token para M2M.
-3. **MCP server**: añadir flujo client credentials (token endpoint del issuer, cache del token
-   hasta expiración, `Authorization: Bearer` en cada fetch). Hoy usa `LOCAL_PM_URL` a secas.
-4. **ACLs**: reemplazar `access: () => true` por las funciones del «ACL mapping»; añadir
-   `readVersions` explícito cuando SPC-001 introduzca `versions: true`.
-5. **Admin UI login**: botón/redirect «Sign in con <issuer>» en la vista de login del admin
-   (Payload permite customizar vistas y componentes del admin); los agentes no acceden al admin.
-6. **Tipado**: interfaces del «Data Model» en `src/types/`; `payload-types.ts` regenerado al
-   añadir la colección auth-enabled.
+1. **Authentication strategy in Payload.** Payload 3.x supports auth-enabled collections with
+   custom strategies (`auth.strategies`, an `authenticate` that receives headers and returns the
+   Payload user or null) and `disableLocalStrategy` when the native email/password strategy is
+   not used. Proposal: an auth-enabled `users` collection with an OIDC strategy that validates
+   the token (signature via the issuer's JWKS, `iss`, `aud`, expiry) and resolves an
+   `AuthenticatedActor`; Payload's HTTP-only cookie flow is kept for the admin session.
+   Integrating alternative: the community plugin `payload-plugin-oidc` exists (sign-in with a
+   custom provider, login button, optional user creation, configurable callback), but its scope
+   covers human login only — not agent client-credentials nor this ADR's role mapping; its
+   maintenance and Payload 3.x compatibility must be evaluated at implementation time.
+2. **Callback / exchange endpoints** (Next.js server-side routes): authorization code + PKCE
+   for humans; bearer token validation for M2M.
+3. **MCP server**: add a client credentials flow (issuer token endpoint, token cache until
+   expiry, `Authorization: Bearer` on every fetch). Today it uses bare `LOCAL_PM_URL`.
+4. **ACLs**: replace `access: () => true` with the "ACL mapping" functions; add explicit
+   `readVersions` when SPC-001 introduces `versions: true`.
+5. **Admin UI login**: a "Sign in with <issuer>" button/redirect on the admin login view
+   (Payload allows customizing admin views and components); agents do not access the admin.
+6. **Typing**: the "Data Model" interfaces in `src/types/`; `payload-types.ts` regenerated when
+   the auth-enabled collection is added.
 
 ## DB impact
 
-- **Nueva colección auth-enabled `users`** (Payload auth: campos `hash`/`salt`/`email` nativos
-  según estrategia). Documentos: shape `LocalPmUser`.
-- **Índices**: único compuesto `(identity.iss, identity.sub)`; único en `email` cuando exista;
-  índice en `actorType` para consultas administrativas.
-- **Colecciones `_slug_versions`** (futuras, SPC-001): sin cambio por este ADR; su ACL
-  `readVersions` es la que queda restringida.
-- **Migración de datos existentes**: hoy no hay usuarios; no hay backfill de identidad. El
-  bootstrap crea el/los primeros usuarios (fase 1 del Migration path). Payload genera el schema
-  (colecciones Mongo se crean en primera escritura); no se requieren scripts de migración de
-  datos, solo el provisionamiento inicial.
+- **New auth-enabled `users` collection** (Payload auth: native `hash`/`salt`/`email` fields
+  per strategy). Documents: `LocalPmUser` shape.
+- **Indexes**: composite unique `(identity.iss, identity.sub)`; unique on `email` when present;
+  index on `actorType` for administrative queries.
+- **`_slug_versions` collections** (future, SPC-001): unchanged by this ADR; their
+  `readVersions` ACL is what gets restricted.
+- **Existing data migration**: there are no users today; no identity backfill. The bootstrap
+  creates the first user(s) (phase 1 of the Migration path). Payload generates the schema
+  (Mongo collections are created on first write); no data migration scripts are required,
+  only initial provisioning.
 
 ## Migration path
 
-Fases propuestas (incrementales, cada una deja el sistema coherente):
+Proposed phases (incremental; each leaves the system coherent):
 
-1. **Fase 0 — hoy**: `access: () => true` en todo; sin auth; sin atribución.
-2. **Fase 1 — dos identidades sobre OIDC (cumple REQ-002 en su forma 1+1):** issuer OIDC
-   parametrizable; se provisionan exactamente dos identidades (master user humano por code+PKCE;
-   master agent user por client credentials). ACLs del «ACL mapping» activas (agentes sin
-   versions/restore). ADR-001 D2 se satisface con el nuevo mecanismo.
-3. **Fase 2 — N humanos / N agentes:** alta de identidades adicionales (humanos invitados;
-   un client credentials por agente, cada uno su identidad). Sin cambio de esquema: el modelo
-   (iss, sub) ya es N-compatible. Boundaries por grupos activables aquí: grupos del IdP →
-   query constraints en `read` por colección (p. ej. un grupo `team-x` solo ve sus proyectos).
-4. **Fase 3 — super-admin y administración de identidades:** rol `superadmin` gestiona `users`
-   (alta/baja/desactivación), revisa el mapping de claims y audita la atribución. La app nunca
-   fue multi-tenant y no lo será en esta fase (ADR-001 non-goals intactos).
+1. **Phase 0 — today**: `access: () => true` everywhere; no auth; no attribution.
+2. **Phase 1 — two identities over OIDC (fulfills REQ-002 in its 1+1 form):** parameterizable
+   OIDC issuer; exactly two identities provisioned (human master user via code+PKCE;
+   master agent user via client credentials). "ACL mapping" ACLs active (agents without
+   versions/restore). ADR-001 D2 is satisfied by the new mechanism.
+3. **Phase 2 — N humans / N agents:** onboarding of additional identities (invited humans;
+   one client credentials per agent, each with its own identity). No schema change: the
+   (iss, sub) model is already N-compatible. Group boundaries become activatable here: IdP
+   groups → query constraints on per-collection `read` (e.g. a `team-x` group sees only its
+   projects).
+4. **Phase 3 — super-admin and identity administration:** the `superadmin` role manages `users`
+   (on/offboarding, deactivation), reviews the claims mapping and audits attribution. The app
+   never was multi-tenant and will not become so in this phase (ADR-001 non-goals intact).
 
-El orden garantiza que REQ-002.1–.4 quedan cumplidos desde la fase 1, y que las fases 2–3 son
-extensiones de población y administración, no rediseños.
+The order guarantees REQ-002.1–.4 are fulfilled from phase 1 onward, and that phases 2–3 are
+population and administration extensions, not redesigns.
 
 ## Super admin recommendation
 
-**Recomendación: admin único con ACL/condicionales por rol `superadmin` (admin tab / vistas
-custom), NO panel separado.** Fundamento:
+**Recommendation: a single admin with `superadmin`-role ACL/conditionals (admin tab / custom
+views), NOT a separate panel.** Rationale:
 
-1. **Payload ya da el mecanismo**: el acceso al Admin Panel se gobierna con la función `admin`
-   de las colecciones auth-enabled, y las vistas/capacidades se condicionan por rol (custom views,
-   componentes que ocultan o muestran según `req.user`). Un segundo admin implicaría un segundo
-   config de Payload o un gates proxy delante — más superficie, más despliegue, cero ganancia
-   para una app loopback-first.
-2. **Escala del caso**: local-pm es local-first con un puñado de identidades. La separación
-   física de panel tiene sentido cuando hay operadores que no deben ni conocer la existencia del
-   plano administrativo; aquí el mismo operador es super-admin.
-3. **Coste de reversión**: si algún día creciera, elevar la vista de administración a ruta propia
-   es un refactor acotado; fusionar dos paneles duplicados, no.
-   Forma concreta propuesta: vista custom del admin (`/admin/identity`, por ejemplo) — listado de
-   `users`, activar/desactivar, ver mapping de claims vigente — visible solo con rol `superadmin`
-   (y protegida server-side, no solo oculta en UI: las custom views de Payload son públicas por
-   defecto si no se aseguran).
+1. **Payload already provides the mechanism**: Admin Panel access is governed by the `admin`
+   function of auth-enabled collections, and views/capabilities are conditioned by role (custom
+   views, components that hide or show based on `req.user`). A second admin would imply a second
+   Payload config or a gating proxy in front — more surface, more deployment, zero gain
+   for a loopback-first app.
+2. **Case scale**: local-pm is local-first with a handful of identities. Physical panel
+   separation makes sense when there are operators who must not even know the administrative
+   plane exists; here the same operator is the super-admin.
+3. **Reversal cost**: if it ever grew, promoting the administration view to its own route is a
+   scoped refactor; merging two duplicated panels is not.
+   Concrete proposed form: a custom admin view (`/admin/identity`, say) — `users` listing,
+   activate/deactivate, current claims mapping — visible only with the `superadmin` role
+   (and protected server-side, not merely hidden in UI: Payload custom views are public by
+   default unless secured).
 
 ## Alternatives considered
 
-| Alternativa | Veredicto |
+| Alternative | Verdict |
 |---|---|
-| **Status quo (sin auth)** | Rechazada: viola REQ-002.1–.3 con datos productivos; atribución nula. |
-| **Auth embebida Payload (email/password + API keys, sin OIDC)** | Seria y simple: `auth` nativo + `useAPIKey: true` para el agente (Authorization: `<slug> API-Key <key>`), cumple 1+1 y el ACL mapping con menos piezas. **Razones para preferir OIDC**: (a) dirección del operador hacia estándar probado y delegación de credenciales a un IdP; (b) MFA/passkeys/federación quedan del lado del provider; (c) N humanos sin gestionar passwords en la app; (d) revocación por token corto frente a API keys no expirantes. Queda registrada como fallback legítimo si el provider OIDC se considera excesivo para la fase 1. |
-| **NextAuth/Auth.js (o Better Auth) como capa delante de Payload** | Viable y popular, pero introduce un segundo runtime de auth con su propio session store y dos fuentes de verdad de identidad que sincronizar (adapter custom hacia `users` de Payload). La estrategia custom nativa de Payload logra lo mismo dentro de un solo modelo (el usuario validado es un documento Payload desde el primer momento). Rechazada por duplicación, no por incapacidad. |
-| **Plugin comunitario `payload-plugin-oidc`** | Cubre login humano con provider propio y creación de usuario, pero no client credentials para agentes ni el actor-type/roles mapping de este ADR. Evaluarse como base o referencia en implementación; no adoptado como decisión. |
-| **Panel de super-admin separado** | Rechazada: ver «Super admin recommendation». |
-| **Elegir provider OIDC ahora (keycloak/authentik/zitadel/dex/…)** | Fuera de alcance por diseño del encargo: el ADR fija el *contrato* (issuer parametrizable, flujos estándar, claims mapeables); el provider es sustituible. Dex se menciona solo como *perfil de bootstrap dev* (config-driven, sin webui), no como elección. |
-| **Agentes con usuario humano compartido** | Rechazada: viola REQ-002.1 y destruye la atribución (REQ-002.2/.3). |
+| **Status quo (no auth)** | Rejected: violates REQ-002.1–.3 with productive data; null attribution. |
+| **Embedded Payload auth (email/password + API keys, no OIDC)** | Serious and simple: native `auth` + `useAPIKey: true` for the agent (`Authorization: <slug> API-Key <key>`), satisfies 1+1 and the ACL mapping with fewer pieces. **Reasons to prefer OIDC**: (a) the operator's direction toward a proven standard and credential delegation to an IdP; (b) MFA/passkeys/federation live on the provider side; (c) N humans without managing passwords in the app; (d) short-token revocation versus non-expiring API keys. Recorded as a legitimate fallback should the OIDC provider be considered excessive for phase 1. |
+| **NextAuth/Auth.js (or Better Auth) as a layer in front of Payload** | Viable and popular, but it introduces a second auth runtime with its own session store and two identity sources of truth to synchronize (custom adapter toward Payload `users`). Payload's native custom strategy achieves the same within a single model (the validated user is a Payload document from the start). Rejected for duplication, not for incapability. |
+| **Community plugin `payload-plugin-oidc`** | Covers human login with a custom provider and user creation, but not agent client credentials nor this ADR's actor-type/roles mapping. To be evaluated as a base or reference at implementation time; not adopted as a decision. |
+| **Separate super-admin panel** | Rejected: see "Super admin recommendation". |
+| **Choosing an OIDC provider now (keycloak/authentik/zitadel/dex/…)** | Out of scope by design of the assignment: the ADR fixes the *contract* (parameterizable issuer, standard flows, mappable claims); the provider is swappable. Dex is mentioned only as a *dev bootstrap profile* (config-driven, no webui), not as a choice. |
+| **Agents sharing a human user** | Rejected: violates REQ-002.1 and destroys attribution (REQ-002.2/.3). |
 
 ## Open questions
 
-1. **Provider dev para el bootstrap**: perfil dex (config estática, sin webui, contenedor único)
-   frente a alternativas igual de headless. Decisión de implementación, no de este ADR.
-2. **¿El primer humano provisionado es `superadmin` o `human`?** Propuesta por defecto:
-   `superadmin` (fase 3 necesita dueño desde el día uno), a confirmar por el operador.
-3. **¿Los agentes se representan como clients M2M del IdP (tokens sin usuario) o como documentos
-   `users` con `actorType: 'agent'` + client credentials?** Propuesta: ambos a la vez (client en
-   el IdP + documento espejo con roles y `active`), para poder desactivar localmente sin tocar el
-   IdP. A confirmar.
-4. **Boundaries por grupos: ¿lectura por query constraint desde fase 2, o global hasta nueva
-   decisión?** Propuesta: global (todos los identificados leen todo) en fase 1–2; constraints por
-   grupo cuando exista la primera necesidad real.
-5. **Refresh tokens de humanos**: cookies de sesión con expiración corta + auto-refresh del admin
-   frente a refresh tokens del provider. Detalle de implementación.
+1. **Dev provider for the bootstrap**: the dex profile (static config, no webui, single
+   container) versus equally headless alternatives. An implementation decision, not this
+   ADR's.
+2. **Is the first provisioned human `superadmin` or `human`?** Default proposal:
+   `superadmin` (phase 3 needs an owner from day one), to be confirmed by the operator.
+3. **Are agents represented as IdP M2M clients (tokens without a user) or as `users` documents
+   with `actorType: 'agent'` + client credentials?** Proposal: both at once (a client in
+   the IdP + a mirror document with roles and `active`), so they can be deactivated locally
+   without touching the IdP. To be confirmed.
+4. **Group boundaries: query-constrained reads from phase 2, or global until a new
+   decision?** Proposal: global (every identified actor reads everything) in phases 1–2; group
+   constraints when the first real need appears.
+5. **Human refresh tokens**: short-expiry session cookies + admin auto-refresh versus provider
+   refresh tokens. An implementation detail.
 
 ## Verification criteria
 
-Este ADR se verifica (cuando se implemente) si:
+This ADR verifies (when implemented) if:
 
-1. Toda mutación sin credenciales es rechazada (401) en REST, MCP y admin.
-2. Un cambio vía webUI atribuye al humano; uno vía MCP atribuye al agente; ambos quedan
-   distinguibles por `(actor, channel)` — requisito SPC-001 §7.7 / REQ-002.2.
-3. Con credencial de agente válida: `GET /api/tickets/versions` → denegado; `POST
-   /api/tickets/versions/:id` → denegado; el master user obtiene 200 en ambas (REQ-002.4).
-4. Cambiar `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` a otro provider compliant no
-   exige cambios de código (solo config y mapping de claims).
-5. Dos humanos y dos agentes operan simultáneamente con atribución correcta (fase 2).
-6. El rol `superadmin` accede a la administración de identidades; `human` no la ve; `agent`
-   tampoco y no accede al admin.
-7. El modo dev arranca el flujo OIDC completo con el provider de bootstrap sin intervención de
-   webui del provider (D6).
+1. Every mutation without credentials is rejected (401) on REST, MCP and admin.
+2. A change via webUI attributes to the human; one via MCP attributes to the agent; both are
+   distinguishable by `(actor, channel)` — SPC-001 §7.7 / REQ-002.2 requirement.
+3. With a valid agent credential: `GET /api/tickets/versions` → denied; `POST
+   /api/tickets/versions/:id` → denied; the master user gets 200 on both (REQ-002.4).
+4. Pointing `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` at another compliant provider
+   requires no code changes (config and claims mapping only).
+5. Two humans and two agents operate simultaneously with correct attribution (phase 2).
+6. The `superadmin` role accesses identity administration; `human` does not see it; `agent`
+   neither, and does not access the admin.
+7. Dev mode boots the full OIDC flow with the bootstrap provider without any provider
+   webui interaction (D6).
 
 ## References
 
-Todo lo citado fue leído para este ADR (búsquedas donsetch + fetch de las URLs resultantes;
-ninguna URL adivinada):
+Everything cited was read for this ADR (donsetch searches + fetch of the resulting URLs;
+no guessed URLs):
 
-| Fuente | Qué aportó |
+| Source | What it contributed |
 |---|---|
 | [Payload — Authentication Overview](https://payloadcms.com/docs/authentication/overview) | Opciones de `auth` en colecciones (`tokenExpiration`, `useAPIKey`, `useSessions`, `disableLocalStrategy`, `strategies`), estrategias nativas (cookies HTTP-only, JWT, API keys) y auto-login de desarrollo. |
-| [Payload — Custom Strategies](https://payloadcms.com/docs/authentication/custom-strategies) | Mecánica de una estrategia custom (`authenticate` con `payload`/`headers` → user o null; `disableLocalStrategy: true`), base del Code impact §1. |
-| [Payload — API Key Strategy](https://payloadcms.com/docs/authentication/api-keys) | `useAPIKey: true`, header `Authorization: <slug> API-Key <key>`, cifrado de keys en DB, `disableLocalStrategy` para API-key-only; usada en la alternativa «auth embebida». |
-| [Payload — Collection Access Control](https://payloadcms.com/docs/access-control/collections) | Funciones `create/read/update/delete/admin/unlock/readVersions` por colección; `readVersions` restringe también la UI de versiones; queries como constraints — base del ACL mapping y de los boundaries por grupos. |
-| [Payload — Customizing Views](https://payloadcms.com/docs/custom-components/custom-views) | Custom views del admin (`admin.components.views`), seguro de las mismas (públicas por defecto) — base de la recomendación de super-admin. |
-| [payload-plugin-oidc (GitHub, gousta)](https://github.com/gousta/payload-plugin-oidc) | Plugin comunitario OIDC existente: features (sign-in con provider propio, botón de login, creación opcional de usuario, mapping de role desde userinfo) y sus límites frente a este ADR. |
-| [dexidp/dex (GitHub)](https://github.com/dexidp/dex) | Dex como OIDC provider federado config-driven; ejemplo de ID token con claims `iss/sub/aud/groups`; tabla de conectores y soporte de `groups` claim — perfil D6 de bootstrap dev. |
-| [Pocket ID (GitHub)](https://github.com/pocket-id/pocket-id) | OIDC provider self-hosted mínimo (certificado OIDC, passkeys, docker) — contraste de peso para el bootstrap dev; su webui de administración lo aleja del perfil sin-webui. |
-| [oauth.net — Client Credentials Grant](https://oauth.net/2/grant-types/client-credentials/) | Definición del flujo M2M (RFC 6749 §4.4): sin redirect, sin usuario, sin refresh token; tokens cortos — base de D3. |
-| [RFC 6749 — The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/info/rfc6749/) | Marco normativo del grant client credentials citado por oauth.net. |
-| [Auth0 — Authorization Code Flow with PKCE](https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce) | Mecánica code+PKCE paso a paso (code_verifier/challenge, id+access token) — base de D2. |
-| [Microsoft Entra — client credentials flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow) | Flujo M2M «two-legged», permisos a la aplicación misma, ausencia de refresh tokens, autorización por ACL de client ids — refuerza D3 y el campo `agentClientIds`. |
-| [Zitadel — Zitadel vs Keycloak](https://zitadel.com/blog/zitadel-vs-keycloak) | Contraste de providers self-hosted (protocolos soportados, multi-tenancy, audit trail del IdP) — contexto para dejar fuera la elección de provider sin ignorarla. |
+| [Payload — Custom Strategies](https://payloadcms.com/docs/authentication/custom-strategies) | Mechanics of a custom strategy (`authenticate` receiving `payload`/`headers` → user or null; `disableLocalStrategy: true`), basis of Code impact §1. |
+| [Payload — API Key Strategy](https://payloadcms.com/docs/authentication/api-keys) | `useAPIKey: true`, `Authorization: <slug> API-Key <key>` header, key encryption in DB, `disableLocalStrategy` for API-key-only; used in the "embedded auth" alternative. |
+| [Payload — Collection Access Control](https://payloadcms.com/docs/access-control/collections) | Per-collection `create/read/update/delete/admin/unlock/readVersions` functions; `readVersions` also restricts the versions UI; queries as constraints — basis of the ACL mapping and group boundaries. |
+| [Payload — Customizing Views](https://payloadcms.com/docs/custom-components/custom-views) | Admin custom views (`admin.components.views`), their security (public by default) — basis of the super-admin recommendation. |
+| [payload-plugin-oidc (GitHub, gousta)](https://github.com/gousta/payload-plugin-oidc) | Existing community OIDC plugin: features (sign-in with a custom provider, login button, optional user creation, role mapping from userinfo) and its limits against this ADR. |
+| [dexidp/dex (GitHub)](https://github.com/dexidp/dex) | Dex as a config-driven federated OIDC provider; sample ID token with `iss/sub/aud/groups` claims; connector table and `groups` claim support — the D6 dev-bootstrap profile. |
+| [Pocket ID (GitHub)](https://github.com/pocket-id/pocket-id) | Minimal self-hosted OIDC provider (OIDC cert, passkeys, docker) — weight contrast for the dev bootstrap; its admin webui keeps it away from the no-webui profile. |
+| [oauth.net — Client Credentials Grant](https://oauth.net/2/grant-types/client-credentials/) | Definition of the M2M flow (RFC 6749 §4.4): no redirect, no user, no refresh token; short tokens — basis of D3. |
+| [RFC 6749 — The OAuth 2.0 Authorization Framework](https://www.rfc-editor.org/info/rfc6749/) | Normative framework of the client credentials grant cited by oauth.net. |
+| [Auth0 — Authorization Code Flow with PKCE](https://auth0.com/docs/get-started/authentication-and-authorization-flow/authorization-code-flow-with-pkce) | Step-by-step code+PKCE mechanics (code_verifier/challenge, id+access token) — basis of D2. |
+| [Microsoft Entra — client credentials flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow) | "Two-legged" M2M flow, permissions to the application itself, absence of refresh tokens, authorization by client-id ACL — reinforces D3 and the `agentClientIds` field. |
+| [Zitadel — Zitadel vs Keycloak](https://zitadel.com/blog/zitadel-vs-keycloak) | Self-hosted provider contrast (supported protocols, multi-tenancy, IdP audit trail) — context for leaving provider choice out without ignoring it. |
 
-Referencias internas: [REQ-002](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md)
-(Requerimiento contrastado — modelo de provisionamiento, REQ-002.1–.4, decisión abierta D-R2) ·
+Internal references: [REQ-002](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md)
+(Contrasted requirement — provisioning model, REQ-002.1–.4, open decision D-R2) ·
 [ADR-001](2026-09-05_ADR-001_local-first-loopback-binding.md) (ACCEPTED — loopback-only,
 two-identity provisioning, non-goals) · [SPC-001 — Audit trail & restore](../specs/2026-09-05_SPC-001_audit-trail-restore.md)
-(§6 Access policy normativo; §7.7 verificación de denegación al agente; G-1 atribución de autor) ·
-Código: `src/payload.config.ts`, `src/collections/{Projects,Teams,Tickets}.ts` (`access: () => true`),
-`mcp-server/` (`LOCAL_PM_URL` sin credenciales).
+(§6 normative Access policy; §7.7 agent-denial verification; G-1 author attribution) ·
+Code: `src/payload.config.ts`, `src/collections/{Projects,Teams,Tickets}.ts` (`access: () => true`),
+`mcp-server/` (`LOCAL_PM_URL`, no credentials).

@@ -1,88 +1,88 @@
-# Documentación del repositorio — convención
+# Repository documentation — convention
 
-Este directorio centraliza la documentación normativa y de diseño de `local-pm`.
-Toda decisión, requerimiento y especificación vive aquí, versionada en git junto
-al código al que aplica. Esta página documenta la convención vigente; los
-documentos existentes son la referencia de estilo.
+This directory centralizes the normative and design documentation of `local-pm`.
+Every decision, requirement, and specification lives here, versioned in git
+alongside the code it applies to. This page documents the current convention;
+the existing documents are the style reference.
 
-## Estructura
+## Structure
 
-| Folder | Contenido | Pregunta que responde |
+| Folder | Content | Question it answers |
 |---|---|---|
-| `docs/adr/` | Architecture Decision Records — decisiones tomadas, con contexto y consecuencias | ¿Qué se decidió y por qué? |
-| `docs/requirements/` | Requerimientos — qué debe cumplirse, sin especificar cómo | ¿Qué se requiere? |
-| `docs/specs/` | Especificaciones de diseño — cómo se implementa un requerimiento | ¿Cómo se implementa? |
+| `docs/adr/` | Architecture Decision Records — decisions made, with context and consequences | What was decided and why? |
+| `docs/requirements/` | Requirements — what must be fulfilled, without specifying how | What is required? |
+| `docs/specs/` | Design specifications — how a requirement is implemented | How is it implemented? |
 
-## Nomenclatura de archivos
+## File naming
 
 ```
 YYYY-MM-DD_<TYPE>-<NNN>_<slug>.md
 ```
 
-- `YYYY-MM-DD`: fecha de creación del documento (no de última edición).
+- `YYYY-MM-DD`: document creation date (not last-edition date).
 - `<TYPE>`: `REQ` (requirement) · `ADR` (decision record) · `SPC` (spec).
-- `<NNN>`: número consecutivo por tipo, sin ceros a la izquierda del milestone
-  de tres dígitos (`REQ-001`, `ADR-002`, `SPC-003`, …).
-- `<slug>`: kebab-case, descriptivo y estable. El slug NO se reescribe en
-  renombrados posteriores salvo que el ID sea el que faltaba.
+- `<NNN>`: consecutive number per type, zero-padded to three digits
+  (`REQ-001`, `ADR-002`, `SPC-003`, …).
+- `<slug>`: kebab-case, descriptive and stable. The slug is NOT rewritten in
+  later renames unless the ID was the missing piece.
 
-Ejemplos reales: `2026-09-05_REQ-003_workspace-restructure.md`,
+Real examples: `2026-09-05_REQ-003_workspace-restructure.md`,
 `2026-09-05_ADR-001_local-first-loopback-binding.md`,
 `2026-09-05_SPC-001_audit-trail-restore.md`.
 
-## Esquema de IDs
+## ID scheme
 
-| Tipo | Formato | Numeración |
+| Type | Format | Numbering |
 |---|---|---|
-| Requerimiento | `REQ-NNN` | Consecutiva por tipo: REQ-001, REQ-002, … |
-| Decisión | `ADR-NNN` | Consecutiva por tipo: ADR-001, ADR-002, … |
-| Especificación | `SPC-NNN` | Consecutiva por tipo: SPC-001, SPC-002, … |
+| Requirement | `REQ-NNN` | Consecutive per type: REQ-001, REQ-002, … |
+| Decision | `ADR-NNN` | Consecutive per type: ADR-001, ADR-002, … |
+| Specification | `SPC-NNN` | Consecutive per type: SPC-001, SPC-002, … |
 
-Los IDs son permanentes: un documento retirado conserva su número y no se
-recicla. El siguiente documento de cada tipo toma el número inmediatamente
-posterior al mayor existente.
+IDs are permanent: a withdrawn document keeps its number and it is not
+recycled. The next document of each type takes the number immediately after
+the highest existing one.
 
-## Ciclo de status
+## Status lifecycle
 
-El status vive en la tabla del header de cada documento.
+The status lives in the header table of every document.
 
-| Tipo | Valores |
+| Type | Values |
 |---|---|
-| ADR | `PROPOSED` (pendiente de revisión del usuario) → `ACCEPTED` · `REJECTED` · `SUPERSEDED` (reemplazado por otro ADR, que debe citarlo) |
-| REQ | `DRAFT` (pendiente de revisión del usuario) → `APPROVED` → `IMPLEMENTED` · `REJECTED` |
-| SPC | `DRAFT` (pendiente de revisión del usuario) → `APPROVED` → `IMPLEMENTED` |
+| ADR | `PROPOSED` (pending user review) → `ACCEPTED` · `REJECTED` · `SUPERSEDED` (replaced by another ADR, which must cite it) |
+| REQ | `DRAFT` (pending user review) → `APPROVED` → `IMPLEMENTED` · `REJECTED` |
+| SPC | `DRAFT` (pending user review) → `APPROVED` → `IMPLEMENTED` |
 
-- `DRAFT`/`PROPOSED`: el documento no compromete al operador; puede corregirse
-  libremente hasta su aprobación.
-- `APPROVED`/`ACCEPTED`: materialmente vinculante; los cambios posteriores se
-  registrado en el propio documento (o mediante un documento que lo supersede).
-- `IMPLEMENTED`: la implementación verificó los criterios de aceptación del
-  documento; el documento no se borra — es el registro histórico.
-- Los documentos rechazados se conservan (nunca se eliminan): la decisión de no
-  hacer algo también es conocimiento del repo.
+- `DRAFT`/`PROPOSED`: the document does not bind the operator; it can be fixed
+  freely until approval.
+- `APPROVED`/`ACCEPTED`: materially binding; later changes are recorded in the
+  document itself (or through a document that supersedes it).
+- `IMPLEMENTED`: the implementation verified the document's acceptance
+  criteria; the document is never deleted — it is the historical record.
+- Rejected documents are kept (never removed): the decision not to do
+  something is also repository knowledge.
 
-## Xrefs (referencias cruzadas)
+## Xrefs (cross-references)
 
-- Siempre **relativas** al archivo que referencia (`../specs/…`, `../adr/…`,
-  `../requirements/…`) — nunca absolutas ni URLs al remote.
-- El texto del enlace cita el ID (`[REQ-003 — …](…)`), de modo que el xref
-  sigue legible aunque el archivo renombre.
-- Los anchors internos de sección (`§5`, `§6`) se citan en el texto del enlace,
-  no en la ruta; un renombrado de archivo no los altera.
-- Al renombrar un documento, se actualizan todos los xrefs entrantes en el
-  mismo commit (`git grep <nombre-viejo>` para localizarlos).
+- Always **relative** to the referencing file (`../specs/…`, `../adr/…`,
+  `../requirements/…`) — never absolute paths nor URLs to the remote.
+- The link text cites the ID (`[REQ-003 — …](…)`), so the xref stays readable
+  even if the file is renamed.
+- Internal section anchors (`§5`, `§6`) are cited in the link text, not in the
+  path; a file rename does not affect them.
+- When renaming a document, update every inbound xref in the same commit
+  (`git grep <old-name>` to locate them).
 
-## Origen
+## Origin
 
-Cada documento deriva de instrucciones verbatim del usuario, registradas en el
-TODO track (`~/.hermes/profiles/ttamayo/todo/TODO.md`). El spec/ADR cita el
-item de origen cuando aplica (campo `Scope driver` en specs). El contenido
-normativo es el del documento; el TODO track es el registro de la instrucción,
-no la especificación.
+Every document derives from verbatim user instructions, recorded in the TODO
+track (`~/.hermes/profiles/ttamayo/todo/TODO.md`). The spec/ADR cites its
+source item where applicable (`Scope driver` field in specs). The normative
+content is the document's own; the TODO track is the record of the
+instruction, not the specification.
 
-## Índice vigente
+## Current index
 
-| ID | Documento | Status |
+| ID | Document | Status |
 |---|---|---|
 | REQ-001 | [Loopback-only binding](requirements/2026-09-05_REQ-001_loopback-only-binding.md) | DRAFT |
 | REQ-002 | [Distinguished actor credentials & role policy](requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) | DRAFT |
@@ -90,6 +90,6 @@ no la especificación.
 | ADR-001 | [Local-first, loopback-only binding, two-identity provisioning](adr/2026-09-05_ADR-001_local-first-loopback-binding.md) | ACCEPTED |
 | ADR-002 | [OIDC-compliant authentication](adr/2026-09-05_ADR-002_oidc-authentication.md) | PROPOSED |
 | SPC-001 | [Audit trail & restore (Payload native versions)](specs/2026-09-05_SPC-001_audit-trail-restore.md) | DRAFT |
-| SPC-002 | [Workspace restructure (resuelve REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | DRAFT |
+| SPC-002 | [Workspace restructure (resolves REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | DRAFT |
 
-Al crear un documento, agregarlo a este índice en el mismo commit.
+When creating a document, add it to this index in the same commit.

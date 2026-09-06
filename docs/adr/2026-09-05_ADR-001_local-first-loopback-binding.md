@@ -11,33 +11,33 @@
 
 ## Context
 
-1. **Intent original del proyecto:** self-hosted, uso local, operador único — igual que el creador original del upstream (`anaskasmi/local-pm`). El fork (`aficiomaquinas/local-pm`) hereda ese objetivo; no hay pivot a hosting público.
-2. **Hallazgo de seguridad (2026-09-05):** `docker-compose.yml` publica la app (3010) y MongoDB (27018) sobre `0.0.0.0`; MongoDB además corre **sin autenticación**. Verificado en runtime: ambos puertos alcanzables desde la LAN completa. Con datos productivos, cualquier equipo de la red puede leer, escribir o extraer la base completa.
-3. **Fase entrante:** módulo de audit trail/rollback (spec adjunto) y datos productivos en el volumen — el costo de exposición sube.
-4. **Vector git:** ambos remotes del repo son públicos; el aislamiento de datos se resuelve fuera del árbol (backups fuera del working tree), pero la superficie de red es la exposición primaria en modo local.
+1. **The project's original intent:** self-hosted, local usage, single operator — same as the upstream's original creator (`anaskasmi/local-pm`). The fork (`aficiomaquinas/local-pm`) inherits that objective; there is no pivot to public hosting.
+2. **Security finding (2026-09-05):** `docker-compose.yml` published the app (3010) and MongoDB (27018) on `0.0.0.0`; MongoDB additionally ran **without authentication**. Verified at runtime: both ports reachable from the whole LAN. With productive data, any machine on the network could read, write, or extract the entire database.
+3. **Incoming phase:** the audit trail/rollback module (companion spec) and productive data in the volume — the cost of exposure rises.
+4. **Git vector:** both repo remotes are public; data isolation is solved outside the tree (backups outside the working tree), but the network surface is the primary exposure in local mode.
 
 ## Decision
 
-- **D1 — Loopback-only binding (local mode):** todo puerto publicado se bind a `127.0.0.1`. MongoDB sin publish de host (red interna de compose únicamente). Detalle normativo: REQ-001.
-- **D2 — Two-identity provisioning:** el producto se provisiona con un **single master user** (humano) y un **single master agent user** (automatización), con credenciales distinguidas. El agente queda excluido por policy de audit trails y rollbacks. Detalle normativo: REQ-002 y spec §5.
-- **D3 — Public hosting, si algún día aplica, exclusivamente como capa de reverse proxy** (TLS, acceso restringido/autenticado) frente a servicios internos idénticos al modo local. La topología interna no cambia para exponer al público.
-- **D4 — Fortalecimiento prospectivo:** la dirección general es endurecer backups/restore y credenciales mirando hacia adelante — no cambiar el objetivo primario, que sigue siendo uso local.
+- **D1 — Loopback-only binding (local mode):** every published port binds to `127.0.0.1`. MongoDB with no host publishing (compose internal network only). Normative detail: REQ-001.
+- **D2 — Two-identity provisioning:** the product is provisioned with a **single master user** (human) and a **single master agent user** (automation), with distinguished credentials. The agent is policy-excluded from audit trails and rollbacks. Normative detail: REQ-002 and spec §5.
+- **D3 — Public hosting, should it ever apply, exclusively as a reverse-proxy layer** (TLS, restricted/authenticated access) in front of internal services identical to local mode. The internal topology does not change to face the public.
+- **D4 — Prospective hardening:** the general direction is hardening backups/restore and credentials looking forward — not changing the primary objective, which remains local usage.
 
 ## Explicit non-goals
 
-- No se pivota a multi-tenant ni a hosting público en esta fase.
-- No se introduce auth stack completo "por si acaso": el mínimo viable aceptado es binding loopback (D1) + el modelo de dos identidades (D2) cuando entre la fase productiva.
+- No pivot to multi-tenant or public hosting in this phase.
+- No full auth stack introduced "just in case": the accepted viable minimum is loopback binding (D1) + the two-identity model (D2) once the productive phase enters.
 
 ## Consequences
 
-- La LAN deja de alcanzar app y Mongo; el acceso local continúa vía loopback sin fricción.
-- Exponer públicamente exige un paso explícito adicional (rev proxy), lo que hace imposible la exposición accidental.
-- El audit trail gana valor como evidencia: con D2, cada entrada tiene actor inequívoco y solo el humano puede reescribir historia.
+- The LAN stops reaching app and Mongo; local access continues via loopback frictionlessly.
+- Public exposure requires an additional explicit step (reverse proxy), making accidental exposure impossible.
+- The audit trail gains value as evidence: with D2, every entry has an unambiguous actor and only the human can rewrite history.
 
 ## Alternatives considered
 
-| Alternativa | Veredicto |
+| Alternative | Verdict |
 |---|---|
-| Status quo (0.0.0.0 + Mongo sin auth) | Rechazada: exposición LAN sin autenticación con datos productivos |
-| Auth stack completo en todos los servicios desde ya | Diferida: excede el mínimo para uso local; D2 la cubre en la capa de aplicación al entrar a productivo |
-| Overlay/VPN (tailscale/wireguard) para acceso remoto | Viable como futuro medio de acceso remoto; no requerido para el objetivo local; no excluido por esta decisión |
+| Status quo (0.0.0.0 + Mongo without auth) | Rejected: unauthenticated LAN exposure with productive data |
+| Full auth stack on every service from the start | Deferred: exceeds the local-usage minimum; D2 covers it at the application layer when productive phase enters |
+| Overlay/VPN (tailscale/wireguard) for remote access | Viable as a future remote-access means; not required for the local objective; not excluded by this decision |

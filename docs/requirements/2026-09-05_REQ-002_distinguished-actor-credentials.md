@@ -4,48 +4,48 @@
 |---|---|
 | **ID** | REQ-002 |
 | **Date** | 2026-09-05 |
-| **Status** | DRAFT — pending review. Sin commit. |
-| **Type** | Requirement (qué debe cumplirse, no cómo) |
+| **Status** | DRAFT — pending review. |
+| **Type** | Requirement (what must be fulfilled, not how) |
 | **Related** | [SPC-001 — Audit trail & restore, §5 Access policy](../specs/2026-09-05_SPC-001_audit-trail-restore.md) · [ADR-001](../adr/2026-09-05_ADR-001_local-first-loopback-binding.md) |
 
 ---
 
-## Modelo de provisionamiento (normativo, fase actual)
+## Provisioning model (normative, current phase)
 
-El producto se provisiona con exactamente dos identidades operativas:
+The product is provisioned with exactly two operating identities:
 
 | Identidad | Naturaleza | Uso |
 |---|---|---|
-| **Master user** | Humano (operador) | webUI, administración, audit trail, rollbacks |
-| **Master agent user** | Automatización (MCP/REST tooling) | mutaciones de tickets/projects/teams por agentes |
+| **Master user** | Human (operator) | webUI, administration, audit trail, rollbacks |
+| **Master agent user** | Automation (MCP/REST tooling) | ticket/project/team mutations by agents |
 
-Las dos identidades llevan **credenciales distinguidas**. Un agente NUNCA opera bajo la identidad del humano ni reutiliza sus credenciales. (Fortalecimiento prospectivo — ver ADR-001: el objetivo primario sigue siendo uso local, igual que el creador original.)
+The two identities carry **distinguished credentials**. An agent NEVER operates under the human's identity nor reuses their credentials. (Prospective hardening — see ADR-001: the primary objective remains local usage, same as the original creator.)
 
-## Estado actual (evidencia, 2026-09-05 — inspección de código; confirmación runtime pendiente)
+## Current state (evidence, 2026-09-05 — code inspection; runtime confirmation pending)
 
-- Las tres colecciones declaran `access: { read/create/update/delete: () => true }` → **no hay autenticación exigida**; `req.user` es indefinido en operaciones por API/REST/MCP.
-- El MCP server (README) se conecta con `LOCAL_PM_URL` únicamente, sin credenciales.
-- Payload registra el autor de un cambio a partir del usuario autenticado de la request; sin auth, la atribución es nula/anónima.
-- Consecuencia actual: un cambio hecho vía webUI y uno hecho por un agente vía MCP/REST son indistinguibles en cualquier audit trail (y lo serán en el módulo de versiones del spec adjunto).
+- The three collections declare `access: { read/create/update/delete: () => true }` → **no authentication is enforced**; `req.user` is undefined on API/REST/MCP operations.
+- The MCP server (README) connects with `LOCAL_PM_URL` only, no credentials.
+- Payload records the author of a change from the request's authenticated user; without auth, attribution is null/anonymous.
+- Current consequence: a change made via webUI and one made by an agent via MCP/REST are indistinguishable in any audit trail (and will be in the companion spec's versions module too).
 
-## Requerimiento
+## Requirement
 
-- **REQ-002.1:** Todo actor que mute documentos (create/update/delete/restore) opera con credenciales DISTINGUIDAS e inequívocas según el modelo de provisionamiento de arriba. Los agentes NUNCA reutilizan credenciales humanas.
-- **REQ-002.2:** Toda entrada de audit trail / version history resuelve a un actor identificado sin ambigüedad: quién (identidad), mediante qué canal (webUI / MCP / REST), cuándo.
-- **REQ-002.3:** La confusión de identidad entre actores en tickets/audit log se considera defecto de bloqueo para datos productivos.
-- **REQ-002.4 (role policy — indispensable):** La identidad de agente NO tiene acceso, por policy (rol/ACL), a audit trails (lectura de version history) NI a operaciones de rollback/restore. Esas capacidades son exclusivas del master user. Detalle normativo: [SPC-001 — Audit trail & restore, §5 Access policy](../specs/2026-09-05_SPC-001_audit-trail-restore.md). Racional: un agente con capacidad de reescribir historia anula el propósito del audit trail (separación de roles = tamper-evidence operativa).
+- **REQ-002.1:** Every actor mutating documents (create/update/delete/restore) operates with DISTINGUISHED, unambiguous credentials per the provisioning model above. Agents NEVER reuse human credentials.
+- **REQ-002.2:** Every audit trail / version history entry resolves to an identified actor without ambiguity: who (identity), through which channel (webUI / MCP / REST), when.
+- **REQ-002.3:** Identity confusion between actors in tickets/audit log is a blocking defect for productive data.
+- **REQ-002.4 (role policy — indispensable):** The agent identity has NO access, by policy (role/ACL), to audit trails (version history reads) NOR to rollback/restore operations. Those capabilities are exclusive to the master user. Normative detail: [SPC-001 — Audit trail & restore, §5 Access policy](../specs/2026-09-05_SPC-001_audit-trail-restore.md). Rationale: an agent able to rewrite history nullifies the audit trail's purpose (role separation = operational tamper-evidence).
 
-**Pregunta abierta registrada (requiere investigación en la implementación):** la atribución es función de la autenticación de Payload (usuarios del sistema). Vía a definir — no es parte de este documento decidirla: usuario bot dedicado para el agente (ajuste natural al modelo de provisionamiento), API keys por actor, o ambos. El requerimiento es el resultado (atribución inequívoca + exclusión de agente del trail/rollback), no el mecanismo.
+**Recorded open question (requires research at implementation):** attribution is a function of Payload's authentication (system users). Path to be defined — deciding it is not this document's job: a dedicated bot user for the agent (natural fit to the provisioning model), per-actor API keys, or both. The requirement is the outcome (unambiguous attribution + agent exclusion from trail/rollback), not the mechanism.
 
-## Verificación
+## Verification
 
-- Cambio vía webUI por el master user → audit/versión atribuida a esa identidad.
-- Cambio vía MCP con la credencial del master agent user → atribuido a la identidad del agente, distinta de la humana.
-- La identidad de agente intenta leer `/api/{slug}/versions` o ejecutar `POST …/versions/:id` → **denegado por ACL**; el master user → permitido.
-- Intento de mutación sin credenciales → rechazado.
+- Change via webUI by the master user → audit/version attributed to that identity.
+- Change via MCP with the master agent user's credential → attributed to the agent identity, distinct from the human's.
+- The agent identity attempts to read `/api/{slug}/versions` or run `POST …/versions/:id` → **denied by ACL**; the master user → allowed.
+- A mutation attempt without credentials → rejected.
 
-## Decisión pendiente del usuario
+## Pending user decision
 
-| ID | Decisión |
+| ID | Decision |
 |---|---|
-| D-R2 | Mecanismo de credenciales del master agent user (usuario bot dedicado vs API keys), dentro del modelo de provisionamiento de dos identidades |
+| D-R2 | The master agent user's credential mechanism (dedicated bot user vs API keys), within the two-identity provisioning model |
