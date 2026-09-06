@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, FolderKanban, Users } from 'lucide-react'
+import { LayoutDashboard, FolderKanban, Users, History } from 'lucide-react'
 
 const navItems = [
   { href: '/board', label: 'Board', icon: LayoutDashboard },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/teams', label: 'Teams', icon: Users },
+  { href: '/history', label: 'History', icon: History },
 ]
 
 export function Sidebar() {
