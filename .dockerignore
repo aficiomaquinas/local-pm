@@ -1,13 +1,16 @@
 # Dependencies
-node_modules
+**/node_modules
 npm-debug.log*
 
 # Next.js build output
-.next
+**/.next
 
 # Production build
 build
-dist
+**/dist
+
+# pnpm
+.pnpm-store
 
 # Environment files (will be passed via docker-compose)
 .env
