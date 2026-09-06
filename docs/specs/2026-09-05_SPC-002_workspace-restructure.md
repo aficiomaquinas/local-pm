@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`) |
 | **ID** | SPC-002 |
 | **Date** | 2026-09-05 |
-| **Status** | DRAFT — pending user review. Spec ONLY: not executed until the user decides (see D-R3 in REQ-003). |
+| **Status** | APPROVED (2026-09-05). Execution authorized — resolves D-R3; branch `feat/workspace-restructure`. |
 | **Type** | Spec (how it is implemented; the what lives in REQ-003) |
 | **Resolves** | [REQ-003 — Repository restructure per best practices (no monkey patching)](../requirements/2026-09-05_REQ-003_workspace-restructure.md) |
 | **Related** | [SPC-001 — Audit trail & restore](../specs/2026-09-05_SPC-001_audit-trail-restore.md) · PR anaskasmi/local-pm#1 and commit `99fad97` (current stopgap, retired by this spec) |

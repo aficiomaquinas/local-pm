@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`) |
 | **ID** | ADR-002 |
 | **Date** | 2026-09-05 |
-| **Status** | PROPOSED — pending user review. No implementation commit; this ADR implements nothing. |
+| **Status** | ACCEPTED (2026-09-05). Implementation to be tracked in a follow-up spec/branch; this ADR implements nothing itself. |
 | **Context docs** | [REQ-002 — distinguished actor credentials & role policy](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001 — local-first, loopback-only, two-identity provisioning](2026-09-05_ADR-001_local-first-loopback-binding.md) · [SPC-001 — Audit trail & restore, §6 Access policy](../specs/2026-09-05_SPC-001_audit-trail-restore.md) |
 
 ---
