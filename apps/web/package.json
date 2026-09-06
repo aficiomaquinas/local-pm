@@ -24,6 +24,7 @@
     "@payloadcms/ui": "^3.68.4",
     "dotenv": "^17.2.3",
     "graphql": "^16.12.0",
+    "jsondiffpatch": "0.6.0",
     "lucide-react": "^0.563.0",
     "next": "^15.4.10",
     "payload": "^3.68.4",

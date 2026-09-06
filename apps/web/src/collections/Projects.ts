@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { denyAgents, enforceMasterOnlyPolicy } from '@/access/actorPolicy'
 import { ProjectStatus, PROJECT_STATUS_OPTIONS, PROJECT_ICONS, PROJECT_COLORS } from '@/types/enums'
 
 export const Projects: CollectionConfig = {
@@ -11,8 +12,15 @@ export const Projects: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: () => true,
+    update: enforceMasterOnlyPolicy('project restore (SPC-001 §6)'),
     delete: () => true,
+    // SPC-001 §6: version trail reads are policy-denied to the agent identity.
+    // Unauthenticated callers are also denied (deny-by-default; OIDC wiring lands in ADR-002).
+    readVersions: denyAgents,
+  },
+  versions: {
+    // SPC-001 §4.1/§5.2 D-1: native Payload versions, drafts disabled.
+    maxPerDoc: 100,
   },
   fields: [
     {

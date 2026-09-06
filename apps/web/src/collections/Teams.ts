@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { denyAgents, enforceMasterOnlyPolicy } from '@/access/actorPolicy'
 
 export const Teams: CollectionConfig = {
   slug: 'teams',
@@ -10,8 +11,15 @@ export const Teams: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: () => true,
+    update: enforceMasterOnlyPolicy('team restore (SPC-001 §6)'),
     delete: () => true,
+    // SPC-001 §6: version trail reads are policy-denied to the agent identity.
+    // Unauthenticated callers are also denied (deny-by-default; OIDC wiring lands in ADR-002).
+    readVersions: denyAgents,
+  },
+  versions: {
+    // SPC-001 §4.1/§5.2 D-1: native Payload versions, drafts disabled.
+    maxPerDoc: 100,
   },
   fields: [
     {
