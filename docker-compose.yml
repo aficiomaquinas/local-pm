@@ -10,7 +10,9 @@ services:
     container_name: local-pm-app
     restart: unless-stopped
     ports:
-      - "3010:3010"
+      # ADR-001/D1: loopback-only binding in local mode. Public exposure,
+      # if ever needed, is added exclusively as a reverse-proxy layer.
+      - "127.0.0.1:3010:3010"
     environment:
       DATABASE_URI: mongodb://mongodb:27017/local-pm
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
@@ -22,8 +24,9 @@ services:
     image: mongo:7.0
     container_name: local-pm-mongodb
     restart: unless-stopped
-    ports:
-      - "27018:27017"
+    # ADR-001/D1 + REQ-001.2: no host port publishing — reachable only via the
+    # compose internal network (app -> mongodb:27017). Host-side inspection,
+    # if needed, goes through `docker exec` or an explicit 127.0.0.1 publish.
     volumes:
       - local-pm-mongodb-data:/data/db
     environment:
