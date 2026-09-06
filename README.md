@@ -44,6 +44,35 @@ A lightweight, self-hosted project management tool with a built-in MCP (Model Co
   <img width="400" alt="Team Details" src="https://github.com/user-attachments/assets/20102c8e-c6e2-4bcb-bfcb-e1449914e275" />
 </p>
 
+## Repository structure (pnpm workspace)
+
+The repository is a [pnpm workspace](https://pnpm.io/workspaces) monorepo with
+an orchestrator root and two independent, first-class packages:
+
+```
+local-pm/
+├── package.json               # private orchestrator root (build/dev/seed scripts)
+├── pnpm-workspace.yaml        # packages: apps/*, packages/*
+├── pnpm-lock.yaml             # single lockfile for the whole repo
+├── tsconfig.base.json         # shared compiler options
+├── apps/
+│   └── web/                   # the Next.js 15 + Payload 3.x application
+├── packages/
+│   └── mcp-server/            # @local-pm/mcp-server — MCP server package
+├── Dockerfile                 # multi-stage build consuming the workspace
+└── docs/                      # specs, requirements, ADRs
+```
+
+The two packages declare **no dependency on each other** — the only interface
+is HTTP (`LOCAL_PM_URL`). Each builds and type-checks in isolation:
+
+```bash
+pnpm install                          # installs everything from the root
+pnpm --filter local-pm-web build      # build the app only
+pnpm --filter @local-pm/mcp-server build   # build the MCP server only
+pnpm mcp:build                        # same, via the root orchestrator script
+```
+
 ## Installation
 
 ### Using Docker (Recommended)
@@ -56,18 +85,18 @@ cd local-pm
 
 2. Start the containers:
 ```bash
-docker-compose up -d
+docker compose up -d --build
 ```
 
 3. Access the app at http://localhost:3010
 
 ### Manual Installation
 
-1. Clone the repository and install dependencies:
+1. Clone the repository and install dependencies (from the repo root):
 ```bash
 git clone https://github.com/your-username/local-pm.git
 cd local-pm
-npm install
+pnpm install
 ```
 
 2. Set up environment variables:
@@ -78,7 +107,7 @@ cp .env.example .env
 
 3. Run the development server:
 ```bash
-npm run dev
+pnpm dev
 ```
 
 ## MCP Server Setup
@@ -87,16 +116,18 @@ The MCP (Model Context Protocol) server allows AI assistants like Claude to inte
 
 ### Building the MCP Server
 
+From the repository root:
 ```bash
-cd mcp-server
-npm install
-npm run build
+pnpm install
+pnpm mcp:build
 ```
+
+The compiled server lands in `packages/mcp-server/dist/index.js`.
 
 ### Adding to Claude Code (Global)
 
 ```bash
-claude mcp add --scope user local-pm node "/path/to/local-pm/mcp-server/dist/index.js"
+claude mcp add --scope user local-pm node "/path/to/local-pm/packages/mcp-server/dist/index.js"
 ```
 
 ### Adding to Claude Desktop
@@ -108,7 +139,7 @@ Add to your Claude Desktop config (`~/.claude/claude_desktop_config.json`):
   "mcpServers": {
     "local-pm": {
       "command": "node",
-      "args": ["/path/to/local-pm/mcp-server/dist/index.js"],
+      "args": ["/path/to/local-pm/packages/mcp-server/dist/index.js"],
       "env": {
         "LOCAL_PM_URL": "http://localhost:3010"
       }
