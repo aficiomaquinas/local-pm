@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
+# pnpm 10: last line compatible with Node 20 (pnpm 11 needs node:sqlite,
+# a Node 22+ builtin). Lockfile v9.0 is shared across pnpm 10/11, so the
+# operator's pnpm 11 stays compatible with this lockfile.
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -43,11 +46,14 @@ RUN pnpm --filter @local-pm/mcp-server build
 # Build the application
 RUN pnpm --filter local-pm-web build
 
-# Prune to the app's production dependency tree (workspace-aware deploy)
+# Prune to the app's production dependency tree (workspace-aware deploy).
 FROM base AS deployer
 WORKDIR /app
 COPY --from=builder /app ./
-RUN pnpm --filter local-pm-web deploy --prod /out
+# --legacy: pnpm 10 gates deploy behind inject-workspace-packages, which
+# does not apply here — the packages are intentionally independent
+# (D-SPC2-3, no workspace deps to inject).
+RUN pnpm --filter local-pm-web deploy --prod --legacy /out
 
 # Production image
 FROM base AS runner
@@ -70,4 +76,4 @@ EXPOSE 3010
 ENV PORT=3010
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "node_modules/.bin/next", "start", "--port", "3010"]
+CMD ["node", "node_modules/next/dist/bin/next", "start", "--port", "3010"]
