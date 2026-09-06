@@ -4,7 +4,7 @@
 |---|---|
 | **ID** | REQ-003 |
 | **Date** | 2026-09-05 |
-| **Status** | DRAFT — pending review. Requirement ONLY: not executed until the user decides. |
+| **Status** | IMPLEMENTED (2026-09-06) — executed via [SPC-002](../specs/2026-09-05_SPC-002_workspace-restructure.md) on branch `feat/workspace-restructure`; Verification items all green. |
 | **Type** | Requirement |
 | **Related** | PR anaskasmi/local-pm#1 (stopgap vigente) · `mcp-server/` · `tsconfig.json` |
 
