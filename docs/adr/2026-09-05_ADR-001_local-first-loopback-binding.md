@@ -5,7 +5,7 @@
 | **ID** | ADR-001 |
 | **Date** | 2026-09-05 |
 | **Status** | ACCEPTED |
-| **Context docs** | [REQ-001](../requirements/2026-09-05_REQ-001_loopback-only-binding.md) · [REQ-002](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [Spec audit trail & restore](../specs/2026-09-05_audit-trail-restore-spec.md) |
+| **Context docs** | [REQ-001](../requirements/2026-09-05_REQ-001_loopback-only-binding.md) · [REQ-002](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [SPC-001 — Audit trail & restore](../specs/2026-09-05_SPC-001_audit-trail-restore.md) |
 
 ---
 

@@ -3,7 +3,8 @@
 | | |
 |---|---|
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`) |
-| **Status** | DRAFT — pending user review. Sin commit. |
+| **ID** | SPC-001 |
+| **Status** | DRAFT — pending user review. |
 | **Date** | 2026-09-05 |
 | **Depends on** | PR anaskasmi/local-pm#1 (`fix/tsconfig-exclude-mcp-server`) — build base |
 | **Related** | [REQ-002 — distinguished actor credentials & role policy](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001](../adr/2026-09-05_ADR-001_local-first-loopback-binding.md) |
@@ -112,7 +113,7 @@ src/components/history/
   VersionRow.tsx            # fila colapsable del feed (meta + acción Restore)
   HistoryFilters.tsx        # barra de filtros
 docs/specs/
-  2026-09-05_audit-trail-restore-spec.md   # este archivo
+  2026-09-05_SPC-001_audit-trail-restore.md   # este archivo
 ```
 
 ### 4.3 Endpoint de agregación `GET /api/history`

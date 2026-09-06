@@ -6,7 +6,7 @@
 | **ID** | ADR-002 |
 | **Date** | 2026-09-05 |
 | **Status** | PROPOSED — pending user review. Sin commit de implementación; este ADR no implementa nada. |
-| **Context docs** | [REQ-002 — distinguished actor credentials & role policy](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001 — local-first, loopback-only, two-identity provisioning](2026-09-05_ADR-001_local-first-loopback-binding.md) · [Spec audit trail & restore — §6 Access policy](../specs/2026-09-05_audit-trail-restore-spec.md) |
+| **Context docs** | [REQ-002 — distinguished actor credentials & role policy](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001 — local-first, loopback-only, two-identity provisioning](2026-09-05_ADR-001_local-first-loopback-binding.md) · [SPC-001 — Audit trail & restore, §6 Access policy](../specs/2026-09-05_SPC-001_audit-trail-restore.md) |
 
 ---
 
@@ -325,7 +325,7 @@ ninguna URL adivinada):
 Referencias internas: [REQ-002](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md)
 (Requerimiento contrastado — modelo de provisionamiento, REQ-002.1–.4, decisión abierta D-R2) ·
 [ADR-001](2026-09-05_ADR-001_local-first-loopback-binding.md) (ACCEPTED — loopback-only,
-two-identity provisioning, non-goals) · [Spec SPC-001](../specs/2026-09-05_audit-trail-restore-spec.md)
+two-identity provisioning, non-goals) · [SPC-001 — Audit trail & restore](../specs/2026-09-05_SPC-001_audit-trail-restore.md)
 (§6 Access policy normativo; §7.7 verificación de denegación al agente; G-1 atribución de autor) ·
 Código: `src/payload.config.ts`, `src/collections/{Projects,Teams,Tickets}.ts` (`access: () => true`),
 `mcp-server/` (`LOCAL_PM_URL` sin credenciales).
