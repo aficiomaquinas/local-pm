@@ -1,0 +1,22 @@
+{
+  "name": "local-pm-monorepo",
+  "version": "1.0.0",
+  "description": "Local PM monorepo orchestrator (apps/web + packages/mcp-server)",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter local-pm-web dev",
+    "mcp:build": "pnpm --filter @local-pm/mcp-server build",
+    "mcp:dev": "pnpm --filter @local-pm/mcp-server dev",
+    "seed": "pnpm --filter local-pm-web seed",
+    "start": "pnpm --filter local-pm-web start",
+    "payload": "pnpm --filter local-pm-web payload",
+    "generate:types": "pnpm --filter local-pm-web generate:types",
+    "generate:importmap": "pnpm --filter local-pm-web generate:importmap"
+  },
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=10"
+  }
+}

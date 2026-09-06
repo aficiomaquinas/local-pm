@@ -1,5 +1,5 @@
 {
-  "name": "local-pm",
+  "name": "local-pm-web",
   "version": "1.0.0",
   "description": "Linear-like project management system with Kanban boards",
   "license": "MIT",
