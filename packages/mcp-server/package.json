@@ -3,27 +3,36 @@
   "version": "1.0.0",
   "description": "MCP server for Local PM - Project Management System",
   "type": "module",
+  "private": true,
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "bin": {
     "local-pm-mcp": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod 755 dist/index.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.12.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^22",
+    "typescript": "^5.9"
   },
   "keywords": [
     "mcp",
     "project-management",
     "local-pm"
   ],
-  "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }
