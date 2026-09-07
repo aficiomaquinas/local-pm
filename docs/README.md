@@ -84,12 +84,13 @@ instruction, not the specification.
 
 | ID | Document | Status |
 |---|---|---|
-| REQ-001 | [Loopback-only binding](requirements/2026-09-05_REQ-001_loopback-only-binding.md) | DRAFT |
-| REQ-002 | [Distinguished actor credentials & role policy](requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) | DRAFT |
-| REQ-003 | [Repository restructure per best practices](requirements/2026-09-05_REQ-003_workspace-restructure.md) | DRAFT |
+| REQ-001 | [Loopback-only binding](requirements/2026-09-05_REQ-001_loopback-only-binding.md) | IMPLEMENTED (via ADR-001 D1) |
+| REQ-002 | [Distinguished actor credentials & role policy](requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) | DRAFT (waits ADR-002 wiring) |
+| REQ-003 | [Repository restructure per best practices](requirements/2026-09-05_REQ-003_workspace-restructure.md) | IMPLEMENTED (via SPC-002) |
 | ADR-001 | [Local-first, loopback-only binding, two-identity provisioning](adr/2026-09-05_ADR-001_local-first-loopback-binding.md) | ACCEPTED |
-| ADR-002 | [OIDC-compliant authentication](adr/2026-09-05_ADR-002_oidc-authentication.md) | PROPOSED |
-| SPC-001 | [Audit trail & restore (Payload native versions)](specs/2026-09-05_SPC-001_audit-trail-restore.md) | DRAFT |
-| SPC-002 | [Workspace restructure (resolves REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | DRAFT |
+| ADR-002 | [OIDC-compliant authentication](adr/2026-09-05_ADR-002_oidc-authentication.md) | ACCEPTED (implementation pending, follow-up spec) |
+| SPC-001 | [Audit trail & restore (Payload native versions)](specs/2026-09-05_SPC-001_audit-trail-restore.md) | IMPLEMENTED |
+| SPC-002 | [Workspace restructure (resolves REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | IMPLEMENTED |
+| SPC-003 | [Testing strategy (Option B: unit + mocked API-contract)](specs/2026-09-06_SPC-003_testing-strategy.md) | APPROVED (implementation in progress) |
 
 When creating a document, add it to this index in the same commit.
