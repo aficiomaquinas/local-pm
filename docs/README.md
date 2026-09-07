@@ -91,6 +91,6 @@ instruction, not the specification.
 | ADR-002 | [OIDC-compliant authentication](adr/2026-09-05_ADR-002_oidc-authentication.md) | ACCEPTED (implementation pending, follow-up spec) |
 | SPC-001 | [Audit trail & restore (Payload native versions)](specs/2026-09-05_SPC-001_audit-trail-restore.md) | IMPLEMENTED |
 | SPC-002 | [Workspace restructure (resolves REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | IMPLEMENTED |
-| SPC-003 | [Testing strategy (Option B: unit + mocked API-contract)](specs/2026-09-06_SPC-003_testing-strategy.md) | APPROVED (implementation in progress) |
+| SPC-003 | [Testing strategy (Option B: unit + mocked API-contract)](specs/2026-09-06_SPC-003_testing-strategy.md) | IMPLEMENTED |
 
 When creating a document, add it to this index in the same commit.

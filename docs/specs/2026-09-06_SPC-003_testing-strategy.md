@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`) |
 | **ID** | SPC-003 |
 | **Date** | 2026-09-06 |
-| **Status** | APPROVED (2026-09-06) — **Option B** (Unit + mocked API-contract). Implementation authorized: branch `feat/testing`, sequenced after wave-1 stabilization (§5.3 build integration included). |
+| **Status** | IMPLEMENTED (2026-09-07) — Option B. Merged to master; all §8 criteria verified including Docker builder gate (broken test breaks build) and offline determinism. |
 | **Type** | Spec (how it is implemented; scope-of-testing decisions proposed as alternatives in §6) |
 | **Resolves** | — (no parent REQ; this spec originates a scope, it does not resolve one) |
 | **Related** | [SPC-002 — Workspace restructure](../specs/2026-09-05_SPC-002_workspace-restructure.md) (the pnpm workspace this strategy plugs into) · [SPC-001 — Audit trail & restore](../specs/2026-09-05_SPC-001_audit-trail-restore.md) (consumer of the future integration tier) |
