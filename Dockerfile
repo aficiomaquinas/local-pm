@@ -43,6 +43,14 @@ RUN mkdir -p apps/web/public
 # isolation inside the image, before and independently of the app build
 RUN pnpm --filter @local-pm/mcp-server build
 
+# SPC-003 §5.3: tests ride the same build that produces the artifact —
+# canonical install → build → test order. A red suite fails this RUN and
+# breaks `docker compose build`; tests are additive and never enter the
+# build outputs (they live in tests/, outside both packages' build
+# tsconfigs). The suites are hermetic: fetch is mocked, no MongoDB and no
+# network are reachable from the builder stage.
+RUN pnpm -r --no-bail test
+
 # Build the application
 RUN pnpm --filter local-pm-web build
 

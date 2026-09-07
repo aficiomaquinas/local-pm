@@ -1,0 +1,22 @@
+# SPC-003 §5.3 verification stack (never used for the production deployment).
+#
+# Overlays docker-compose.yml so a second, isolated stack can be built and
+# booted alongside the main one: different container names (the base file
+# pins names, which a `-p` project name alone does not lift) and host port
+# 3012 instead of 3010.
+#
+#   docker compose -p local-pm-test \
+#     -f docker-compose.yml -f docker-compose.test.yml up -d --build
+#   docker compose -p local-pm-test \
+#     -f docker-compose.yml -f docker-compose.test.yml down --volumes
+#
+# The builder stage runs the full test suite (SPC-003 §5.3): a red suite
+# breaks this build.
+services:
+  app:
+    container_name: local-pm-test-app
+    ports:
+      - "127.0.0.1:3012:3010"
+
+  mongodb:
+    container_name: local-pm-test-mongodb
