@@ -44,18 +44,9 @@ function buildWhere(slug: Slug, params: URLSearchParams): Where | undefined {
   const to = params.get('to')
   if (to) and.push({ updatedAt: { less_than_equal: to } })
 
-  const q = params.get('q')?.trim()
-  if (q) {
-    // Spec §3.2: free text over the versioned document's title / ticketId.
-    if (slug === 'tickets') {
-      and.push({
-        or: [{ 'version.title': { like: q } }, { 'version.ticketId': { like: q } }],
-      })
-    } else {
-      and.push({ 'version.title': { like: q } })
-    }
-  }
-
+  // Free text (spec §3.2: over the versioned document's title / ticketId) is
+  // matched in memory on the snapshot — Payload's query validation rejects
+  // `version.*` paths in findVersions `where` clauses.
   if (and.length === 0) return undefined
   if (and.length === 1) return and[0] as Where
   return { and } as Where
@@ -147,6 +138,25 @@ export async function buildHistoryFeed(
 
   // Consolidated chronological feed (spec §3.2).
   merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+
+  // Free-text filter over the version snapshot (title / ticketId, spec §3.2).
+  // Note: matching happens on the fetched window (≤100 per collection), which
+  // is exact at local-pm scale (v1, G-2).
+  const q = params.get('q')?.trim().toLowerCase()
+  if (q) {
+    const matches = (d: HistoryDoc) => {
+      const v = (d.version ?? {}) as Record<string, unknown>
+      return (
+        String(v.title ?? '').toLowerCase().includes(q) ||
+        String(v.ticketId ?? '').toLowerCase().includes(q) ||
+        String(v.name ?? '').toLowerCase().includes(q)
+      )
+    }
+    const filtered = merged.filter((e) => matches(e.doc))
+    merged.length = 0
+    merged.push(...filtered)
+    totalDocs = merged.length
+  }
 
   const start = (page - 1) * limit
   const pageEntries = merged.slice(start, start + limit)

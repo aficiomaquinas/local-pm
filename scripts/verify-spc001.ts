@@ -65,7 +65,8 @@ async function main() {
     const count = await mongo.collection(c).countDocuments({})
     console.log(`  ${c}: ${count} docs`)
   }
-  const sample = await mongo.collection('_tickets_versions').find({ parent: ticket.id }).toArray()
+  const { ObjectId } = await import('mongodb')
+  const sample = await mongo.collection('_tickets_versions').find({ parent: new ObjectId(String(ticket.id)) }).toArray()
   console.log(`  sample _tickets_versions for ticket ${ticket.id}:`, JSON.stringify(sample.map((d) => ({ id: d._id, status: (d.version as { status?: string })?.status, title: (d.version as { title?: string })?.title }))))
 
   label('AC-3: /api/history aggregation feed (withDiff=1) — same builder the HTTP route uses')
@@ -110,11 +111,11 @@ async function main() {
 
   label('AC-7: policy unit checks (readVersions ACL + endpoint guard)')
   const anon = null
-  const human = { id: 'u1', email: 'master@local', collection: 'users', actorType: 'user' }
-  const agent = { id: 'a1', email: 'agent@local', collection: 'users', actorType: 'agent' }
+  const human = { id: 'u1', email: 'master@local', collection: 'users', actorType: 'user' } as never
+  const agent = { id: 'a1', email: 'agent@local', collection: 'users', actorType: 'agent' } as never
   console.log('resolveActorType(anon):', resolveActorType(anon), '| isMasterUser:', isMasterUser(anon))
-  console.log('resolveActorType(human):', resolveActorType(human), '| isMasterUser:', isMasterUser(human))
-  console.log('resolveActorType(agent):', resolveActorType(agent), '| isMasterUser:', isMasterUser(agent))
+  console.log('resolveActorType(human as never):', resolveActorType(human as never), '| isMasterUser:', isMasterUser(human as never))
+  console.log('resolveActorType(agent as never):', resolveActorType(agent as never), '| isMasterUser:', isMasterUser(agent as never))
 
   const mkReq = (user: unknown) => ({ user, headers: new Map() }) as unknown as Parameters<ReturnType<typeof enforceMasterOnlyPolicy>>[0]['req']
   const guard = enforceMasterOnlyPolicy('test surface')
