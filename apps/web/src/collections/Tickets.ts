@@ -1,6 +1,6 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
-import { denyAgents, enforceMasterOnlyPolicy, isMasterUser } from '@/access/actorPolicy'
+import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { TicketStatus, TicketPriority, TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 
 export const Tickets: CollectionConfig = {

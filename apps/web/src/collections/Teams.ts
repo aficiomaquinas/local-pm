@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
-import { denyAgents, enforceMasterOnlyPolicy } from '@/access/actorPolicy'
+import { APIError } from 'payload'
+import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 
 export const Teams: CollectionConfig = {
   slug: 'teams',
@@ -11,8 +12,9 @@ export const Teams: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    // SPC-001 §3: CRUD stays open (audit-trail surface only is policy-gated;
-    // restore is denied by the readVersions ACL + beforeOperation hook).
+    // Plain CRUD stays open pre-OIDC (ADR-002 provisions identities later).
+    // Restore (which Payload runs through this `update` check) is denied by
+    // the beforeOperation guard below (SPC-001 §6).
     update: () => true,
     delete: () => true,
     // SPC-001 §6: version trail reads are policy-denied to the agent identity.
@@ -22,6 +24,19 @@ export const Teams: CollectionConfig = {
   versions: {
     // SPC-001 §4.1/§5.2 D-1: native Payload versions, drafts disabled.
     maxPerDoc: 100,
+  },
+  hooks: {
+    // SPC-001 §6: native restore (POST /api/teams/versions/:id) runs the
+    // collection `update` access check; this guard hard-denies restore by the
+    // agent identity and by unauthenticated callers.
+    beforeOperation: [
+      ({ args, operation }) => {
+        if (operation !== 'restoreVersion') return
+        if (!args.overrideAccess && !isMasterUser(args.req.user)) {
+          throw new APIError('Restore is reserved for the master user (SPC-001 §6)', 403, null, true)
+        }
+      },
+    ],
   },
   fields: [
     {

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
-import { denyAgents, enforceMasterOnlyPolicy } from '@/access/actorPolicy'
+import { APIError } from 'payload'
+import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { ProjectStatus, PROJECT_STATUS_OPTIONS, PROJECT_ICONS, PROJECT_COLORS } from '@/types/enums'
 
 export const Projects: CollectionConfig = {
@@ -23,6 +24,19 @@ export const Projects: CollectionConfig = {
   versions: {
     // SPC-001 §4.1/§5.2 D-1: native Payload versions, drafts disabled.
     maxPerDoc: 100,
+  },
+  hooks: {
+    // SPC-001 §6: native restore (POST /api/projects/versions/:id) runs the
+    // collection `update` access check; this guard hard-denies restore by the
+    // agent identity and by unauthenticated callers.
+    beforeOperation: [
+      ({ args, operation }) => {
+        if (operation !== 'restoreVersion') return
+        if (!args.overrideAccess && !isMasterUser(args.req.user)) {
+          throw new APIError('Restore is reserved for the master user (SPC-001 §6)', 403, null, true)
+        }
+      },
+    ],
   },
   fields: [
     {
