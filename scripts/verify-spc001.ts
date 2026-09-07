@@ -57,8 +57,10 @@ async function main() {
   await payload.update({ collection: 'teams', id: team.id, data: { name: 'ATV Team v2' } as never })
 
   label('AC-2 evidence: Mongo _slug_versions collections + counts')
-  const db = payload.db as unknown as { mongo: { db: { listCollections: (f?: unknown) => { toArray: () => Promise<{ name: string }[]> }; collection: (n: string) => { countDocuments: (f?: unknown) => Promise<number>; find: (f: unknown) => { toArray: () => Promise<Record<string, unknown>[]> } } } } }
-  const mongo = db.mongo.db
+  const db = payload.db as unknown as {
+    connection: { db: { listCollections: (f?: unknown) => { toArray: () => Promise<{ name: string }[]> }; collection: (n: string) => { countDocuments: (f?: unknown) => Promise<number>; find: (f: unknown) => { toArray: () => Promise<Record<string, unknown>[]> } } } }
+  }
+  const mongo = db.connection.db
   const collections = await mongo.listCollections().toArray()
   const versionCols = collections.map((c) => c.name).filter((n) => n.includes('_versions'))
   console.log('version collections:', JSON.stringify(versionCols))
