@@ -12,17 +12,18 @@ const label = (s: string) => console.log(`\n===== ${s} =====`)
 
 async function main() {
   const payload = await getPayload({ config })
+  const RAND = Array.from({ length: 4 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('')
 
   label('AC-2: CRUD generates _slug_versions entries (Local API create/update)')
   const project = await payload.create({
     collection: 'projects',
-    data: { name: 'Audit Trail Verify', prefix: 'ATV', status: 'active', icon: 'folder', color: '#6366f1' } as never,
+    data: { name: 'Audit Trail Verify', prefix: RAND, status: 'ACTIVE', icon: 'folder', color: '#6366f1' } as never,
   })
   console.log('created project:', project.id, project.name, 'prefix=' + project.prefix)
 
   const team = await payload.create({
     collection: 'teams',
-    data: { name: 'ATV Team', description: null, color: '#22d3ee' } as never,
+    data: { name: `ATV Team ${RAND}`, description: null, color: '#22d3ee' } as never,
   })
   console.log('created team:', team.id, team.name)
 
@@ -30,8 +31,8 @@ async function main() {
     collection: 'tickets',
     data: {
       title: 'ATV verify ticket',
-      status: 'todo',
-      priority: 'high',
+      status: 'TODO',
+      priority: 'HIGH',
       project: project.id,
       team: team.id,
       labels: [{ name: 'audit', color: '#ef4444' }],
@@ -41,13 +42,13 @@ async function main() {
   console.log('created ticket:', ticket.id, 'ticketId=' + (ticket as unknown as { ticketId: string }).ticketId)
 
   // Two updates on the ticket → versions trail
-  await payload.update({ collection: 'tickets', id: ticket.id, data: { status: 'in-progress', title: 'ATV verify ticket (edited)' } as never })
+  await payload.update({ collection: 'tickets', id: ticket.id, data: { status: 'IN_PROGRESS', title: 'ATV verify ticket (edited)' } as never })
   await payload.update({
     collection: 'tickets',
     id: ticket.id,
     data: {
-      status: 'done',
-      priority: 'urgent',
+      status: 'DONE',
+      priority: 'LOW',
       labels: [{ name: 'audit', color: '#ef4444' }, { name: 'verified', color: '#22c55e' }],
       subtasks: [{ title: 'write verify script', completed: true }, { title: 'review diff', completed: false }],
     } as never,
