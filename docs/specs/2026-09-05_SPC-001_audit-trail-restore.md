@@ -4,7 +4,7 @@
 |---|---|
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`) |
 | **ID** | SPC-001 |
-| **Status** | APPROVED (2026-09-05). Implementation authorized — branch `feat/audit-trail`. |
+| **Status** | IMPLEMENTED (2026-09-07). Merged to master and E2E-verified (CRUD→versions, feed+filters, field diffs, restore, §6 policy denial). |
 | **Date** | 2026-09-05 |
 | **Depends on** | PR anaskasmi/local-pm#1 (`fix/tsconfig-exclude-mcp-server`) — build base |
 | **Related** | [REQ-002 — distinguished actor credentials & role policy](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001](../adr/2026-09-05_ADR-001_local-first-loopback-binding.md) |
