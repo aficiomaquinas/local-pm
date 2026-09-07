@@ -6,6 +6,8 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
+    "test": "pnpm -r --no-bail test",
+    "verify": "pnpm -r build && pnpm -r --no-bail test",
     "dev": "pnpm --filter local-pm-web dev",
     "mcp:build": "pnpm --filter @local-pm/mcp-server build",
     "mcp:dev": "pnpm --filter @local-pm/mcp-server dev",
