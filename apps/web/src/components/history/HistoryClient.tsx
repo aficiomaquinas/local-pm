@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Loader2, ChevronLeft, ChevronRight, History as HistoryIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Loader2, ChevronLeft, ChevronRight, History as HistoryIcon, ChevronDown, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { VersionRow } from '@/components/history/VersionRow'
 import { HistoryFilters, DEFAULT_FILTERS, type HistoryFilterState } from '@/components/history/HistoryFilters'
 import { HISTORY_COLLECTIONS, type HistoryDoc, type HistoryResponse } from '@/app/api/history/types'
+import { groupHistoryFeed, isCreationRow } from '@/components/history/grouping'
 
 /**
  * Client surface of the audit trail (SPC-001 §4.5): filters, consolidated
@@ -14,6 +15,12 @@ import { HISTORY_COLLECTIONS, type HistoryDoc, type HistoryResponse } from '@/ap
  * gated). Restore goes straight to the native REST endpoint
  * POST /api/{slug}/versions/:id (spec §4.3) — it re-creates a version, so the
  * refresh shows the restore as the newest trail entry.
+ *
+ * BUG-2 (triage 2026-09-07): the feed renders grouped by (collection, parent)
+ * — one collapsible group per ticket/project/team, versions newest-first
+ * inside, 'Created' marked only on the group's first (oldest) version.
+ * Collapsed by default except the feed's leading group. The fetch is
+ * untouched: the API was never the bug.
  */
 
 const PAGE_SIZE = 20
@@ -29,6 +36,9 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [parentOptions, setParentOptions] = useState<{ id: string; label: string }[]>([])
+  // Accordion: null = default (leading group expanded, rest collapsed);
+  // '' = user collapsed everything; a key = that group is expanded.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
 
   const buildQuery = useCallback(
     (p: number) => {
@@ -58,6 +68,8 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
         const json = (await res.json()) as HistoryResponse
         setData(json)
         setPage(p)
+        // New page/feed → back to the default expansion (leading group open).
+        setExpandedKey(null)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load history')
       } finally {
@@ -89,6 +101,9 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
     load()
   }, [filters.collection])
 
+  const groups = useMemo(() => groupHistoryFeed(data.docs), [data.docs])
+  const firstGroupKey = groups[0]?.key ?? null
+
   const totalPages = Math.max(1, Math.ceil(data.totalDocs / PAGE_SIZE))
 
   const handleRestore = async (doc: HistoryDoc): Promise<boolean> => {
@@ -100,6 +115,10 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
     // Refresh the feed: the restore created a new version on top of the trail.
     await fetchFeed(1)
     return true
+  }
+
+  const toggleGroup = (key: string, isExpanded: boolean) => {
+    setExpandedKey(isExpanded ? '' : key)
   }
 
   return (
@@ -134,9 +153,57 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
         </div>
       ) : (
         <ul className="space-y-2">
-          {data.docs.map((doc) => (
-            <VersionRow key={`${doc.collection}:${doc.id}`} doc={doc} onRestore={handleRestore} />
-          ))}
+          {groups.map((group) => {
+            const isExpanded = expandedKey === null ? group.key === firstGroupKey : expandedKey === group.key
+            return (
+              <li key={group.key} className="bg-[#18181b] border border-[#27272a] rounded-lg">
+                <button
+                  onClick={() => toggleGroup(group.key, isExpanded)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left"
+                  aria-expanded={isExpanded}
+                >
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
+                  ) : (
+                    <ChevronRightIcon className="w-4 h-4 text-gray-500 shrink-0" />
+                  )}
+                  <HistoryIcon className="w-4 h-4 text-gray-600 shrink-0" />
+                  <span
+                    className={`text-[11px] uppercase tracking-wide px-1.5 py-0.5 rounded border shrink-0 ${groupBadge(group.collection)}`}
+                  >
+                    {group.collection}
+                  </span>
+                  <span className="text-sm text-white truncate flex-1">{group.parentLabel}</span>
+                  <span className="text-[11px] text-gray-500 shrink-0">
+                    {group.docs.length} {group.docs.length === 1 ? 'version' : 'versions'}
+                  </span>
+                  {group.creation && (
+                    <span className="text-[11px] text-green-400 border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">
+                      created
+                    </span>
+                  )}
+                </button>
+
+                {isExpanded && (
+                  <div className="px-4 pb-3 pt-1 border-t border-zinc-800/70">
+                    <ul className="space-y-1.5">
+                      {group.docs.map((doc) => (
+                        <VersionRow
+                          key={`${doc.collection}:${doc.id}`}
+                          doc={doc}
+                          onRestore={handleRestore}
+                          // 'Created' only on the group's first (oldest) version;
+                          // superseded creation diffs are not re-displayed.
+                          isCreation={group.creation ? doc.id === group.creation.id : isCreationRow(doc)}
+                          hideCreationDiff={Boolean(group.creation && doc.id !== group.creation.id)}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
 
@@ -161,4 +228,13 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
       </div>
     </div>
   )
+}
+
+function groupBadge(collection: string): string {
+  const BADGE: Record<string, string> = {
+    tickets: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+    projects: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    teams: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  }
+  return BADGE[collection] ?? 'bg-zinc-800 text-gray-400 border-zinc-700'
 }

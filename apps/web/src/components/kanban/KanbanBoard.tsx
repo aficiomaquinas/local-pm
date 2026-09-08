@@ -14,12 +14,14 @@ import {
   type DragEndEvent,
   type DragOverEvent,
 } from '@dnd-kit/core'
-import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { KanbanHeader } from './KanbanHeader'
 import { TicketModal } from './TicketModal'
 import { TicketDetailModal } from './TicketDetailModal'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { computeDragResult } from './dragLogic'
 import { TicketStatus } from '@/types/enums'
 import type { Project, Team, Ticket } from '@/payload-types'
 
@@ -147,12 +149,24 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
   // Track if this is the initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
 
+  // BUG-1: while a drag is in flight, the filter-refetch effect (triggered by
+  // router.replace on URL sync) must not overwrite the optimistic setTickets
+  // with server state from before the PATCH landed. The drag sets this flag;
+  // the effect skips its fetch while it is set and the drag clears it after
+  // the PATCH settles.
+  const isDraggingRef = useRef(false)
+
   // Refetch tickets when filters change
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false
       return
     }
+
+    // BUG-1: a drag is in flight → skip this round; the drag's PATCH resolves
+    // afterwards and the state it committed is already authoritative. (When
+    // filters change mid-drag, the drag refetches the new filters itself.)
+    if (isDraggingRef.current) return
 
     const refetchTickets = async () => {
       setIsRefetching(true)
@@ -348,55 +362,53 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
 
     if (activeId === overId) return
 
-    const activeTicket = tickets.find((t) => t.id === activeId)
-    if (!activeTicket) return
+    // BUG-1: a drag is in flight from here until the PATCH settles — the
+    // filter-refetch effect must stay suppressed through the whole window
+    // (it re-runs on router.replace URL syncs and would otherwise clobber
+    // the optimistic state with pre-PATCH server data).
+    isDraggingRef.current = true
+    try {
+      // BUG-1: recompute from the CURRENT state inside the setTickets updater
+      // (handleDragOver already mutated it during the drag) and PATCH with
+      // the final values computed there — no stale drag-start snapshot. A
+      // no-op drop returns nulls: nothing to PATCH, nothing to refetch.
+      let patch: { status: TicketStatus; sortOrder: number } | null = null
 
-    // Determine the target status
-    let targetStatus = activeTicket.status
-    const isOverColumn = COLUMNS.some((col) => col.id === overId)
-    if (isOverColumn) {
-      targetStatus = overId as TicketStatus
-    } else {
-      const overTicket = tickets.find((t) => t.id === overId)
-      if (overTicket) {
-        targetStatus = overTicket.status as TicketStatus
-      }
-    }
-
-    // Get tickets in the target column
-    const columnTickets = tickets.filter((t) => t.status === targetStatus)
-    const oldIndex = columnTickets.findIndex((t) => t.id === activeId)
-    const newIndex = isOverColumn
-      ? columnTickets.length
-      : columnTickets.findIndex((t) => t.id === overId)
-
-    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-      const reorderedTickets = arrayMove(columnTickets, oldIndex, newIndex)
-
-      // Update sort order for all tickets in the column
-      const updatedTickets = tickets.map((ticket) => {
-        const reorderedIndex = reorderedTickets.findIndex((t) => t.id === ticket.id)
-        if (reorderedIndex !== -1) {
-          return { ...ticket, sortOrder: reorderedIndex, status: targetStatus }
+      setTickets((prev) => {
+        const result = computeDragResult(prev, activeId, overId)
+        if (result.status !== null && result.sortOrder !== null) {
+          patch = { status: result.status, sortOrder: result.sortOrder }
         }
-        return ticket
+        return result.tickets
       })
 
-      setTickets(updatedTickets)
-    }
+      if (!patch) return
 
-    // Update the ticket in the database
-    try {
+      // Refetch only after the PATCH resolves (fresh column pagination and
+      // authoritative order) — never before it, and never on no-op drops.
       await fetch(`/api/tickets/${activeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: targetStatus,
-          sortOrder: columnTickets.findIndex((t) => t.id === overId) + 1,
-        }),
+        body: JSON.stringify(patch),
       })
+
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('project') || params.get('team')) {
+        const url = `/api/tickets?page=1&limit=20&depth=2&sort=sortOrder` +
+          (params.get('project') ? `&where[project][equals]=${params.get('project')}` : '') +
+          (params.get('team') ? `&where[team][equals]=${params.get('team')}` : '')
+        const response = await fetch(url)
+        const data = await response.json()
+        if (Array.isArray(data.docs)) {
+          setTickets(data.docs)
+        }
+        // No pagination rewrite: a move does not change column doc counts.
+      }
     } catch (error) {
       console.error('Failed to update ticket:', error)
+    } finally {
+      isDraggingRef.current = false
+      setActiveTicket(null)
     }
   }
 
@@ -428,12 +440,36 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     setViewingTicket(updatedTicket)
   }
 
+  // BUG-3 soft delete: the UI Delete action PATCHes `deleted: true` — never a
+  // hard DELETE (the collections' beforeOperation guard 403s that anyway) —
+  // with a confirmation. The read constraint hides the ticket on refresh; we
+  // also drop it from local state for instant feedback. The version trail
+  // survives, so the audit history keeps the ticket.
+  const [pendingDelete, setPendingDelete] = useState<Ticket | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const handleDeleteTicket = async (ticketId: string) => {
+    const ticket = tickets.find((t) => t.id === ticketId) ?? null
+    setPendingDelete(ticket)
+  }
+
+  const confirmSoftDelete = async () => {
+    if (!pendingDelete) return
+    setIsDeleting(true)
     try {
-      await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' })
-      setTickets((prev) => prev.filter((t) => t.id !== ticketId))
+      const response = await fetch(`/api/tickets/${pendingDelete.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleted: true }),
+      })
+      if (!response.ok) throw new Error(`Soft delete failed (${response.status})`)
+      setTickets((prev) => prev.filter((t) => t.id !== pendingDelete.id))
+      setViewingTicket((prev) => (prev?.id === pendingDelete.id ? null : prev))
+      setPendingDelete(null)
     } catch (error) {
-      console.error('Failed to delete ticket:', error)
+      console.error('Failed to soft delete ticket:', error)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -504,6 +540,17 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
           onDelete={handleDeleteTicket}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmSoftDelete}
+        title="Delete this ticket?"
+        message={`This soft-deletes "${pendingDelete?.title ?? ''}".\n\nIt disappears from the board, but its full audit history is preserved — deletion never destroys the trail.`}
+        confirmText="Delete"
+        isDestructive
+        isLoading={isDeleting}
+      />
     </div>
   )
 }

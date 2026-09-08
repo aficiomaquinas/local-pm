@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
+import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 
 export const Teams: CollectionConfig = {
   slug: 'teams',
@@ -10,7 +11,9 @@ export const Teams: CollectionConfig = {
     description: 'Teams group related work within a project',
   },
   access: {
-    read: () => true,
+    // Soft delete (SPC-004 D2): deleted teams leave every read path while
+    // their version trail survives for the audit history.
+    read: readExcludingDeleted,
     create: () => true,
     // Plain CRUD stays open pre-OIDC (ADR-002 provisions identities later).
     // Restore (which Payload runs through this `update` check) is denied by
@@ -30,6 +33,9 @@ export const Teams: CollectionConfig = {
     // collection `update` access check; this guard hard-denies restore by the
     // agent identity and by unauthenticated callers.
     beforeOperation: [
+      // Soft delete (SPC-004 D2): hard delete is disabled from every request
+      // path — the real purge is the operator's terminal-only script.
+      blockHardDelete,
       ({ args, operation }) => {
         if (operation !== 'restoreVersion') return
         if (!args.overrideAccess && !isMasterUser(args.req.user)) {
@@ -62,6 +68,9 @@ export const Teams: CollectionConfig = {
         description: 'Color for team identification',
       },
     },
+    // Soft delete (SPC-004 D2): `deleted: true` hides the team while its
+    // version trail survives.
+    DELETED_FIELD,
   ],
   timestamps: true,
 }

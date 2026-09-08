@@ -135,8 +135,13 @@ export function TeamsList({ initialTeams, initialPagination }: TeamsListProps) {
     try {
       const { team } = deleteConfirm
 
-      // Delete the team (tickets will be orphaned, not deleted)
-      await fetch(`/api/teams/${team.id}`, { method: 'DELETE' })
+      // Soft delete the team (BUG-3: PATCH, never hard DELETE — the trail
+      // must survive; tickets keep pointing at a soft-deleted team).
+      await fetch(`/api/teams/${team.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleted: true }),
+      })
       setTeams((prev) => prev.filter((t) => t.id !== team.id))
       setDeleteConfirm(null)
     } catch (error) {
@@ -183,7 +188,12 @@ export function TeamsList({ initialTeams, initialPagination }: TeamsListProps) {
 
   const handleTicketDelete = async (ticketId: string) => {
     try {
-      await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' })
+      // BUG-3 soft delete: PATCH, never hard DELETE (trail preserved).
+      await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleted: true }),
+      })
       setSelectedTicket(null)
     } catch (error) {
       console.error('Failed to delete ticket:', error)

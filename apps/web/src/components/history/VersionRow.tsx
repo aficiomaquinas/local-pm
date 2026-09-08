@@ -23,9 +23,18 @@ const COLLECTION_BADGE: Record<string, string> = {
 interface VersionRowProps {
   doc: HistoryDoc
   onRestore: (doc: HistoryDoc) => Promise<boolean>
+  /**
+   * BUG-2 grouping: override for the 'created' badge. The group marks its
+   * first (oldest) version as THE creation; individual rows no longer decide
+   * from `!diff` alone (a creation diff-vs-{} on a non-first row used to
+   * render every entry as an unrelated "created" card).
+   */
+  isCreation?: boolean
+  /** Hide the expanded diff (superseded creation diff inside a group). */
+  hideCreationDiff?: boolean
 }
 
-export function VersionRow({ doc, onRestore }: VersionRowProps) {
+export function VersionRow({ doc, onRestore, isCreation: isCreationProp, hideCreationDiff = false }: VersionRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -43,7 +52,7 @@ export function VersionRow({ doc, onRestore }: VersionRowProps) {
         minute: '2-digit',
       })
 
-  const isCreation = !doc.diff || Object.keys(doc.diff).length === 0
+  const isCreation = isCreationProp ?? (!doc.diff || Object.keys(doc.diff).length === 0)
 
   const handleRestore = async () => {
     setRestoring(true)
@@ -125,7 +134,7 @@ export function VersionRow({ doc, onRestore }: VersionRowProps) {
               Restore this version
             </button>
           </div>
-          <VersionDiff delta={doc.diff} />
+          <VersionDiff delta={hideCreationDiff ? null : doc.diff} />
           {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
         </div>
       )}
