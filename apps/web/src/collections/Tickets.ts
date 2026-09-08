@@ -1,6 +1,7 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
+import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { TicketStatus, TicketPriority, TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 
 export const Tickets: CollectionConfig = {
@@ -11,7 +12,10 @@ export const Tickets: CollectionConfig = {
     description: 'Individual work items within projects',
   },
   access: {
-    read: () => true,
+    // Soft delete (SPC-004 D2): deleted docs leave every read path (board
+    // server render, client refetch, list APIs) via this query constraint,
+    // while the version trail survives untouched for the audit history.
+    read: readExcludingDeleted,
     create: () => true,
     // SPC-001 §3 in-scope item 4 + actorPolicy.ts decision: collection CRUD stays
     // OPEN (the kanban and local tooling depend on it); only the audit trail
@@ -48,6 +52,9 @@ export const Tickets: CollectionConfig = {
     // collection `update` access check. The policy hook below hard-denies
     // restore by the agent identity and by unauthenticated callers.
     beforeOperation: [
+      // Soft delete (SPC-004 D2): hard delete is disabled from every request
+      // path — the real purge is the operator's terminal-only script.
+      blockHardDelete,
       ({ args, operation }) => {
         if (operation !== 'restoreVersion') return
         if (!args.overrideAccess && !isMasterUser(args.req.user)) {
@@ -184,6 +191,10 @@ export const Tickets: CollectionConfig = {
         description: 'Order within the column',
       },
     },
+    // Soft delete (SPC-004 D2): `deleted: true` hides the ticket from the
+    // board while its version trail survives (audit history is never
+    // destroyed by the action it records).
+    DELETED_FIELD,
   ],
   timestamps: true,
 }

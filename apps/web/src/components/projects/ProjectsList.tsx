@@ -162,15 +162,25 @@ export function ProjectsList({ initialProjects, initialPagination }: ProjectsLis
         const tickets = ticketsData.docs || []
 
         // Delete each ticket
+        // BUG-3 soft delete: PATCH `deleted: true` on every ticket of the
+        // project (never hard DELETE — the trail must survive).
         await Promise.all(
           tickets.map((ticket: { id: string }) =>
-            fetch(`/api/tickets/${ticket.id}`, { method: 'DELETE' })
+            fetch(`/api/tickets/${ticket.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deleted: true }),
+            })
           )
         )
       }
 
-      // Then delete the project
-      await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+      // Then soft delete the project (trail preserved).
+      await fetch(`/api/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleted: true }),
+      })
       setProjects((prev) => prev.filter((p) => p.id !== project.id))
       setDeleteConfirm(null)
     } catch (error) {
@@ -217,7 +227,12 @@ export function ProjectsList({ initialProjects, initialPagination }: ProjectsLis
 
   const handleTicketDelete = async (ticketId: string) => {
     try {
-      await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' })
+      // BUG-3 soft delete: PATCH, never hard DELETE (trail preserved).
+      await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleted: true }),
+      })
       setSelectedTicket(null)
     } catch (error) {
       console.error('Failed to delete ticket:', error)

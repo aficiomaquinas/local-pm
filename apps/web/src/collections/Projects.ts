@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
+import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { ProjectStatus, PROJECT_STATUS_OPTIONS, PROJECT_ICONS, PROJECT_COLORS } from '@/types/enums'
 
 export const Projects: CollectionConfig = {
@@ -11,7 +12,9 @@ export const Projects: CollectionConfig = {
     description: 'Projects organize related tickets together',
   },
   access: {
-    read: () => true,
+    // Soft delete (SPC-004 D2): deleted projects leave every read path while
+    // their version trail survives for the audit history.
+    read: readExcludingDeleted,
     create: () => true,
     // SPC-001 §3: CRUD stays open (audit-trail surface only is policy-gated;
     // restore is denied by the readVersions ACL + beforeOperation hook).
@@ -30,6 +33,9 @@ export const Projects: CollectionConfig = {
     // collection `update` access check; this guard hard-denies restore by the
     // agent identity and by unauthenticated callers.
     beforeOperation: [
+      // Soft delete (SPC-004 D2): hard delete is disabled from every request
+      // path — the real purge is the operator's terminal-only script.
+      blockHardDelete,
       ({ args, operation }) => {
         if (operation !== 'restoreVersion') return
         if (!args.overrideAccess && !isMasterUser(args.req.user)) {
@@ -108,6 +114,9 @@ export const Projects: CollectionConfig = {
         description: 'Auto-incremented counter for ticket IDs',
       },
     },
+    // Soft delete (SPC-004 D2): `deleted: true` hides the project while its
+    // version trail survives.
+    DELETED_FIELD,
   ],
   timestamps: true,
 }

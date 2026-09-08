@@ -218,6 +218,10 @@ export interface Project {
    * Auto-incremented counter for ticket IDs
    */
   ticketCounter?: number | null;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -255,6 +259,10 @@ export interface Team {
    * Color for team identification
    */
   color?: string | null;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -340,6 +348,10 @@ export interface Ticket {
    * Order within the column
    */
   sortOrder?: number | null;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -631,6 +643,7 @@ export interface ProjectsSelect<T extends boolean = true> {
   color?: T;
   status?: T;
   ticketCounter?: T;
+  deleted?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -642,6 +655,7 @@ export interface TeamsSelect<T extends boolean = true> {
   name?: T;
   description?: T;
   color?: T;
+  deleted?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -674,6 +688,7 @@ export interface TicketsSelect<T extends boolean = true> {
         id?: T;
       };
   sortOrder?: T;
+  deleted?: T;
   updatedAt?: T;
   createdAt?: T;
 }
