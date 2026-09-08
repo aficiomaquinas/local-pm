@@ -1,4 +1,6 @@
 import type { Access, PayloadRequest } from 'payload'
+import { status as httpStatus } from 'http-status'
+import { APIError } from 'payload'
 
 /**
  * SPC-004 §4e access policy — NORMATIVE (xref REQ-002, ADR-002, SPC-001 §6).
@@ -30,6 +32,35 @@ export const dataManagementAccess: Access = ({ req }) => {
   const role = (user as { role?: unknown } | null | undefined)?.role
   if (typeof role === 'string') return role === 'superadmin' // post-ADR-002 claims
   return true // master user, pre-claims
+}
+
+/**
+ * R-4 guard (SPC-004 §4e note + §6 R-4) — endpoint-level enforcement for the
+ * plugin's CUSTOM endpoints (`POST /api/exports/download`,
+ * `POST /api/exports/export-preview`, `POST /api/imports/preview-data`).
+ *
+ * Payload does NOT run collection `access` for collection-configured custom
+ * endpoints, and these handlers call createExport/createImport directly:
+ * `createExport` only checks that SOME user is present, so a valid agent
+ * credential would stream the full dataset from `/download`, bypassing the
+ * `exports.read`/`exports.create` policy above. Gate here, at the exact
+ * surface the spec flags as unverified — throwing 401/403 (documented
+ * fallback: "endpoint-level access override").
+ */
+export function enforceDataManagementEndpointPolicy(surface: string) {
+  return ({ req }: { req: PayloadRequest }) => {
+    if (!dataManagementAccess({ req })) {
+      const user = req?.user as PayloadRequest['user']
+      const actorType = resolveDataManagementActor(user)
+      throw new APIError(
+        `Access denied: ${actorType === 'agent' ? 'the agent identity is barred from' : 'authentication required for'} ${surface} (SPC-004 §4e/R-4)`,
+        actorType === 'agent' ? httpStatus.FORBIDDEN : httpStatus.UNAUTHORIZED,
+        null,
+        true,
+      )
+    }
+    return true
+  }
 }
 
 type DataManagementActor = 'agent' | 'user' | null

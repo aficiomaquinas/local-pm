@@ -3,9 +3,10 @@ import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { importExportPlugin } from '@payloadcms/plugin-import-export'
 import path from 'path'
 import { buildConfig } from 'payload'
+import type { CollectionConfig, PayloadRequest } from 'payload'
 import { fileURLToPath } from 'url'
 
-import { dataManagementAccess } from './access/dataManagementPolicy'
+import { dataManagementAccess, enforceDataManagementEndpointPolicy } from './access/dataManagementPolicy'
 import { Projects } from './collections/Projects'
 import { Teams } from './collections/Teams'
 import { Tickets } from './collections/Tickets'
@@ -18,6 +19,31 @@ const dirname = path.dirname(filename)
 // exports collection stores uploads on the compose-mounted volume
 // (`local-pm-snapshots:/app/snapshots`), overridable via SNAPSHOT_DIR.
 const SNAPSHOT_STATIC_DIR = process.env.SNAPSHOT_DIR || '/app/snapshots'
+
+/**
+ * R-4: wrap the plugin's custom-endpoint handlers so the Data Management
+ * policy runs BEFORE them (Payload does not apply collection access to
+ * custom endpoints). The plugin handlers are already-bound closures, so
+ * wrapping preserves their behavior exactly.
+ */
+function gatePluginEndpoints(
+  collection: CollectionConfig,
+  policy: (surface: string) => (args: { req: PayloadRequest }) => boolean,
+): CollectionConfig['endpoints'] {
+  const endpoints = collection.endpoints
+  if (!endpoints) return endpoints
+  return endpoints.map((endpoint) =>
+    typeof endpoint === 'object'
+      ? {
+          ...endpoint,
+          handler: (req: PayloadRequest) => {
+            policy(endpoint.path)({ req })
+            return endpoint.handler(req)
+          },
+        }
+      : endpoint,
+  )
+}
 
 export default buildConfig({
   admin: {
@@ -66,6 +92,9 @@ export default buildConfig({
           ...((collection as { upload?: Record<string, unknown> }).upload ?? {}),
           staticDir: SNAPSHOT_STATIC_DIR,
         },
+        // R-4: the plugin's /download + /export-preview custom endpoints are
+        // gated by the same policy (collection access does not run for them).
+        endpoints: gatePluginEndpoints(collection, enforceDataManagementEndpointPolicy),
         access: {
           ...collection.access,
           read: dataManagementAccess,
@@ -78,6 +107,8 @@ export default buildConfig({
       }),
       overrideImportCollection: ({ collection }) => ({
         ...collection,
+        // R-4: gate the /preview-data custom endpoint identically.
+        endpoints: gatePluginEndpoints(collection, enforceDataManagementEndpointPolicy),
         access: {
           ...collection.access,
           read: dataManagementAccess,
