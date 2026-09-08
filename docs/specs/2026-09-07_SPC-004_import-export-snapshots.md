@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`, branch `master`) |
 | **ID** | SPC-004 |
 | **Date** | 2026-09-07 |
-| **Status** | DRAFT — pending operator review |
+| **Status** | APPROVED (2026-09-07) — operator decisions recorded (§6 D-1…D-5). Implementation authorized: branch `feat/auth-upgrade-datamanagement` (spine: upgrade → auth bridge → plugin → reset tool → frontend panel) + `feat/ui-fixes-soft-delete` (parallel UI wave). |
 | **Type** | Specification (resolves [REQ-004](../requirements/2026-09-06_REQ-004_import-export-snapshots.md)) |
 | **Depends on** | Payload upgrade 3.68.4 → ≥ 3.85 (hard requirement, §3.2) · ADR-002 auth wiring (functional prerequisite, §3.4) |
 | **Related** | [REQ-002 — distinguished actor credentials](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · [ADR-001 — loopback-only, two identities](../adr/2026-09-05_ADR-001_local-first-loopback-binding.md) · [ADR-002 — OIDC authentication](../adr/2026-09-05_ADR-002_oidc-authentication.md) · [SPC-001 — audit trail & restore](../specs/2026-09-05_SPC-001_audit-trail-restore.md) · [SPC-002 — workspace restructure](../specs/2026-09-05_SPC-002_workspace-restructure.md) · [SPC-003 — testing strategy](../specs/2026-09-06_SPC-003_testing-strategy.md) |
@@ -339,15 +339,20 @@ is found, the fix is an upstream issue + local endpoint-level access override.
 | G-3 | **Jobs Queue `autoRun`** deliberately not adopted | Revisit only if background/periodic snapshots become a requirement (none exists today). |
 | G-4 | **CSV spreadsheet use-case** foreclosed by forced `json` | D-4: per-collection CSV re-enable is a one-line change if a real workflow appears. |
 
-Open decisions for the operator:
+Open decisions for the operator — **ALL RESOLVED by the operator (2026-09-07)**:
 
 | ID | Decision |
 |---|---|
-| D-1 | Upgrade window for payload 3.68.4 → 3.88.x (hard prerequisite, §3.1–3.2) |
-| D-2 | Bridge minimal `users` collection now (recommended) vs sequence after ADR-002 |
-| D-3 | Snapshot file persistence: ephemeral-accepted vs `staticDir` volume (recommend volume) |
-| D-4 | Any per-collection CSV exception (none recommended today) |
-| D-5 | Custom frontend tab (not recommended; admin panel suffices) |
+| D-1 | **RESOLVED: upgrade now.** No productive load → no maintenance window needed. |
+| D-2 | **RESOLVED: bridge minimal `users` collection NOW** (first step of the implementation spine; ADR-002 subsumes it later). |
+| D-3 | **RESOLVED: `staticDir` to a compose volume** (option b). |
+| D-4 | **RESOLVED: no CSV exceptions** (JSON-only for the three collections). |
+| D-5 | **RESOLVED: YES — authenticated frontend Data Management panel is a REQUIREMENT.** The operator will apply import/export via UI (never via agent, never memorized CLI); the panel requires authentication with a permission profile (superadmin sees it, agent does not). Built as the final step of the spine (SPC-001 History-tab pattern). |
+
+Additional operator resolution (BUG-3, from the QA triage): **soft delete** for
+frontend items (preserves history; aligned with restore/snapshot). Hard purge
+exists only as a **terminal, non-atomic, dev-oriented `--reset` tool** that is
+snapshot-safe (backs up before resetting; never deletes snapshots).
 
 ## 7. Acceptance criteria (verifiable)
 
