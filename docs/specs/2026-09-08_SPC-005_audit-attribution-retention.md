@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`, branch `master`) |
 | **ID** | SPC-005 |
 | **Date** | 2026-09-08 |
-| **Status** | DRAFT — pending operator approval. No implementation authorized by this document. |
+| **Status** | APPROVED (2026-09-08) — retention Option B (maxPerDoc 1000). Implementation authorized: branch `feat/audit-attribution` (with drag UX fix, History mutation labels, superadmin Options panel — action plan items 1-3). |
 | **Type** | Specification (patch to SPC-001 gap G-1 + retention policy decision) |
 | **Depends on** | SPC-001 (implemented 2026-09-07) · REQ-002 (distinguished actors) · ADR-002 (OIDC wiring; functional prerequisite for non-anonymous attribution) |
 | **Related** | [SPC-001 — audit trail & restore](2026-09-05_SPC-001_audit-trail-restore.md) · [SPC-004 — import/export & snapshots](2026-09-07_SPC-004_import-export-snapshots.md) · [ADR-003 — external audit snapshot chain & platform landscape](../adr/2026-09-08_ADR-003_external-audit-snapshot-chain.md) |
@@ -96,7 +96,8 @@ audit-first posture this is the only data-loss primitive left in the app.
   unbounded growth vector and slows `findVersions` windows. Rejected: the
   external chain, not the OLTP database, is the permanent archive.
 
-**Operator decision requested:** A / B / C. Default if unspecified: **B**.
+**Operator decision (2026-09-08): Option B — `maxPerDoc: 1000`.** Approved along
+with this spec's implementation.
 
 ## 5. Acceptance criteria
 
