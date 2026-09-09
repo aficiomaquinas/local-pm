@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
+import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
 
 export const Teams: CollectionConfig = {
   slug: 'teams',
@@ -26,9 +27,14 @@ export const Teams: CollectionConfig = {
   },
   versions: {
     // SPC-001 §4.1/§5.2 D-1: native Payload versions, drafts disabled.
-    maxPerDoc: 100,
+    // SPC-005 §4 (retention Option B): 1000 — see Tickets.ts rationale.
+    maxPerDoc: 1000,
   },
   hooks: {
+    beforeChange: [
+      // SPC-005 D-2: actor attribution on every write (see hooks/actorAttribution.ts).
+      attributeActor,
+    ],
     // SPC-001 §6: native restore (POST /api/teams/versions/:id) runs the
     // collection `update` access check; this guard hard-denies restore by the
     // agent identity and by unauthenticated callers.
@@ -71,6 +77,8 @@ export const Teams: CollectionConfig = {
     // Soft delete (SPC-004 D2): `deleted: true` hides the team while its
     // version trail survives.
     DELETED_FIELD,
+    // SPC-005 D-1: actor attribution on every version snapshot.
+    ...ACTOR_ATTRIBUTION_FIELDS,
   ],
   timestamps: true,
 }

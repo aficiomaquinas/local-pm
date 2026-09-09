@@ -2,6 +2,7 @@ import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
+import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
 import { TicketStatus, TicketPriority, TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 
 export const Tickets: CollectionConfig = {
@@ -36,10 +37,19 @@ export const Tickets: CollectionConfig = {
   },
   versions: {
     // SPC-001 §4.1/§5.2 D-1: native Payload versions, drafts disabled.
-    maxPerDoc: 100,
+    // SPC-005 §4 (retention Option B, operator decision 2026-09-08): 100 →
+    // 1000 — removes the realistic audit-eviction scenario (agent loops).
+    // Enforced at write time by Payload's enforceMaxVersions (application
+    // level, not a Mongo capped collection): applies to new writes
+    // immediately, no collMod needed.
+    maxPerDoc: 1000,
   },
   hooks: {
     beforeChange: [
+      // SPC-005 D-2: stamp actorType/actorId/actorLabel from req.user on
+      // every write (anonymous when there is no user); versions snapshot the
+      // whole doc, so every version is attributed.
+      attributeActor,
       async ({ data, req, operation }) => {
         if (operation === 'create' && data?.project) {
           const ticketId = await generateTicketId(req, data.project as string)
@@ -195,6 +205,8 @@ export const Tickets: CollectionConfig = {
     // board while its version trail survives (audit history is never
     // destroyed by the action it records).
     DELETED_FIELD,
+    // SPC-005 D-1: actor attribution on every version snapshot.
+    ...ACTOR_ATTRIBUTION_FIELDS,
   ],
   timestamps: true,
 }
