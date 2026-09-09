@@ -34,8 +34,13 @@ export function KanbanColumn({
   isLoadingMore = false,
   onLoadMore,
 }: KanbanColumnProps) {
+  // Drag fix: the data.type === 'Column' marker is how the collision layer
+  // and the drop handlers distinguish the COLUMN droppable from card
+  // droppables (cards never carry data.type) — needed so a pointer in an
+  // empty area of a column resolves to that column, not to a foreign card.
   const { setNodeRef } = useDroppable({
     id,
+    data: { type: 'Column' as const },
   })
 
   // Get status color accent
