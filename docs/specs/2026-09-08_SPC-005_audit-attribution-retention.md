@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`, branch `master`) |
 | **ID** | SPC-005 |
 | **Date** | 2026-09-08 |
-| **Status** | APPROVED (2026-09-08) — retention Option B (maxPerDoc 1000). Implementation authorized: branch `feat/audit-attribution` (with drag UX fix, History mutation labels, superadmin Options panel — action plan items 1-3). |
+| **Status** | IMPLEMENTED (2026-09-09) — merged to master and E2E-verified: actor attribution (anonymous/master), retention Option B, mutation labels, drag collision fix, superadmin Options panel (visible/silent). |
 | **Type** | Specification (patch to SPC-001 gap G-1 + retention policy decision) |
 | **Depends on** | SPC-001 (implemented 2026-09-07) · REQ-002 (distinguished actors) · ADR-002 (OIDC wiring; functional prerequisite for non-anonymous attribution) |
 | **Related** | [SPC-001 — audit trail & restore](2026-09-05_SPC-001_audit-trail-restore.md) · [SPC-004 — import/export & snapshots](2026-09-07_SPC-004_import-export-snapshots.md) · [ADR-003 — external audit snapshot chain & platform landscape](../adr/2026-09-08_ADR-003_external-audit-snapshot-chain.md) |

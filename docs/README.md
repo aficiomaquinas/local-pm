@@ -92,5 +92,6 @@ instruction, not the specification.
 | SPC-001 | [Audit trail & restore (Payload native versions)](specs/2026-09-05_SPC-001_audit-trail-restore.md) | IMPLEMENTED |
 | SPC-002 | [Workspace restructure (resolves REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | IMPLEMENTED |
 | SPC-003 | [Testing strategy (Option B: unit + mocked API-contract)](specs/2026-09-06_SPC-003_testing-strategy.md) | IMPLEMENTED |
+| SPC-005 | [Audit attribution & retention policy (Option B: maxPerDoc 1000)](specs/2026-09-08_SPC-005_audit-attribution-retention.md) | IMPLEMENTED |
 
 When creating a document, add it to this index in the same commit.
