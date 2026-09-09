@@ -5,7 +5,8 @@ import { Loader2, ChevronLeft, ChevronRight, History as HistoryIcon, ChevronDown
 import { VersionRow } from '@/components/history/VersionRow'
 import { HistoryFilters, DEFAULT_FILTERS, type HistoryFilterState } from '@/components/history/HistoryFilters'
 import { HISTORY_COLLECTIONS, type HistoryDoc, type HistoryResponse } from '@/app/api/history/types'
-import { groupHistoryFeed, isCreationRow } from '@/components/history/grouping'
+import { groupHistoryFeed, detectRestoredFrom } from '@/components/history/grouping'
+import { mutationInfo, type MutationInfo } from '@/components/history/mutationLabel'
 
 /**
  * Client surface of the audit trail (SPC-001 §4.5): filters, consolidated
@@ -104,6 +105,23 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
   const groups = useMemo(() => groupHistoryFeed(data.docs), [data.docs])
   const firstGroupKey = groups[0]?.key ?? null
 
+  // SPC-005: per-row mutation labels. Computed from the grouped feed so
+  // 'Created' is reserved to each group's oldest version and restores are
+  // detected by snapshot-equality within the group.
+  const mutations = useMemo(() => {
+    const map = new Map<string, MutationInfo>()
+    for (const group of groups) {
+      for (const doc of group.docs) {
+        const restoredFrom = detectRestoredFrom(doc, group.docs)
+        map.set(
+          `${doc.collection}:${doc.id}`,
+          mutationInfo(doc, group.creation?.id === doc.id, restoredFrom),
+        )
+      }
+    }
+    return map
+  }, [groups])
+
   const totalPages = Math.max(1, Math.ceil(data.totalDocs / PAGE_SIZE))
 
   const handleRestore = async (doc: HistoryDoc): Promise<boolean> => {
@@ -182,6 +200,7 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
                       created
                     </span>
                   )}
+                  {groupHeaderActor(group.docs)}
                 </button>
 
                 {isExpanded && (
@@ -192,10 +211,10 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
                           key={`${doc.collection}:${doc.id}`}
                           doc={doc}
                           onRestore={handleRestore}
-                          // 'Created' only on the group's first (oldest) version;
-                          // superseded creation diffs are not re-displayed.
-                          isCreation={group.creation ? doc.id === group.creation.id : isCreationRow(doc)}
-                          hideCreationDiff={Boolean(group.creation && doc.id !== group.creation.id)}
+                          // SPC-005: 'Created' only on the group's first
+                          // (oldest) version; updates carry named fields;
+                          // restores are detected within the group.
+                          mutation={mutations.get(`${doc.collection}:${doc.id}`)}
                         />
                       ))}
                     </ul>
@@ -237,4 +256,27 @@ function groupBadge(collection: string): string {
     teams: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   }
   return BADGE[collection] ?? 'bg-zinc-800 text-gray-400 border-zinc-700'
+}
+
+const GROUP_ACTOR_BADGE: Record<string, string> = {
+  user: 'text-violet-300 border-violet-500/30 bg-violet-500/10',
+  agent: 'text-orange-300 border-orange-500/30 bg-orange-500/10',
+  anonymous: 'text-gray-400 border-zinc-600/60 bg-zinc-700/30',
+}
+
+/**
+ * SPC-005 D-4: last-actor chip on each group header — the identity of the
+ * most recent write to this parent (the feed is newest-first, so docs[0]).
+ */
+function groupHeaderActor(docs: HistoryDoc[]) {
+  const actor = docs[0]?.actor
+  if (!actor) return null
+  return (
+    <span
+      className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 ${GROUP_ACTOR_BADGE[actor.type] ?? GROUP_ACTOR_BADGE.anonymous}`}
+      title={`Last change by: ${actor.label}`}
+    >
+      {actor.label}
+    </span>
+  )
 }

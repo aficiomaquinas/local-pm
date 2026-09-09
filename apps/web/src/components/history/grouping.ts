@@ -13,6 +13,11 @@ import type { HistoryDoc } from '@/app/api/history/types'
  * shows only its per-field delta. When a group has predecessors, the oldest
  * row's creation diff is not displayed — only its date marker (triage
  * contributor #2: a missing predecessor made updates look like creations).
+ *
+ * SPC-005 (mutation labels): the group also carries each entry's restored
+ * source date — a restore writes a snapshot IDENTICAL to some older version
+ * of the same parent; the newest such match that is not the entry itself
+ * marks the entry as 'Restored to <date>'.
  */
 
 export interface HistoryGroup {
@@ -31,6 +36,36 @@ export interface HistoryGroup {
 /** True when a version row is a "creation" (no diff, or diff against {}). */
 export function isCreationRow(doc: HistoryDoc): boolean {
   return !doc.diff || Object.keys(doc.diff).length === 0
+}
+
+/**
+ * Detect the version a feed entry restores: snapshot-equality against an
+ * older version of the same parent. Compares the JSON of the snapshots
+ * (stable key order from Mongo), ignoring the attribution trio — a restore
+ * by a different actor than the original write must still match. Returns
+ * the matched entry's updatedAt (label source), or null.
+ */
+export function detectRestoredFrom(
+  doc: HistoryDoc,
+  groupDocs: HistoryDoc[],
+): string | null {
+  const strip = (d: HistoryDoc) => {
+    const v = { ...((d.version ?? {}) as Record<string, unknown>) }
+    delete v.actorType
+    delete v.actorId
+    delete v.actorLabel
+    delete v.updatedAt
+    delete v.createdAt
+    return JSON.stringify(v)
+  }
+  const target = strip(doc)
+  if (!doc.version || Object.keys(doc.version).length === 0) return null
+  // Only entries strictly OLDER than `doc` are restore candidates.
+  const candidates = groupDocs.filter(
+    (d) => d.id !== doc.id && (d.updatedAt || '') < (doc.updatedAt || ''),
+  )
+  const match = candidates.find((d) => strip(d) === target)
+  return match ? match.updatedAt : null
 }
 
 /**

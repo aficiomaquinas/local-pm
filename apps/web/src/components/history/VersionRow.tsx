@@ -5,6 +5,7 @@ import { ChevronRight, ChevronDown, RotateCcw, History as HistoryIcon } from 'lu
 import { VersionDiff } from '@/components/history/VersionDiff'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { HistoryDoc } from '@/app/api/history/types'
+import type { MutationInfo } from '@/components/history/mutationLabel'
 
 /**
  * Collapsible audit-trail feed row (SPC-001 §4.5):
@@ -12,6 +13,10 @@ import type { HistoryDoc } from '@/app/api/history/types'
  * Restore action with explicit confirmation. After a successful restore the
  * row shows a "restored" badge and the feed refreshes (the restore itself
  * creates a new version — visible feedback in the trail).
+ *
+ * SPC-005: each row carries its mutation label (Created only on the group's
+ * first version; Updated with named fields; Restored to <date>; Soft-deleted)
+ * and an actor badge ({type, label} resolved by the feed).
  */
 
 const COLLECTION_BADGE: Record<string, string> = {
@@ -20,21 +25,27 @@ const COLLECTION_BADGE: Record<string, string> = {
   teams: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
 }
 
+const MUTATION_BADGE: Record<MutationInfo['kind'], string> = {
+  created: 'text-green-400 border-green-500/30 bg-green-500/10',
+  updated: 'text-sky-300 border-sky-500/30 bg-sky-500/10',
+  restored: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  'soft-deleted': 'text-red-300 border-red-500/30 bg-red-500/10',
+}
+
+const ACTOR_BADGE: Record<string, string> = {
+  user: 'text-violet-300 border-violet-500/30 bg-violet-500/10',
+  agent: 'text-orange-300 border-orange-500/30 bg-orange-500/10',
+  anonymous: 'text-gray-400 border-zinc-600/60 bg-zinc-700/30',
+}
+
 interface VersionRowProps {
   doc: HistoryDoc
   onRestore: (doc: HistoryDoc) => Promise<boolean>
-  /**
-   * BUG-2 grouping: override for the 'created' badge. The group marks its
-   * first (oldest) version as THE creation; individual rows no longer decide
-   * from `!diff` alone (a creation diff-vs-{} on a non-first row used to
-   * render every entry as an unrelated "created" card).
-   */
-  isCreation?: boolean
-  /** Hide the expanded diff (superseded creation diff inside a group). */
-  hideCreationDiff?: boolean
+  /** SPC-005 mutation label data (kind + operator-facing label). */
+  mutation?: MutationInfo
 }
 
-export function VersionRow({ doc, onRestore, isCreation: isCreationProp, hideCreationDiff = false }: VersionRowProps) {
+export function VersionRow({ doc, onRestore, mutation }: VersionRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -52,7 +63,7 @@ export function VersionRow({ doc, onRestore, isCreation: isCreationProp, hideCre
         minute: '2-digit',
       })
 
-  const isCreation = isCreationProp ?? (!doc.diff || Object.keys(doc.diff).length === 0)
+  const isCreation = mutation?.kind === 'created'
 
   const handleRestore = async () => {
     setRestoring(true)
@@ -90,11 +101,20 @@ export function VersionRow({ doc, onRestore, isCreation: isCreationProp, hideCre
           {doc.collection}
         </span>
         <span className="text-sm text-white truncate flex-1">{doc.parentLabel}</span>
-        {isCreation ? (
-          <span className="text-[11px] text-green-400 border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 rounded shrink-0">
-            created
+        {mutation && (
+          <span
+            className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 ${MUTATION_BADGE[mutation.kind]}`}
+            title={mutation.fields.length ? mutation.fields.join(', ') : undefined}
+          >
+            {mutation.label}
           </span>
-        ) : null}
+        )}
+        <span
+          className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 ${ACTOR_BADGE[doc.actor?.type] ?? ACTOR_BADGE.anonymous}`}
+          title={`Actor: ${doc.actor?.label ?? 'unknown'}`}
+        >
+          {doc.actor?.label ?? 'anonymous'}
+        </span>
         {restored ? (
           <span className="text-[11px] text-emerald-300 border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">
             ⟲ restored
@@ -134,7 +154,7 @@ export function VersionRow({ doc, onRestore, isCreation: isCreationProp, hideCre
               Restore this version
             </button>
           </div>
-          <VersionDiff delta={hideCreationDiff ? null : doc.diff} />
+          <VersionDiff delta={doc.diff} />
           {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
         </div>
       )}
