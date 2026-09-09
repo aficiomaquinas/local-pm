@@ -130,7 +130,7 @@ function resolveActorForSnapshot(version: Record<string, unknown>): {
  * Other writes are never filtered, and the entries keep their versions in
  * the database either way.
  */
-function filterSilentDeletes(entries: Entry[]): Entry[] {
+function filterSilentDeletes(entries: { doc: HistoryDoc; date: string }[]): typeof entries {
   return entries.filter((e) => {
     const v = (e.doc.version ?? {}) as Record<string, unknown>
     return v.deleted !== true

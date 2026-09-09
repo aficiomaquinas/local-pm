@@ -22,6 +22,7 @@ export interface StubPayload extends Payload {
 
 export function stubPayload(
   findVersionsByCollection: Partial<Record<string, Array<Record<string, unknown>>>>,
+  options: { global?: Record<string, unknown> | null } = {},
 ): StubPayload {
   const calls: FindVersionsCall[] = []
   const payload = {
@@ -43,6 +44,9 @@ export function stubPayload(
     },
     // find() is used by parentLabels resolution; empty by default.
     find: async () => ({ docs: [] }),
+    // findGlobal() is used by the SPC-005 soft-delete behavior resolution.
+    findGlobal: async (args: { slug: string }) =>
+      (options.global ?? {}) as Record<string, unknown>,
   }
   const result = payload as unknown as StubPayload
   result.__calls = calls

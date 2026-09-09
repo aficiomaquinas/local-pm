@@ -29,6 +29,8 @@ function doc(id: string, parent: string, updatedAt: string, diff: Record<string,
     createdAt: updatedAt,
     updatedAt,
     diff,
+    // SPC-005 D-4: the feed contract carries the resolved actor per entry.
+    actor: { type: 'anonymous' as const, label: 'anonymous' },
   }
 }
 
@@ -67,16 +69,24 @@ describe('W8b: HistoryClient grouped render (BUG-2)', () => {
     expect(screen.getAllByText('1 version')).toHaveLength(1)
   })
 
-  it('shows version counts and group-level creation marks', () => {
+  it('shows version counts, group-level creation marks, and SPC-005 mutation labels', () => {
     render(<HistoryClient initialData={initialData} />)
 
     // 3 versions in the first group, 1 in the second.
     expect(screen.getByText('3 versions')).toBeInTheDocument()
     expect(screen.getByText('1 version')).toBeInTheDocument()
 
-    // 'created' marks: one per group header (2) + one on the expanded
-    // group's creation row (va1) = 3 — never one per version row
-    // (the old bug: every row carried its own independent created badge).
-    expect(screen.getAllByText('created')).toHaveLength(3)
+    // 'created' marks: one per group header (2, lowercase) + the expanded
+    // group's creation row (va1, canonical 'Created' label) — never one per
+    // version row (the old bug: every row carried its own created badge).
+    expect(screen.getAllByText(/created/i)).toHaveLength(3)
+
+    // SPC-005 mutation labels: updates carry named fields — BOTH updated
+    // rows of the expanded group render their 'Updated (1 field: Status)'.
+    expect(screen.getAllByText('Updated (1 field: Status)')).toHaveLength(2)
+
+    // SPC-005 D-4: every rendered element carries its actor badge —
+    // 3 rows in the expanded group + 2 group headers = 5.
+    expect(screen.getAllByText('anonymous')).toHaveLength(5)
   })
 })

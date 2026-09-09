@@ -97,8 +97,12 @@ export interface Config {
     defaultIDType: string;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'site-settings': SiteSetting;
+  };
+  globalsSelect: {
+    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
@@ -222,8 +226,48 @@ export interface Project {
    * Soft delete — hidden from the board, trail preserved
    */
   deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users".
+ */
+export interface User {
+  id: string;
+  name?: string | null;
+  actorType: 'superadmin' | 'human' | 'agent';
+  active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'users';
 }
 /**
  * Teams group related work within a project
@@ -263,6 +307,18 @@ export interface Team {
    * Soft delete — hidden from the board, trail preserved
    */
   deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -352,36 +408,20 @@ export interface Ticket {
    * Soft delete — hidden from the board, trail preserved
    */
   deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
   updatedAt: string;
   createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users".
- */
-export interface User {
-  id: string;
-  name?: string | null;
-  actorType: 'superadmin' | 'human' | 'agent';
-  active?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
-    | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
-      }[]
-    | null;
-  password?: string | null;
-  collection: 'users';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -644,6 +684,9 @@ export interface ProjectsSelect<T extends boolean = true> {
   status?: T;
   ticketCounter?: T;
   deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -656,6 +699,9 @@ export interface TeamsSelect<T extends boolean = true> {
   description?: T;
   color?: T;
   deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -689,6 +735,9 @@ export interface TicketsSelect<T extends boolean = true> {
       };
   sortOrder?: T;
   deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -845,6 +894,31 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * Operator-level switches. Superadmin only — same ACL family as Data Management (SPC-004 §4e).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings".
+ */
+export interface SiteSetting {
+  id: string;
+  /**
+   * Hard delete stays blocked from every request path in BOTH modes (SPC-004 D2). Visible is the default: the least surprising audit posture.
+   */
+  softDeleteBehavior: 'visible' | 'silent';
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings_select".
+ */
+export interface SiteSettingsSelect<T extends boolean = true> {
+  softDeleteBehavior?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
