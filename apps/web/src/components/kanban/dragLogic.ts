@@ -31,43 +31,75 @@ export interface DragResult {
 }
 
 /**
- * Resolve the outcome of a drop. `tickets` must be the CURRENT state (the
- * caller passes it from inside the state updater). A no-op (dropped on
- * itself, same column same slot, unknown ids) comes back with
- * status/sortOrder === null and the state untouched — the caller must skip
- * the PATCH and any refetch in that case.
- *
- * Accepted drop targets:
- *  - a column id → ticket moves to that column, appended at the end;
- *  - another card → ticket takes that card's slot in its column.
- *
- * The whole target column is renumbered 0..n so every ticket lands on a
- * final, contiguous sortOrder (server sorts by `sortOrder` asc).
+ * Resolved drop target for a drag, shared by handleDragOver (live preview)
+ * and computeDragResult (final drop math).
  */
-export function computeDragResult(
+export interface DragTarget {
+  /** Column the dragged ticket lands in. */
+  status: TicketStatus
+  /** true → the `over` id IS the column (drop on empty column space). */
+  isColumnTarget: boolean
+}
+
+/**
+ * Resolve WHICH column a drop targets, purely from the CURRENT state.
+ *
+ *  - `overId` is a column id → that column itself (append at the end);
+ *  - `overId` is another card → the column that card lives in;
+ *  - anything else (dropped on itself, unknown ids) → null (no-op).
+ *
+ * Column ids are the TicketStatus values; card ids are Mongo ObjectIds, so
+ * the two namespaces never collide (same discriminator collision.ts uses).
+ */
+export function resolveDragTarget(
+  tickets: Ticket[],
+  activeId: string,
+  overId: string,
+): DragTarget | null {
+  if (activeId === overId) return null
+
+  const activeTicket = tickets.find((t) => t.id === activeId)
+  if (!activeTicket) return null
+
+  if (KANBAN_COLUMNS.some((col) => col === overId)) {
+    return { status: overId as TicketStatus, isColumnTarget: true }
+  }
+
+  const overTicket = tickets.find((t) => t.id === overId)
+  if (!overTicket) return null
+
+  return { status: overTicket.status as TicketStatus, isColumnTarget: false }
+}
+
+/**
+ * Apply a drop to the state WITHOUT any "did anything change" shortcut:
+ * structurally invalid drops (self, unknown ids) return nulls + untouched
+ * state; everything else normalizes the target column and returns the final
+ * status/sortOrder plus the next tickets array.
+ *
+ * Split out from computeDragResult so handleDragEnd can decide "is this a
+ * real move" against the DRAG-START origin (what the server knows) instead
+ * of the current optimistic state — handleDragOver legitimately brings the
+ * state to the drop position during the drag, which must NOT suppress the
+ * PATCH.
+ */
+export function applyDrop(
   tickets: Ticket[],
   activeId: string,
   overId: string,
 ): DragResult {
   const noOp: DragResult = { activeId: null, status: null, sortOrder: null, tickets }
 
-  if (activeId === overId) return noOp
+  const target = resolveDragTarget(tickets, activeId, overId)
+  if (!target) return noOp
 
-  const activeTicket = tickets.find((t) => t.id === activeId)
-  if (!activeTicket) return noOp
-
-  const isOverColumn = KANBAN_COLUMNS.some((col) => col === overId)
-
-  let targetStatus: TicketStatus
+  const activeTicket = tickets.find((t) => t.id === activeId) as Ticket
+  const targetStatus = target.status
   let targetIndex: number
 
-  if (isOverColumn) {
-    targetStatus = overId as TicketStatus
+  if (target.isColumnTarget) {
     targetIndex = Number.MAX_SAFE_INTEGER // append at the end
   } else {
-    const overTicket = tickets.find((t) => t.id === overId)
-    if (!overTicket) return noOp
-    targetStatus = overTicket.status as TicketStatus
     targetIndex = tickets
       .filter((t) => t.status === targetStatus)
       .findIndex((t) => t.id === overId)
@@ -105,18 +137,66 @@ export function computeDragResult(
 
   const activeNext = nextTickets.find((t) => t.id === activeId) as Ticket
 
-  // Nothing actually changed (same column, same slot) → no PATCH, no refetch.
-  if (
-    activeNext.status === activeTicket.status &&
-    (activeNext.sortOrder ?? 0) === (activeTicket.sortOrder ?? 0)
-  ) {
-    return noOp
-  }
-
   return {
     activeId,
     status: targetStatus,
     sortOrder: activeNext.sortOrder ?? 0,
     tickets: nextTickets,
   }
+}
+
+/**
+ * True when the drop result actually changes the ticket's server-known
+ * position (the drag-start origin). `origin === null` (unknown start, e.g.
+ * the ticket vanished mid-drag) is treated as a real move whenever the drop
+ * itself is valid — a PATCH to a freshly resolved position is then the only
+ * way to reconcile.
+ */
+export function isRealMove(
+  result: DragResult,
+  origin: { status: TicketStatus; sortOrder: number } | null,
+): boolean {
+  if (result.status === null || result.sortOrder === null) return false
+  if (!origin) return true
+  return result.status !== origin.status || result.sortOrder !== origin.sortOrder
+}
+
+/**
+ * Resolve the outcome of a drop. `tickets` must be the CURRENT state (the
+ * caller passes it from inside the state updater). A no-op (dropped on
+ * itself, same column same slot, unknown ids) comes back with
+ * status/sortOrder === null and the state untouched — the caller must skip
+ * the PATCH and any refetch in that case.
+ *
+ * Accepted drop targets (via resolveDragTarget):
+ *  - a column id → ticket moves to that column, appended at the end;
+ *  - another card → ticket takes that card's slot in its column.
+ *
+ * The whole target column is renumbered 0..n so every ticket lands on a
+ * final, contiguous sortOrder (server sorts by `sortOrder` asc).
+ */
+export function computeDragResult(
+  tickets: Ticket[],
+  activeId: string,
+  overId: string,
+): DragResult {
+  const result = applyDrop(tickets, activeId, overId)
+
+  // Structural no-op (self/unknown) → state untouched, nulls already set.
+  if (result.status === null) return result
+
+  // Value no-op: the drop lands exactly on the CURRENT position → treat as
+  // nothing happened (no PATCH, no refetch, state reference preserved).
+  const activePrev = tickets.find((t) => t.id === result.activeId)
+  const activeNext = result.tickets.find((t) => t.id === result.activeId)
+  if (
+    activePrev &&
+    activeNext &&
+    activeNext.status === activePrev.status &&
+    (activeNext.sortOrder ?? 0) === (activePrev.sortOrder ?? 0)
+  ) {
+    return { activeId: null, status: null, sortOrder: null, tickets }
+  }
+
+  return result
 }
