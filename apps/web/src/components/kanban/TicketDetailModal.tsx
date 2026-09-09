@@ -133,7 +133,9 @@ export function TicketDetailModal({
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this ticket?')) return
+    // SPC-005 options: the soft-delete confirmation UX is owned by the board's
+    // ConfirmDialog (togglable via Options). The browser-native confirm() is
+    // removed here — it duplicated the dialog (QA 2026-09-07/09).
     onDelete(ticket.id)
     onClose()
   }

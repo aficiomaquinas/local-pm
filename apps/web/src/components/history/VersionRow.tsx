@@ -103,14 +103,14 @@ export function VersionRow({ doc, onRestore, mutation }: VersionRowProps) {
         <span className="text-sm text-white truncate flex-1">{doc.parentLabel}</span>
         {mutation && (
           <span
-            className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 ${MUTATION_BADGE[mutation.kind]}`}
-            title={mutation.fields.length ? mutation.fields.join(', ') : undefined}
+            className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 min-w-0 max-w-[220px] truncate ${MUTATION_BADGE[mutation.kind]}`}
+            title={mutation.fields.length ? mutation.fields.join(', ') : mutation.label}
           >
             {mutation.label}
           </span>
         )}
         <span
-          className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 ${ACTOR_BADGE[doc.actor?.type] ?? ACTOR_BADGE.anonymous}`}
+          className={`text-[11px] px-1.5 py-0.5 rounded border shrink-0 min-w-0 max-w-[180px] truncate ${ACTOR_BADGE[doc.actor?.type] ?? ACTOR_BADGE.anonymous}`}
           title={`Actor: ${doc.actor?.label ?? 'unknown'}`}
         >
           {doc.actor?.label ?? 'anonymous'}
