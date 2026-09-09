@@ -11,6 +11,7 @@ import { Projects } from './collections/Projects'
 import { Teams } from './collections/Teams'
 import { Tickets } from './collections/Tickets'
 import { Users } from './collections/Users'
+import { SiteSettings } from './globals/SiteSettings'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -52,6 +53,9 @@ export default buildConfig({
     },
   },
   collections: [Projects, Teams, Tickets, Users],
+  // SPC-005 options panel: operator-level runtime switches (soft-delete
+  // visible/silent). Superadmin-only writes via the global's access config.
+  globals: [SiteSettings],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
