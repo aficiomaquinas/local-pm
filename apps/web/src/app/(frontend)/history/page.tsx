@@ -16,7 +16,8 @@ export const metadata: Metadata = {
 // filters / pagination / restore and refetches /api/history from then on.
 export default async function HistoryPage() {
   const payload = await getPayload({ config })
-  const initialData = await buildHistoryFeed(payload, new URLSearchParams())
+  // SPC-005: diffs power the mutation labels (Updated with named fields).
+  const initialData = await buildHistoryFeed(payload, new URLSearchParams('withDiff=1'))
 
   return <HistoryClient initialData={initialData} />
 }

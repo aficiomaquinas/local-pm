@@ -1,23 +1,24 @@
-# SPC-004 verification stack (never used for the production deployment).
+# SPC-004/SPC-005 verification stack (never used for the production deployment).
 #
-# Overlays docker-compose.yml for an isolated spine-verification stack:
+# Overlays docker-compose.yml for an isolated verification stack:
 #   - different container names (the base file pins them; `-p` alone does
 #     not lift that)
-#   - NO host port publishing at all: every check runs from inside the
-#     network via `docker exec` (curl against localhost:3010 in-container)
+#   - loopback-only host port 3012 -> container 3010 (E2E evidence from the
+#     host; !override replaces the base file's port list)
 #   - snapshot files land on the dedicated local-pm-snapshots volume (D-3)
 #
-#   docker compose -p local-pm-test \
+#   docker compose -p local-pm-audit2 \
 #     -f docker-compose.yml -f docker-compose.test.yml up -d --build
-#   docker compose -p local-pm-test \
+#   docker compose -p local-pm-audit2 \
 #     -f docker-compose.yml -f docker-compose.test.yml down --volumes
 #
 # The builder stage runs the full test suite (SPC-003 §5.3): a red suite
 # breaks this build.
 services:
   app:
-    container_name: local-pm-test-app
-    ports: !reset []
+    container_name: local-pm-audit2-app
+    ports: !override
+      - "127.0.0.1:3012:3010"
 
   mongodb:
-    container_name: local-pm-test-mongodb
+    container_name: local-pm-audit2-mongodb

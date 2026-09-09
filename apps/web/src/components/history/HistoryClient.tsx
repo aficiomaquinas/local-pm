@@ -47,6 +47,8 @@ export function HistoryClient({ initialData }: HistoryClientProps) {
       params.set('collection', filters.collection)
       params.set('page', String(p))
       params.set('limit', String(PAGE_SIZE))
+      // SPC-005: diffs power the mutation labels (Updated with named fields).
+      params.set('withDiff', '1')
       if (filters.parent) params.set('parent', filters.parent)
       if (filters.from) params.set('from', new Date(`${filters.from}T00:00:00`).toISOString())
       if (filters.to) params.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString())

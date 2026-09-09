@@ -91,8 +91,23 @@ describe('T1: mutationInfo (delta → operator language)', () => {
     const m = mutationInfo(d, false, '2026-09-08T05:00:00.000Z')
     expect(m.kind).toBe('restored')
     expect(m.label).toBe('Restored to Sep 8, 2026, 05:00 UTC')
-    // fields carry RAW paths (the label already shows the translated list).
-    expect(m.fields).toEqual(['status'])
+    // fields carry the HUMAN names (translated list; noise excluded).
+    expect(m.fields).toEqual(['Status'])
+  })
+
+  it('excludes attribution/timestamp noise from the label list', () => {
+    const d = doc({
+      id: 'v2',
+      diff: {
+        status: ['TODO', 'DONE'],
+        actorType: ['anonymous', 'user'],
+        actorId: [null, 'u_1'],
+        actorLabel: ['anonymous', 'user:m@x'],
+        updatedAt: ['2026-09-08T05:00:00.000Z', '2026-09-08T06:00:00.000Z'],
+      },
+    })
+    const m = mutationInfo(d, false, null)
+    expect(m.label).toBe('Updated (1 field: Status)')
   })
 
   it('soft-deleted snapshot → Soft-deleted', () => {

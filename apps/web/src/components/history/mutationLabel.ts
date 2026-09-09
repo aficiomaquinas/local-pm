@@ -46,9 +46,22 @@ const FIELD_LABELS: Record<string, string> = {
   ticketId: 'Ticket ID',
   prefix: 'Prefix',
   ticketCounter: 'Ticket Counter',
-  sortOrder: 'Sort Order',
   deleted: 'Deleted',
 }
+
+/**
+ * Fields excluded from the mutation label list: the SPC-005 attribution trio
+ * (bookkeeping of the trail itself) and pure timestamps/board-internal order.
+ * The expanded diff still shows them; the compact label stays readable.
+ */
+const LABEL_EXCLUDED_FIELDS = new Set([
+  'actorType',
+  'actorId',
+  'actorLabel',
+  'updatedAt',
+  'createdAt',
+  'sortOrder',
+])
 
 /** Map a delta field path (top-level key) to its human label. */
 export function humanFieldName(path: string): string {
@@ -68,6 +81,13 @@ function isDeltaNode(v: unknown): v is Record<string, unknown> {
 export function deltaFieldPaths(delta: Record<string, unknown> | null | undefined): string[] {
   if (!delta || !isDeltaNode(delta)) return []
   return Object.keys(delta).filter((k) => k !== '_t')
+}
+
+/** Human field names for the label, excluding attribution/timestamp noise. */
+function labelFields(delta: Record<string, unknown> | null | undefined): string[] {
+  return deltaFieldPaths(delta)
+    .filter((p) => !LABEL_EXCLUDED_FIELDS.has(p))
+    .map(humanFieldName)
 }
 
 /** True when the version snapshot is a soft delete state (deleted: true). */
@@ -106,7 +126,7 @@ export function mutationInfo(
     return {
       kind: 'restored',
       label: `Restored to ${shortDate(restoredFrom)}`,
-      fields: deltaFieldPaths(doc.diff),
+      fields: labelFields(doc.diff),
     }
   }
 
@@ -114,7 +134,7 @@ export function mutationInfo(
     return {
       kind: 'soft-deleted',
       label: 'Soft-deleted',
-      fields: deltaFieldPaths(doc.diff).map(humanFieldName),
+      fields: labelFields(doc.diff),
     }
   }
 
@@ -122,7 +142,7 @@ export function mutationInfo(
     return { kind: 'created', label: 'Created', fields: [] }
   }
 
-  const fields = deltaFieldPaths(doc.diff).map(humanFieldName)
+  const fields = labelFields(doc.diff)
   if (fields.length === 0) {
     // No predecessor delta available (e.g. feed without withDiff) — a
     // non-creation row with an empty delta is still an update-shaped entry.
