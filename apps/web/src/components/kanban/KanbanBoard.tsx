@@ -5,7 +5,6 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -21,7 +20,8 @@ import { KanbanHeader } from './KanbanHeader'
 import { TicketModal } from './TicketModal'
 import { TicketDetailModal } from './TicketDetailModal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { computeDragResult } from './dragLogic'
+import { computeDragResult, KANBAN_COLUMNS } from './dragLogic'
+import { prioritizePointerWithin } from './collision'
 import { TicketStatus } from '@/types/enums'
 import type { Project, Team, Ticket } from '@/payload-types'
 
@@ -487,7 +487,10 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        // Drag UX fix (2026-09-08): pointerWithin-first composed collision
+        // detection — dropping anywhere inside a column (incl. empty areas)
+        // now reliably targets that column instead of a card in another one.
+        collisionDetection={prioritizePointerWithin(KANBAN_COLUMNS)}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
