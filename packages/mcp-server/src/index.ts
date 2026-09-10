@@ -7,6 +7,11 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import {
+  getMcpBearerToken,
+  invalidateMcpToken,
+  readMcpOidcConfig,
+} from './auth.js';
 
 const BASE_URL = process.env.LOCAL_PM_URL || 'http://localhost:3010';
 
@@ -154,30 +159,66 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
 }
 
 // Helper function to make API requests
+//
+// SPC-006 §10 (D-6): every request carries `Authorization: Bearer <token>`
+// (the agent's OWN client-credentials token — never a relayed user token)
+// and `X-LocalPM-Channel: mcp` (best-effort channel stamp, §9). Behavior is
+// flag-gated: with OIDC_ENABLED!=true (default) no Authorization header is
+// attached and requests behave exactly as before (optionality principle).
+// With the flag on and credentials missing, the first call fails loudly
+// (AC-12) instead of silently going anonymous. A 401 from the API triggers
+// exactly ONE token refetch + retry (cache invalidation), then the error
+// surfaces.
 async function apiRequest(
   endpoint: string,
   method: string = 'GET',
   body?: unknown
 ): Promise<unknown> {
   const url = `${BASE_URL}/api${endpoint}`;
-  const options: RequestInit = {
-    method,
-    headers: {
+  const oidc = readMcpOidcConfig();
+
+  const buildOptions = async (withAuth: boolean): Promise<RequestInit> => {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-    },
+      'X-LocalPM-Channel': 'mcp',
+    };
+    if (withAuth) {
+      headers['Authorization'] = `Bearer ${await getMcpBearerToken(oidc, fetch)}`;
+    }
+    const options: RequestInit = { method, headers };
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    return options;
   };
 
-  if (body) {
-    options.body = JSON.stringify(body);
+  const send = async (options: RequestInit): Promise<Response> => {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API request failed: ${response.status} - ${error}`);
+    }
+    return response;
+  };
+
+  if (oidc.enabled) {
+    try {
+      return await (async () => {
+        const r = await send(await buildOptions(true));
+        return r.json();
+      })();
+    } catch (err) {
+      // Single retry on 401: the cached token may have been revoked/expired
+      // server-side. Invalidate, refetch, retry once — then surface.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.startsWith('API request failed: 401')) throw err;
+      invalidateMcpToken();
+      const r = await send(await buildOptions(true));
+      return r.json();
+    }
   }
 
-  const response = await fetch(url, options);
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`API request failed: ${response.status} - ${error}`);
-  }
-
+  const response = await send(await buildOptions(false));
   return response.json();
 }
 
