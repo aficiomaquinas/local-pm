@@ -17,6 +17,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Route handlers import the Payload instance via the Next-style
+      // '@payload-config' alias; vitest has no Next plugin, so mirror the
+      // app tsconfig mapping here (tests never boot Payload — the handlers
+      // under contract test fail over to the conventional cookie name).
+      '@payload-config': fileURLToPath(new URL('./src/payload.config.ts', import.meta.url)),
     },
   },
   test: {
