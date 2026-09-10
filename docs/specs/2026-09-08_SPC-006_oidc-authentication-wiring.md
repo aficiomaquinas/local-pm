@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`, branch `feat/spc006-oidc-wiring`) |
 | **ID** | SPC-006 |
 | **Date** | 2026-09-08 |
-| **Status** | DRAFT (pending operator review) — this spec designs; it implements nothing |
+| **Status** | APPROVED (operator authorization 2026-09-09 23:41 CST: "autorizado spec6, se ve bien para implementar con subagente(s), en su(s) branches distinguidos"; execution = implementation wave, branches `feat/oidc-implementation` (+ `feat/keyboard-drag-a11y` for upstream issue #3) — this spec still designs; implementation lands on its own branch) |
 | **Type** | Specification (implementation design for ADR-002) |
 | **Depends on** | [ADR-002 — OIDC-compliant authentication (ACCEPTED)](../adr/2026-09-05_ADR-002_oidc-authentication.md) · [REQ-002 — distinguished actor credentials](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · SPC-001 §6 (access policy) · SPC-004 §4e/R-4 (data management policy) · SPC-005 (actor attribution, implemented) |
 | **Related** | [SPC-001 — audit trail & restore](2026-09-05_SPC-001_audit-trail-restore.md) · [SPC-004 — import/export & snapshots](2026-09-07_SPC-004_import-export-snapshots.md) · [SPC-005 — audit attribution & retention](2026-09-08_SPC-005_audit-attribution-retention.md) |
@@ -480,6 +480,14 @@ Every criterion is independently checkable (curl-level unless noted):
 | **disableLocalStrategy regression** | Lockout, broken first-register | OD-1 stays open; M7 runs only behind explicit operator confirmation (§12, §15). |
 
 ## 18. Open decisions for the operator
+
+> **Resolved by the operator, 2026-09-09 23:41 CST** (implicit approval of the proposed
+> defaults — "se ve bien para implementar"): OD-1 keep local strategy until OIDC proven
+> (M7 gated); OD-2 yes, first human = superadmin; OD-3 yes, agent = IdP client + mirror
+> doc; OD-4 dex dev bootstrap per ADR-002 D6 (implementation decides profile specifics);
+> OD-5 cookie Secure `auto`; OD-6 Payload-native silent refresh; OD-7 CRUD hardening in
+> scope, sequenced after M5. Any deviation surfaced by implementation returns to the
+> operator before merge.
 
 | ID | Decision | Spec's default position |
 |---|---|---|
