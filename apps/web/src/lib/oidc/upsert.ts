@@ -52,7 +52,7 @@ export async function upsertOidcUser(payload: Payload, claims: ActorClaims): Pro
   if (isAgent) {
     const clientId = claims.clientIdClaim ?? sub
     if (doc) {
-      return { doc: doc as Record<string, unknown> & { id: number | string }, created: false }
+      return { doc: doc as unknown as Record<string, unknown> & { id: number | string }, created: false }
     }
     const created = await payload.create({
       collection: 'users',
