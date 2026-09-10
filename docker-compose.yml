@@ -4,8 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        DATABASE_URI: mongodb://mongodb:27017/local-pm
-        PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
+        # Runtime-only value (inlined into client bundles at build time).
+        # DATABASE_URI / PAYLOAD_SECRET are deliberately NOT build args: the
+        # builder has no route to mongodb and tests must not require one —
+        # both are injected at runtime via `environment:` below.
         NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
     container_name: local-pm-app
     restart: unless-stopped
@@ -18,7 +20,8 @@ services:
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
       NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     volumes:
       # SPC-004 §5.6 / D-3: named-snapshot files (plugin-import-export
       # `exports` uploads, staticDir /app/snapshots) persist across rebuilds.
@@ -31,6 +34,15 @@ services:
     # ADR-001/D1 + REQ-001.2: no host port publishing — reachable only via the
     # compose internal network (app -> mongodb:27017). Host-side inspection,
     # if needed, goes through `docker exec` or an explicit 127.0.0.1 publish.
+    # Health gate: the app starts (and its adapter connects) only once mongo
+    # answers `ping`, so the cold-start window never races the app's bounded
+    # 3s server-selection timeout.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     volumes:
       - local-pm-mongodb-data:/data/db
     environment:
