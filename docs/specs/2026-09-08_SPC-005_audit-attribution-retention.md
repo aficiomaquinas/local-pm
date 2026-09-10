@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`, branch `master`) |
 | **ID** | SPC-005 |
 | **Date** | 2026-09-08 |
-| **Status** | IMPLEMENTED (2026-09-09) — merged to master and E2E-verified: actor attribution (anonymous/master), retention Option B, mutation labels, drag collision fix, superadmin Options panel (visible/silent). |
+| **Status** | IMPLEMENTED (2026-09-09) — merged to master and E2E-verified: actor attribution (anonymous/master), retention Option B, mutation labels, drag collision fix. AMENDED (2026-09-10): the superadmin Options panel (soft-delete visible/silent toggle) removed by operator decision — see §7. |
 | **Type** | Specification (patch to SPC-001 gap G-1 + retention policy decision) |
 | **Depends on** | SPC-001 (implemented 2026-09-07) · REQ-002 (distinguished actors) · ADR-002 (OIDC wiring; functional prerequisite for non-anonymous attribution) |
 | **Related** | [SPC-001 — audit trail & restore](2026-09-05_SPC-001_audit-trail-restore.md) · [SPC-004 — import/export & snapshots](2026-09-07_SPC-004_import-export-snapshots.md) · [ADR-003 — external audit snapshot chain & platform landscape](../adr/2026-09-08_ADR-003_external-audit-snapshot-chain.md) |
@@ -113,3 +113,28 @@ with this spec's implementation.
 
 Cryptographic signing and long-term durability (ADR-003 external chain);
 OIDC wiring (ADR-002 follow-up spec); admin UI beyond History tab columns.
+
+## 7. Amendment (2026-09-10) — soft-delete behavior toggle removed
+
+**Operator decision (2026-09-10, verbatim):** "toggle soft delete, si" — ELIMINAR
+the 'Soft delete behavior' (visible/silent) toggle from the UI Options and all
+of its plumbing. Rationale: the toggle is not useful, its wording is
+confusing/miswritten, and it contradicts the audit-first objective — the
+History trail must ALWAYS show every entry, including soft-deletes.
+
+Consequently, D-2's presentation filter is OBSOLETE and is superseded by this
+amendment:
+
+- The `site-settings` Payload global (`src/globals/SiteSettings.ts`,
+  `src/globals/contract.ts`) and its `/api/globals/site-settings` REST surface
+  are removed.
+- The `/options` page, the Options navigation link, and the OptionsPanel
+  component are removed (the Options surface hosted only this toggle).
+- `/api/history` no longer resolves a soft-delete behavior nor filters
+  `deleted: true` snapshots: the feed is audit-first and always complete.
+- All storage, versions, and soft-delete deletion semantics (SPC-003 §7.2,
+  BUG-3 wiring) are UNCHANGED — this amendment removes a presentation toggle
+  only, never data.
+
+Regression coverage: the feed test pins that `deleted: true` snapshots always
+appear in `/api/history` (no silent filtering may return).

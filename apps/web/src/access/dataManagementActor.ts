@@ -1,11 +1,10 @@
 /**
- * Actor resolution shared by SPC-004 (Data Management) and SPC-005 (site
- * settings / soft-delete options) surfaces.
+ * Actor resolution shared by SPC-004 (Data Management) surfaces.
  *
  * This is the exact `resolveDataManagementActor` logic from
- * access/dataManagementPolicy.ts, extracted so the site-settings ACL can
+ * access/dataManagementPolicy.ts, extracted so privileged ACLs can
  * reuse it without importing the whole Data Management module (and so the
- * two policy vocabularies cannot drift apart):
+ * policy vocabularies cannot drift apart):
  *
  *   - agent markers win → 'agent' (barred BY POLICY everywhere privileged);
  *   - 'superadmin'/'human'/'user' actorType → 'user' (the master user

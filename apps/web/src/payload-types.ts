@@ -97,12 +97,8 @@ export interface Config {
     defaultIDType: string;
   };
   fallbackLocale: null;
-  globals: {
-    'site-settings': SiteSetting;
-  };
-  globalsSelect: {
-    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
-  };
+  globals: {};
+  globalsSelect: {};
   locale: null;
   widgets: {
     collections: CollectionsWidget;
@@ -932,31 +928,6 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
-}
-/**
- * Operator-level switches. Superadmin only — same ACL family as Data Management (SPC-004 §4e).
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "site-settings".
- */
-export interface SiteSetting {
-  id: string;
-  /**
-   * Hard delete stays blocked from every request path in BOTH modes (SPC-004 D2). Visible is the default: the least surprising audit posture.
-   */
-  softDeleteBehavior: 'visible' | 'silent';
-  updatedAt?: string | null;
-  createdAt?: string | null;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "site-settings_select".
- */
-export interface SiteSettingsSelect<T extends boolean = true> {
-  softDeleteBehavior?: T;
-  updatedAt?: T;
-  createdAt?: T;
-  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

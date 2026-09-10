@@ -3,9 +3,12 @@ import { buildHistoryFeed } from '@/app/api/history/feed'
 import { stubPayload, makeVersionRow, type StubPayload } from './helpers/payloadStub'
 
 /**
- * T1 (SPC-005 §5.2 + options panel D-2) — the feed contract gains `actor`
- * per entry, and the soft-delete behavior (visible/silent) gates
- * `deleted: true` snapshots in/out of the feed.
+ * T1 (SPC-005 §5.2) — the feed contract carries `actor` per entry.
+ *
+ * Amendment (2026-09-10): the soft-delete visible/silent settings toggle was
+ * REMOVED by operator decision. The feed is audit-first: every
+ * snapshot, including `deleted: true` soft-delete entries, is ALWAYS shown.
+ * The regression below pins that invariant — no silent filtering may return.
  */
 
 describe('T1: /api/history actor resolution (SPC-005 D-4)', () => {
@@ -44,54 +47,16 @@ describe('T1: /api/history actor resolution (SPC-005 D-4)', () => {
   })
 })
 
-describe('T1: soft-delete toggle feed behavior (options panel D-2)', () => {
-  const feedWithDelete = () =>
-    stubPayload(
-      {
-        tickets: [
-          makeVersionRow({ id: 'vk_normal', version: { title: 'keep' } }),
-          makeVersionRow({ id: 'vk_deleted', version: { title: 'gone', deleted: true } }),
-        ],
-      },
-      { global: { softDeleteBehavior: 'visible' } },
-    )
-
-  it('visible (default): soft-delete snapshots stay in the feed', async () => {
-    const res = await buildHistoryFeed(feedWithDelete(), new URLSearchParams(''))
+describe('T1: audit-first feed (2026-09-10 amendment — soft-delete toggle removed)', () => {
+  it('soft-delete (`deleted: true`) snapshots are ALWAYS shown — no silent filtering', async () => {
+    const payload = stubPayload({
+      tickets: [
+        makeVersionRow({ id: 'vk_normal', version: { title: 'keep' } }),
+        makeVersionRow({ id: 'vk_deleted', version: { title: 'gone', deleted: true } }),
+      ],
+    })
+    const res = await buildHistoryFeed(payload, new URLSearchParams(''))
     expect(res.docs.map((d) => d.id).sort()).toEqual(['vk_deleted', 'vk_normal'])
     expect(res.totalDocs).toBe(2)
-  })
-
-  it('silent: `deleted: true` snapshots are omitted (and do not count in totalDocs)', async () => {
-    const payload = stubPayload(
-      {
-        tickets: [
-          makeVersionRow({ id: 'vk_normal', version: { title: 'keep' } }),
-          makeVersionRow({ id: 'vk_deleted', version: { title: 'gone', deleted: true } }),
-        ],
-      },
-      { global: { softDeleteBehavior: 'silent' } },
-    )
-    const res = await buildHistoryFeed(payload, new URLSearchParams(''))
-    expect(res.docs.map((d) => d.id)).toEqual(['vk_normal'])
-    expect(res.totalDocs).toBe(1)
-  })
-
-  it('missing global row → visible (least surprising default)', async () => {
-    const payload = stubPayload(
-      { tickets: [makeVersionRow({ id: 'vk_deleted', version: { deleted: true } })] },
-      { global: null },
-    )
-    const res = await buildHistoryFeed(payload, new URLSearchParams(''))
-    expect(res.docs).toHaveLength(1)
-  })
-
-  it('unknown stored value → visible (normalize, never throw)', async () => {
-    const payload = stubPayload(
-      { tickets: [makeVersionRow({ id: 'vk_deleted', version: { deleted: true } })] },
-      { global: { softDeleteBehavior: 'bogus' } },
-    )
-    const res = await buildHistoryFeed(payload, new URLSearchParams(''))
-    expect(res.docs).toHaveLength(1)
   })
 })

@@ -4,10 +4,6 @@ import { buildParentLabels } from '@/app/api/history/parentLabels'
 import type { HistoryDoc, HistoryResponse } from '@/app/api/history/types'
 import { resolveDataManagementActor } from '@/access/dataManagementActor'
 import { resolveActorType } from '@/access/actorPolicy'
-import {
-  normalizeSoftDeleteBehavior,
-  type SoftDeleteBehavior,
-} from '@/globals/contract'
 
 // SPC-001 §4.4: objectHash by `name` (labels) / `title` (subtasks) for stable
 // array diffs; positional fallback keeps other arrays diffable.
@@ -77,24 +73,6 @@ async function previousVersionOf(
 }
 
 /**
- * SPC-005 options panel D-2: read the operator's soft-delete behavior from
- * the site-settings global. Falls back to 'visible' when the global has no
- * row yet (pre-first-save) or holds an unknown value — the least surprising
- * audit posture is the default.
- */
-export async function resolveSoftDeleteBehavior(
-  payload: Payload,
-): Promise<SoftDeleteBehavior> {
-  const settings = await payload.findGlobal({
-    slug: 'site-settings',
-    depth: 0,
-  })
-  return normalizeSoftDeleteBehavior(
-    (settings as { softDeleteBehavior?: unknown } | null)?.softDeleteBehavior,
-  )
-}
-
-/**
  * SPC-005 D-4: resolve `{ type, label }` per entry IN BULK from the version
  * snapshots (the attribution fields ride on the doc, so they ride on every
  * snapshot). No per-entry lookups: the label is the denormalized
@@ -118,26 +96,6 @@ function resolveActorForSnapshot(version: Record<string, unknown>): {
 }
 
 /**
- * SPC-005 options panel D-2 — the 'silent' half of the soft-delete toggle.
- *
- * A soft delete stamps `deleted: true` on a version snapshot. In 'visible'
- * mode (default) those entries show like any other change. In 'silent' mode
- * the soft-delete entries are OMITTED from the feed — the trail itself is
- * untouched (nothing is destroyed; flipping back to 'visible' reveals every
- * historical entry again), so this stays an audit-preserving presentation
- * filter, not a data loss primitive.
- *
- * Other writes are never filtered, and the entries keep their versions in
- * the database either way.
- */
-function filterSilentDeletes(entries: { doc: HistoryDoc; date: string }[]): typeof entries {
-  return entries.filter((e) => {
-    const v = (e.doc.version ?? {}) as Record<string, unknown>
-    return v.deleted !== true
-  })
-}
-
-/**
  * Consolidated audit-trail feed (SPC-001 §4.3 / G-2): three parallel
  * findVersions calls + in-memory merge, pagination over the combined result.
  * Throws on invalid collection filter. ACL is enforced by the HTTP layer
@@ -155,10 +113,6 @@ export async function buildHistoryFeed(
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1)
   const limit = parseLimit(params.get('limit'))
   const withDiff = params.get('withDiff') === '1'
-
-  // SPC-005 options panel: the soft-delete behavior (visible/silent) gates
-  // whether `deleted: true` version snapshots appear in the feed.
-  const softDeleteBehavior = await resolveSoftDeleteBehavior(payload)
 
   const PER_FEED_LIMIT = 100
   const results = await Promise.all(
@@ -226,15 +180,6 @@ export async function buildHistoryFeed(
       )
     }
     const filtered = merged.filter((e) => matches(e.doc))
-    merged.length = 0
-    merged.push(...filtered)
-    totalDocs = merged.length
-  }
-
-  // SPC-005 options panel D-2: 'silent' hides soft-delete snapshots from the
-  // feed (before pagination, so silent entries don't consume page slots).
-  if (softDeleteBehavior === 'silent') {
-    const filtered = filterSilentDeletes(merged)
     merged.length = 0
     merged.push(...filtered)
     totalDocs = merged.length
