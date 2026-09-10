@@ -33,6 +33,8 @@ export interface ActorClaims {
   clientIdClaim: string | null
   /** True when the token resolves to an agent (client-id in the list, §6). */
   isAgent: boolean
+  /** Best-effort channel stamp (§9): webui | rest | mcp, from the request. */
+  channel?: 'webui' | 'rest' | 'mcp'
 }
 
 /** Fail-closed result type: any verification failure → `{ user: null }` (§4). */

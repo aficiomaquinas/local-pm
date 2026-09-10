@@ -250,6 +250,38 @@ export interface User {
   name?: string | null;
   actorType: 'superadmin' | 'human' | 'agent';
   active?: boolean | null;
+  /**
+   * Token iss, exactly as emitted. Identity key is the (identityIss, identitySub) pair.
+   */
+  identityIss?: string | null;
+  /**
+   * Token sub. Email is an attribute; the identity is the pair.
+   */
+  identitySub?: string | null;
+  /**
+   * Re-derived from token claims at every login (effective revocation at token expiry).
+   */
+  roles?: ('superadmin' | 'human' | 'agent')[] | null;
+  /**
+   * Unmapped group-claim values, kept for mapping audit (ADR-002 rawGroups).
+   */
+  rawGroups?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Diagnostics: last successful OIDC authentication.
+   */
+  lastLoginAt?: string | null;
+  /**
+   * Best-effort channel stamp (X-LocalPM-Channel), set at login time only (§9).
+   */
+  lastChannel?: ('webui' | 'rest' | 'mcp') | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -749,6 +781,12 @@ export interface UsersSelect<T extends boolean = true> {
   name?: T;
   actorType?: T;
   active?: T;
+  identityIss?: T;
+  identitySub?: T;
+  roles?: T;
+  rawGroups?: T;
+  lastLoginAt?: T;
+  lastChannel?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;

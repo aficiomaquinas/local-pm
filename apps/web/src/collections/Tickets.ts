@@ -1,5 +1,6 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
+import { authenticatedMutations } from '@/access/authenticatedAccess'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
@@ -17,20 +18,18 @@ export const Tickets: CollectionConfig = {
     // server render, client refetch, list APIs) via this query constraint,
     // while the version trail survives untouched for the audit history.
     read: readExcludingDeleted,
-    create: () => true,
+    // SPC-006 / ADR-002 phase 1 (OD-7): mutations require ANY authenticated
+    // actor (local session or OIDC bearer — humans and agents alike; the
+    // MCP agent mutating tickets IS the product, REQ-002/AC-5). Anonymous
+    // → 401 (AC-2).
+    create: authenticatedMutations,
     // SPC-001 §3 in-scope item 4 + actorPolicy.ts decision: collection CRUD stays
     // OPEN (the kanban and local tooling depend on it); only the audit trail
     // surface (readVersions + restore) is policy-gated. Restore for native
     // `POST /api/tickets/versions/:id` runs this same `update` check, and the
     // beforeOperation hook below denies restore for agent/anonymous explicitly.
-    update: ({ req }) => {
-      // master user → allowed; agent → denied; anonymous → allowed only for
-      // non-restore operations. Payload's `req` carries the operation context
-      // for version restores via beforeOperation, so here we keep update open
-      // to keep CRUD parity with `create` (spec decision documented above).
-      return true
-    },
-    delete: () => true,
+    update: authenticatedMutations,
+    delete: authenticatedMutations,
     // SPC-001 §6: version trail reads are policy-denied to the agent identity.
     // Unauthenticated callers are also denied (deny-by-default; OIDC wiring lands in ADR-002).
     readVersions: denyAgents,
