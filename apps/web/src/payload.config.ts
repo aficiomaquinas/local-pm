@@ -63,6 +63,15 @@ export default buildConfig({
   },
   db: mongooseAdapter({
     url: process.env.DATABASE_URI || '',
+    // Bound mongoose's server selection so an unreachable mongodb fails fast
+    // and deterministically (30s default). 3s stays under the 5s vitest
+    // testTimeout — a stale DATABASE_URI in any test environment errors
+    // inside the test instead of hanging it — while comfortably covering
+    // runtime reconnects on the compose-internal network (mongodb health
+    // gate in docker-compose.yml ensures the app starts against a live DB).
+    connectOptions: {
+      serverSelectionTimeoutMS: 3000,
+    },
   }),
   plugins: [
     // SPC-004 §4a — import/export for the business collections. JSON-only
