@@ -60,8 +60,9 @@ RUN pnpm --filter @local-pm/mcp-server build
 # DATABASE_URI where getPayload() is reachable (o2 test, beforeEach), and
 # the line below pins the stage to the same contract. See
 # docs/investigations/2026-09-10_docker-builder-tests-mongoose-timeout.md.
-# (Kept as a scoped override, not a bare ENV: next build below reads
-# DATABASE_URI during static prerender and needs a resolvable value.)
+# (Scoped per-RUN override, not a stage ENV: compose build-args keep feeding
+# the stage-level DATABASE_URI for `next build` below, so the deploy path is
+# untouched — verified that next build completes even with the value empty.)
 RUN DATABASE_URI="" pnpm -r --no-bail test
 
 # Build the application

@@ -1,0 +1,56 @@
+# OD-4 (FUTURE, OPT-IN): dex IdP overlay for OIDC end-to-end testing.
+#
+# NOT part of the default deployment — `docker compose up --build` never
+# reads this file. It exists so the SPC-006 "E2E IdP pending" milestone (the
+# only unimplemented piece of SPC-006 besides the gated M7/OD-1) has a
+# ready-made local IdP instead of a hand-run one. Build/test are fully
+# hermetic and DO NOT need this overlay (see
+# docs/investigations/2026-09-10_docker-builder-tests-mongoose-timeout.md).
+#
+# Usage (when OD-4 work starts):
+#   docker compose -f docker-compose.yml -f docker-compose.oidc.yml up --build
+#   ... run the E2E pass ...
+#   docker compose -f docker-compose.yml -f docker-compose.oidc.yml down
+#     # (add --volumes ONLY with operator authorization — data nuke rule)
+#
+# What it adds:
+#   - dex (ghcr.io/dexidp/dex:v2.45.1) on the compose network, port published
+#     loopback-only for the browser leg of the login flow.
+#   - config/dex/config.yml (read-only bind mount): issuer http://dex:5556/dex,
+#     static clients local-pm-web (authorization_code+PKCE, redirect
+#     /api/auth/oidc/callback) and local-pm-mcp (client_credentials), one dev
+#     password login. Dev secrets only — never expose beyond loopback.
+#     NOTE (verified live 2026-09-10): dex v2.45.1 predates client_credentials
+#     support (PR #4583, unreleased at this tag) — the web login leg works
+#     end-to-end; the MCP machine-grant leg stays 400 until dex ships #4583.
+#     See config/dex/config.yml for the full note.
+#
+# What the app needs at RUN time (set in the shell or an env file, NOT baked
+# into the image):
+#   app.environment:
+#     OIDC_ENABLED: "true"
+#     OIDC_ISSUER: http://dex:5556/dex
+#     OIDC_CLIENT_ID: local-pm-web
+#     OIDC_CLIENT_SECRET: web-secret-dev-only
+#   ...and for the MCP server (SPC-006 §10): OIDC_ENABLED=true,
+#   OIDC_ISSUER=http://dex:5556/dex, OIDC_CLIENT_ID=local-pm-mcp,
+#   OIDC_CLIENT_SECRET=mcp-secret-dev-only.
+#   NEXT_PUBLIC_SERVER_URL must stay http://localhost:3010 (default) so the
+#   redirect URI matches config/dex/config.yml.
+#
+# Deliberately minimal: no healthchecks, no profiles:, no resource limits —
+# this file is a starting point for the OD-4 implementation, not an
+# operational deployment.
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.45.1
+    container_name: local-pm-dex
+    restart: unless-stopped
+    command: ["dex", "serve", "/etc/dex/config.yml"]
+    volumes:
+      - ./config/dex/config.yml:/etc/dex/config.yml:ro
+    ports:
+      # Loopback-only, matching the deployment's binding posture (ADR-001
+      # D1): dex serves the browser leg on the operator host, the app talks
+      # to it server-to-server over the compose network (http://dex:5556/dex).
+      - "127.0.0.1:5556:5556"
