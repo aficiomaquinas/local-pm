@@ -15,6 +15,14 @@ Research contract honored: every external claim below is cited `[Rn]` to §19 Re
 (all URLs surfaced by donsetch web searches, then fetched; no guessed URLs). Items not
 confirmed by a fetched source are marked **[unverified]**.
 
+**Optionality principle (operator requirement, 2026-09-09):** OIDC is an *opt-in module*,
+consistent with the upstream contribution offer (anaskasmi/local-pm#2): with
+`OIDC_ENABLED=false` (the default) the system behaves exactly as today — local
+email/password login, first-register, no IdP dependency, no new boot-time failure modes.
+The simple single-user + single-agent setup stays simple; nothing in M0–M6 forces an
+external IdP. The only irreversible step (M7, `disableLocalStrategy: true`) stays
+behind an explicit operator gate (OD-1, §18).
+
 ---
 
 ## 1. Objective
