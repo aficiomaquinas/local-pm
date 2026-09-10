@@ -26,13 +26,15 @@ WORKDIR /app
 COPY --from=deps /app ./
 COPY . .
 
-# Build arguments for environment variables needed at build time
-ARG DATABASE_URI
-ARG PAYLOAD_SECRET
+# Public build-time value (inlined into client bundles by Next.js). Deliberately
+# the ONLY build arg: secrets and the database URI are injected at RUNTIME via
+# docker-compose `environment:` — they never enter the builder stage. The
+# builder has no route to mongodb, so a DATABASE_URI here would push the
+# test-stage mongoose connects (getPayload) into their default 30s server
+# selection retry loop and blow past the 5s vitest testTimeout (SPC-003 §5.3).
+# With no URI, the adapter fails immediately — same fast-fail as the host.
 ARG NEXT_PUBLIC_SERVER_URL
 
-ENV DATABASE_URI=$DATABASE_URI
-ENV PAYLOAD_SECRET=$PAYLOAD_SECRET
 ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
 ENV NODE_OPTIONS="--no-deprecation --max-old-space-size=8000"
 
