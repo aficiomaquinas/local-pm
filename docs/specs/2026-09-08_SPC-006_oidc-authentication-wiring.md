@@ -5,7 +5,7 @@
 | **Repo** | `local-pm` (fork local: `aficiomaquinas/local-pm`, branch `feat/spc006-oidc-wiring`) |
 | **ID** | SPC-006 |
 | **Date** | 2026-09-08 |
-| **Status** | APPROVED (operator authorization 2026-09-09 23:41 CST: "autorizado spec6, se ve bien para implementar con subagente(s), en su(s) branches distinguidos"; execution = implementation wave, branches `feat/oidc-implementation` (+ `feat/keyboard-drag-a11y` for upstream issue #3) — this spec still designs; implementation lands on its own branch) |
+| **Status** | APPROVED → IMPLEMENTED (M0–M6 merged to master 2026-09-10, gate 285 tests green; M7 gated OD-1 pending operator flip; E2E with real IdP pending — OD-4 dex bootstrap, curl-level AC-3/4/6 verification) — operator authorization 2026-09-09 23:41 CST: "autorizado spec6, se ve bien para implementar con subagente(s), en su(s) branches distinguidos" |
 | **Type** | Specification (implementation design for ADR-002) |
 | **Depends on** | [ADR-002 — OIDC-compliant authentication (ACCEPTED)](../adr/2026-09-05_ADR-002_oidc-authentication.md) · [REQ-002 — distinguished actor credentials](../requirements/2026-09-05_REQ-002_distinguished-actor-credentials.md) · SPC-001 §6 (access policy) · SPC-004 §4e/R-4 (data management policy) · SPC-005 (actor attribution, implemented) |
 | **Related** | [SPC-001 — audit trail & restore](2026-09-05_SPC-001_audit-trail-restore.md) · [SPC-004 — import/export & snapshots](2026-09-07_SPC-004_import-export-snapshots.md) · [SPC-005 — audit attribution & retention](2026-09-08_SPC-005_audit-attribution-retention.md) |
