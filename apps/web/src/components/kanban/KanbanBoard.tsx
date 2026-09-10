@@ -20,7 +20,12 @@ import { KanbanHeader } from './KanbanHeader'
 import { TicketModal } from './TicketModal'
 import { TicketDetailModal } from './TicketDetailModal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { computeDragResult, KANBAN_COLUMNS } from './dragLogic'
+import {
+  applyDrop,
+  isRealMove,
+  resolveDragTarget,
+  KANBAN_COLUMNS,
+} from './dragLogic'
 import { prioritizePointerWithin } from './collision'
 import { TicketStatus } from '@/types/enums'
 import type { Project, Team, Ticket } from '@/payload-types'
@@ -155,6 +160,17 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
   // the effect skips its fetch while it is set and the drag clears it after
   // the PATCH settles.
   const isDraggingRef = useRef(false)
+
+  // Drag fix (2026-09-09): snapshot of {status, sortOrder} at drag start —
+  // the position the SERVER knows. handleDragOver now mutates optimistic
+  // state (incl. sortOrder), so handleDragEnd can no longer detect a real
+  // move by comparing against current state: a drop that only confirms the
+  // live preview re-solves to identical status+sortOrder and would be
+  // misread as a no-op → no PATCH → the next refetch silently reverts the
+  // move (the "In Progress drop does nothing" bug). Comparing against the
+  // drag-start snapshot keeps dragOver (live preview) and dragEnd (commit)
+  // consistent.
+  const dragOriginRef = useRef<{ status: TicketStatus; sortOrder: number } | null>(null)
 
   // Refetch tickets when filters change
   useEffect(() => {
@@ -312,6 +328,11 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
   const handleDragStart = (event: DragStartEvent) => {
     const ticket = tickets.find((t) => t.id === event.active.id)
     setActiveTicket(ticket || null)
+    // Drag fix: remember the position the SERVER knows (status + sortOrder)
+    // so dragEnd can tell a real move from "dragOver already landed here".
+    dragOriginRef.current = ticket
+      ? { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
+      : null
   }
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -321,34 +342,39 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     const activeId = active.id as string
     const overId = over.id as string
 
-    const activeTicket = tickets.find((t) => t.id === activeId)
-    if (!activeTicket) return
+    // Drag fix (2026-09-09): the over state must be fully applied DURING the
+    // drag, not only at drop time. Previously handleDragOver mutated ONLY the
+    // status and left the mover's sortOrder as junk from the source column:
+    // a drop on the column body then re-solved to the same status+sortOrder
+    // in handleDragEnd, computeDragResult reported a no-op, no PATCH went
+    // out, and the next refetch reverted the optimistic move — "In Progress
+    // drop does nothing". resolveDragTarget + append sortOrder make the
+    // optimistic state the true final state; dragEnd then produces a real
+    // PATCH (or a genuine no-op).
+    setTickets((prev) => {
+      const target = resolveDragTarget(prev, activeId, overId)
+      if (!target) return prev
 
-    // Check if we're over a column
-    const isOverColumn = COLUMNS.some((col) => col.id === overId)
-    if (isOverColumn) {
-      const newStatus = overId as TicketStatus
-      if (activeTicket.status !== newStatus) {
-        setTickets((prev) =>
-          prev.map((ticket) =>
-            ticket.id === activeId ? { ...ticket, status: newStatus } : ticket
-          )
-        )
-      }
-      return
-    }
+      const activeTicket = prev.find((t) => t.id === activeId)
+      if (!activeTicket) return prev
+      // Same column → nothing to preview (within-column drops are committed
+      // by dragEnd from the final over position); the sortOrder append is
+      // only for CROSS-column entries, per the drag fix.
+      if (activeTicket.status === target.status) return prev
 
-    // We're over another ticket
-    const overTicket = tickets.find((t) => t.id === overId)
-    if (!overTicket) return
+      // Entering a new column → land at the END of it (max+1 over the
+      // tickets already in that column) so the visual preview matches what
+      // the drop will commit.
+      const maxSort = prev
+        .filter((t) => t.status === target.status && t.id !== activeId)
+        .reduce((max, t) => Math.max(max, t.sortOrder ?? 0), -1)
 
-    if (activeTicket.status !== overTicket.status) {
-      setTickets((prev) =>
-        prev.map((ticket) =>
-          ticket.id === activeId ? { ...ticket, status: overTicket.status } : ticket
-        )
+      return prev.map((ticket) =>
+        ticket.id === activeId
+          ? { ...ticket, status: target.status, sortOrder: maxSort + 1 }
+          : ticket,
       )
-    }
+    })
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -365,19 +391,25 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     // BUG-1: a drag is in flight from here until the PATCH settles — the
     // filter-refetch effect must stay suppressed through the whole window
     // (it re-runs on router.replace URL syncs and would otherwise clobber
-    // the optimistic state with pre-PATCH server data).
+    // the optimistic state with pre-PATCH server data). The flag is set
+    // BEFORE any return, so even a no-op drop (and the empty-window `over`
+    // case above) leaves it consistent for the next effect run.
     isDraggingRef.current = true
     try {
-      // BUG-1: recompute from the CURRENT state inside the setTickets updater
-      // (handleDragOver already mutated it during the drag) and PATCH with
-      // the final values computed there — no stale drag-start snapshot. A
-      // no-op drop returns nulls: nothing to PATCH, nothing to refetch.
+      // Drag fix: recompute the drop from the CURRENT state (dragOver already
+      // landed the mover there) and compare against the DRAG-START origin —
+      // not the current state — to decide whether a PATCH is needed. The
+      // committed tickets are always the normalized applyDrop result; the
+      // PATCH itself is skipped only when the drop changes nothing relative
+      // to what the server already knows.
       let patch: { status: TicketStatus; sortOrder: number } | null = null
 
       setTickets((prev) => {
-        const result = computeDragResult(prev, activeId, overId)
+        const result = applyDrop(prev, activeId, overId)
         if (result.status !== null && result.sortOrder !== null) {
-          patch = { status: result.status, sortOrder: result.sortOrder }
+          if (isRealMove(result, dragOriginRef.current)) {
+            patch = { status: result.status, sortOrder: result.sortOrder }
+          }
         }
         return result.tickets
       })
@@ -487,9 +519,11 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
 
       <DndContext
         sensors={sensors}
-        // Drag UX fix (2026-09-08): pointerWithin-first composed collision
+        // Drag UX fix (2026-09-08/09): pointerWithin-first composed collision
         // detection — dropping anywhere inside a column (incl. empty areas)
         // now reliably targets that column instead of a card in another one.
+        // Column droppables carry data.type === 'Column' (KanbanColumn) and
+        // resolveDragTarget maps over-ids to columns during over/drop.
         collisionDetection={prioritizePointerWithin(KANBAN_COLUMNS)}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
