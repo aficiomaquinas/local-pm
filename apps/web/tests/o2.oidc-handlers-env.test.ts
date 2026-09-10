@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const ENV_KEYS = [
+  'DATABASE_URI',
   'OIDC_ENABLED',
   'OIDC_ISSUER',
   'OIDC_CLIENT_ID',
@@ -24,6 +25,18 @@ let savedEnv: Record<string, string | undefined>
 beforeEach(() => {
   savedEnv = {}
   for (const k of ENV_KEYS) savedEnv[k] = process.env[k]
+  // Hermetic DATABASE_URI (see docs/investigations/
+  // 2026-09-10_docker-builder-tests-mongoose-timeout.md): the /logout and
+  // /callback handlers call getPayload() → payload.config boots the
+  // mongooseAdapter. Left ambient, the behavior is environmental: an EMPTY
+  // url makes mongoose throw immediately (fast fallback path), while a
+  // valid-format-but-unreachable url — exactly what the docker builder used
+  // to receive as a compose build-arg — puts mongoose into its 30s
+  // serverSelection retry loop, blowing vitest's 5s testTimeout. Pin a
+  // deterministic fail-fast URL instead: closed loopback port + 1ms
+  // timeouts → the adapter rejects in milliseconds in EVERY environment.
+  process.env['DATABASE_URI'] =
+    'mongodb://127.0.0.1:1/local-pm?serverSelectionTimeoutMS=1&connectTimeoutMS=1'
   vi.resetModules()
 })
 
@@ -264,7 +277,8 @@ describe('GET/POST /api/auth/oidc/logout (§5, AC-9)', () => {
     stubFetch()
     const { GET } = await import('@/app/api/auth/oidc/logout/route')
     const res = await GET()
-    // getPayload is unavailable in the unit environment → the handler falls
+    // getPayload cannot boot Payload here — the hermetic DATABASE_URI above
+    // makes the mongooseAdapter reject in milliseconds → the handler falls
     // back to clearing the conventional cookie name; the contract under test
     // is: SOME Set-Cookie clears the session + 302 to the IdP end session.
     expect(res.status).toBe(302)
