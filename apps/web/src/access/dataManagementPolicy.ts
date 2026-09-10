@@ -31,6 +31,11 @@ export const dataManagementAccess: Access = ({ req }) => {
   if (!actorType) return false // no auth / anonymous → deny-by-default
   const role = (user as { role?: unknown } | null | undefined)?.role
   if (typeof role === 'string') return role === 'superadmin' // post-ADR-002 claims
+  // SPC-006 §9 — the only ACL-module delta: the OIDC wiring spells the claim
+  // roles `roles` (array of superadmin|human|agent, re-derived per login),
+  // so superadmin must be recognized on that marker too.
+  const roles = (user as { roles?: unknown }).roles
+  if (Array.isArray(roles)) return roles.includes('superadmin')
   return true // master user, pre-claims
 }
 

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
+import { authenticatedMutations } from '@/access/authenticatedAccess'
 import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
@@ -16,11 +17,14 @@ export const Projects: CollectionConfig = {
     // Soft delete (SPC-004 D2): deleted projects leave every read path while
     // their version trail survives for the audit history.
     read: readExcludingDeleted,
-    create: () => true,
-    // SPC-001 §3: CRUD stays open (audit-trail surface only is policy-gated;
-    // restore is denied by the readVersions ACL + beforeOperation hook).
-    update: () => true,
-    delete: () => true,
+    // SPC-006 / ADR-002 phase 1 (OD-7): mutations require ANY authenticated
+    // actor (local session or OIDC bearer — humans and agents alike; agents
+    // keep business CRUD by design, REQ-002). Anonymous → 401 (AC-2).
+    create: authenticatedMutations,
+    // Restore (which Payload runs through this `update` check) stays
+    // master-only via the beforeOperation guard below (SPC-001 §6).
+    update: authenticatedMutations,
+    delete: authenticatedMutations,
     // SPC-001 §6: version trail reads are policy-denied to the agent identity.
     // Unauthenticated callers are also denied (deny-by-default; OIDC wiring lands in ADR-002).
     readVersions: denyAgents,
