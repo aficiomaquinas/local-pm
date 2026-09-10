@@ -51,7 +51,18 @@ RUN pnpm --filter @local-pm/mcp-server build
 # build outputs (they live in tests/, outside both packages' build
 # tsconfigs). The suites are hermetic: fetch is mocked, no MongoDB and no
 # network are reachable from the builder stage.
-RUN pnpm -r --no-bail test
+#
+# The test stage is hermetic — no DB, no network; runtime env comes from
+# compose at run time. DATABASE_URI must NOT be ambient here: compose passes
+# it as a build-arg, and a valid-format-but-unreachable URL makes the OIDC
+# handler tests hang in mongoose's 30s serverSelection retry loop (vitest
+# testTimeout is 5s). The suites pin their own deterministic fail-fast
+# DATABASE_URI where getPayload() is reachable (o2 test, beforeEach), and
+# the line below pins the stage to the same contract. See
+# docs/investigations/2026-09-10_docker-builder-tests-mongoose-timeout.md.
+# (Kept as a scoped override, not a bare ENV: next build below reads
+# DATABASE_URI during static prerender and needs a resolvable value.)
+RUN DATABASE_URI="" pnpm -r --no-bail test
 
 # Build the application
 RUN pnpm --filter local-pm-web build
