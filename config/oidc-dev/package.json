@@ -1,0 +1,13 @@
+{
+  "name": "@local-pm/oidc-dev",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Disposable dev IdP (node-oidc-provider) for the local-pm E2E stack — MCP client_credentials leg. INV-E2E-STACK R3; NOT in the pnpm workspace by design.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "oidc-provider": "^9.12.2"
+  }
+}

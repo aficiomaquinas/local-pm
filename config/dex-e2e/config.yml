@@ -1,0 +1,65 @@
+# dex config for the local-pm E2E stack ONLY (docker-compose.e2e.yml).
+#
+# Self-contained copy of the operator profile config
+# (../../config/dex/config.yml) with the E2E topology baked in:
+#   - issuer http://dex-e2e:5557/dex (compose-network name dex-e2e)
+#   - web 0.0.0.0:5557 (host publishes 127.0.0.1:5557 loopback-only)
+# The E2E stack must never mutate operator files; duplicating this ~70-line
+# YAML is cheaper than clever env templating of the operator's file.
+#
+# Image this config targets: ghcr.io/dexidp/dex:v2.45.1
+#   docker run --rm -v "$PWD/config/dex-e2e:/etc/dex:ro" \
+#     ghcr.io/dexidp/dex:v2.45.1 dex serve /etc/dex/config.yml  # dry check
+
+# Canonical URL all clients MUST use to refer to dex (in-network hostname).
+issuer: http://dex-e2e:5557/dex
+
+# In-memory storage: disposable by design (nothing to back up).
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5557
+
+# Built-in email/password connector — no external connector for the E2E login.
+enablePasswordDB: true
+
+oauth2:
+  # E2E-only: no consent interstitial (the flow must be scriptable end-to-end
+  # with curl; the operator profile keeps its default approval UX). Key name
+  # verified in dex source v2.45.1 (server/server.go: SkipApprovalScreen).
+  skipApprovalScreen: true
+  # Kept for symmetry with the operator config: dex v2.45.1 does NOT ship
+  # client_credentials (PR #4583 unreleased — INV-IDP-ALT §2). The E2E m2m
+  # leg is served by the oidc-dev service, NOT by dex. This entry stays
+  # inert until a dex release carries the grant.
+  grantTypes:
+    - authorization_code
+    - client_credentials
+
+staticClients:
+  # Web app (human leg): authorization_code + PKCE (S256). Redirect URI must
+  # match getRedirectUri() = ${NEXT_PUBLIC_SERVER_URL}/api/auth/oidc/callback
+  # with the E2E app publishing 127.0.0.1:3012.
+  - id: local-pm-web
+    redirectURIs:
+      - "http://localhost:3012/api/auth/oidc/callback"
+      - "http://127.0.0.1:3012/api/auth/oidc/callback"
+    name: "local-pm web (e2e)"
+    secret: web-secret-dev-only
+
+  # MCP server client is NOT registered here on purpose: its grant is
+  # 400-at-this-tag (see oauth2 note). It lives in config/oidc-dev/server.mjs.
+
+# Dev-only login: ops@local.test / ops-password (same hash as the operator
+# config — disposable stack, never reuse outside it).
+staticPasswords:
+  - email: "ops@local.test"
+    hash: "$2a$10$hqE9.Uv8hQV9cZuDtHuyju4QCU0eYeDeXCp4sgD6rMNwUj0Z1mlOC"
+    username: "ops"
+    name: "Ops User"
+    emailVerified: true
+    userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+    groups:
+      - "local-pm-humans"
+      - "local-pm-admins"

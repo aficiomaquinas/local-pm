@@ -19,6 +19,8 @@
  * contract needs; runtime field validation is Payload's (config-truth).
  */
 
+import { randomBytes } from 'node:crypto'
+
 import type { Payload } from 'payload'
 
 import type { AppRole } from './env'
@@ -91,6 +93,12 @@ export async function upsertOidcUser(payload: Payload, claims: ActorClaims): Pro
       data: {
         name: clientId,
         email: `${clientId.replace(/[^a-zA-Z0-9._-]/g, '_')}@clients.local`,
+        // Payload 3.88 runs registerLocalStrategy on EVERY create of an auth
+        // collection (dist/collections/operations/create.js →
+        // generatePasswordSaltHash: password required:true). Provide server-
+        // generated random credentials: never displayed, never used — OIDC
+        // auth is strategy-based and never consults the password.
+        password: randomBytes(24).toString('hex'),
         actorType: 'agent',
         active: true,
         identityIss: iss,
@@ -121,7 +129,11 @@ export async function upsertOidcUser(payload: Payload, claims: ActorClaims): Pro
     rawGroups,
     lastLoginAt: new Date().toISOString(),
   }
-  if (email !== undefined) data['email'] = email
+  // Email is required+unique on auth collections in Payload 3.88
+  // (dist/auth/baseFields/email.js) and is an ATTRIBUTE here (identity is
+  // the (iss, sub) pair, §8). Tokens without an email claim get a
+  // deterministic synthetic address derived from the subject.
+  data['email'] = email ?? `oidc-${String(sub).replace(/[^a-zA-Z0-9._-]/g, '_')}@users.local`
   if (name !== undefined) data['name'] = name
 
   if (doc) {
@@ -140,7 +152,16 @@ export async function upsertOidcUser(payload: Payload, claims: ActorClaims): Pro
   try {
     const created = await create({
       collection: 'users',
-      data: { ...data, identityIss: iss, identitySub: sub, active: true },
+      // password: see the agent-branch note — Payload 3.88 requires it on
+      // EVERY create of an auth collection (registerLocalStrategy). Random,
+      // never used: OIDC humans authenticate via the strategy, not locally.
+      data: {
+        ...data,
+        password: randomBytes(24).toString('hex'),
+        identityIss: iss,
+        identitySub: sub,
+        active: true,
+      },
       depth: 0,
       overrideAccess: true,
     })

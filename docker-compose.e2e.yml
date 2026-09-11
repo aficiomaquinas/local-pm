@@ -1,0 +1,125 @@
+# local-pm E2E stack overlay (INV-E2E-STACK R2) — T3 OIDC E2E harness.
+#
+#   docker compose -p local-pm-e2e \
+#     -f docker-compose.yml -f docker-compose.test.yml -f docker-compose.e2e.yml \
+#     up -d --build
+#
+# Layering (R1: the operator file stays the operator surface):
+#   base (docker-compose.yml) ....... app image build, mongodb, healthchecks
+#   test overlay (docker-compose.test.yml) . isolated project names + 3012 port
+#   THIS overlay .................... E2E-only services + OIDC env for T3
+#
+# Adds over the chain:
+#   dex-e2e ..... human leg (authorization_code + PKCE), 127.0.0.1:5557,
+#                 config bind-mounted from config/dex-e2e/config.yml
+#                 (self-contained copy — operator files untouched).
+#   oidc-dev .... MCP leg (client_credentials via node-oidc-provider),
+#                 127.0.0.1:5558, built from config/oidc-dev/.
+#   app-e2e-mcp . second app instance of the SAME image, port 127.0.0.1:3013,
+#                 OIDC_ISSUER -> oidc-dev. Reason (verified against
+#                 apps/web/src/lib/oidc/verify.ts @ 4df5a86): verifyJwks
+#                 validates tokens against the CONFIGURED issuer only — one
+#                 app instance cannot accept tokens from two issuers, so the
+#                 m2m leg needs an instance whose OIDC_ISSUER is oidc-dev.
+#                 Bonus: two instances of one image with different issuer env
+#                 IS acceptance criterion AC-6 (provider swap, zero code
+#                 change) exercised for real in E2E.
+#
+# The app-e2e (from the test overlay) carries OIDC_ISSUER -> dex-e2e here via
+# an `environment:` merge (documented map-merge semantics, Docker docs [2] in
+# INV-E2E-STACK): existing keys are overridden, new keys are added.
+#
+# Everything in this file is disposable: `docker compose -p local-pm-e2e down
+# --volumes` leaves nothing behind. No operator data is involved — the
+# project name separates volumes from any operator stack.
+services:
+  # The chained `app` service (base build + test-overlay ports/names) — the
+  # human-leg E2E instance. `environment:` is a map merge (Docker docs [2]
+  # in INV-E2E-STACK): overrides/extends what base+test set.
+  app:
+    container_name: local-pm-e2e-app
+    environment:
+      # ── OIDC human leg -> dex-e2e (5557) ─────────────────────────────────
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER: http://dex-e2e:5557/dex
+      OIDC_CLIENT_ID: local-pm-web
+      OIDC_CLIENT_SECRET: web-secret-dev-only
+      # Redirect stays on the test overlay's port: NEXT_PUBLIC_SERVER_URL is
+      # baked as http://localhost:3010 in the image build args... but the
+      # default redirect = ${NEXT_PUBLIC_SERVER_URL}/api/auth/oidc/callback
+      # is computed at RUNTIME from env (SPC-006 §13 default), so we pin the
+      # redirect explicitly to the E2E port instead of rebuilding the image.
+      OIDC_REDIRECT_URI: http://localhost:3012/api/auth/oidc/callback
+      # Master user's dex groups (config/dex-e2e/config.yml staticPasswords)
+      # map to superadmin for the feed-write check (§7).
+      OIDC_SUPERADMIN_GROUP: local-pm-admins
+      OIDC_AGENT_CLIENT_IDS: '["local-pm-mcp"]'
+      # ── E2E harness handles (consumed by scripts/e2e-oidc.sh) ───────────
+      E2E_HUMAN_BASE_URL: http://app-e2e:3010
+      E2E_MCP_BASE_URL: http://app-e2e-mcp:3010
+      E2E_MCP_ISSUER: http://oidc-dev:5558
+
+  app-e2e-mcp:
+    # Second instance of the SAME image (R2/R3): the MCP-issuer variant.
+    # Distinct host port (3013) so app-e2e (3012) and any operator stack
+    # (3010) never collide; distinct container_name for the same reason.
+    # Compose does not inherit `build:` across different service keys, so
+    # the base build block is replicated here (same context/Dockerfile).
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # m2m leg is curl/API-only; the inlined client-bundle URL never
+        # reaches a browser in the E2E smoke — the base default is fine.
+        NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
+    container_name: local-pm-e2e-app-mcp
+    ports: !override
+      - "127.0.0.1:3013:3010"
+    environment:
+      DATABASE_URI: mongodb://mongodb:27017/local-pm
+      PAYLOAD_SECRET: local-pm-secret-key-for-development-only
+      NEXT_PUBLIC_SERVER_URL: http://localhost:3013
+      # ── OIDC MCP leg -> oidc-dev (5558) ─────────────────────────────────
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER: http://oidc-dev:5558
+      OIDC_CLIENT_ID: local-pm-mcp
+      OIDC_CLIENT_SECRET: mcp-secret-dev-only
+      # jwks mode needs an audience only when OIDC_AUDIENCE is set (§13:
+      # empty = skip aud check) — the dev IdP mints aud=sub, skip is right.
+      OIDC_AGENT_CLIENT_IDS: '["local-pm-mcp"]'
+      E2E_HUMAN_BASE_URL: http://app-e2e:3010
+      E2E_MCP_BASE_URL: http://app-e2e-mcp:3010
+      E2E_MCP_ISSUER: http://oidc-dev:5558
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - local-pm-snapshots:/app/snapshots
+    restart: unless-stopped
+
+  dex-e2e:
+    # Human-leg IdP (PKCE). Same image as the operator profile's dex but a
+    # SEPARATE service/container/ports so an operator stack (5556) can run
+    # concurrently with the E2E stack (5557) — INV-E2E-STACK R2 isolation.
+    image: ghcr.io/dexidp/dex:v2.45.1
+    container_name: local-pm-e2e-dex
+    restart: unless-stopped
+    command: ["dex", "serve", "/etc/dex/config.yml"]
+    volumes:
+      - ./config/dex-e2e/config.yml:/etc/dex/config.yml:ro
+    ports:
+      - "127.0.0.1:5557:5557"
+
+  oidc-dev:
+    # MCP-leg IdP (client_credentials). Built from config/oidc-dev/ (panva
+    # node-oidc-provider, in-memory, no interaction UI — INV-IDP-ALT §5).
+    build:
+      context: ./config/oidc-dev
+      dockerfile: Dockerfile
+    container_name: local-pm-e2e-oidc-dev
+    restart: unless-stopped
+    environment:
+      PORT: "5558"
+      ISSUER: http://oidc-dev:5558
+    ports:
+      - "127.0.0.1:5558:5558"
