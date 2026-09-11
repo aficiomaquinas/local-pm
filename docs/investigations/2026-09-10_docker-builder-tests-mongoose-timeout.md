@@ -157,6 +157,9 @@ DATABASE_URI='mongodb://mongodb:27017/local-pm' pnpm --filter local-pm-web test
   `client_credential_grant_enabled_by_default`): merged but NOT present in the
   v2.45.1 tag — verified live (config accepted, discovery omits the grant,
   token endpoint 400) and at source level (no `ClientCredentials` in the
-  tagged `server/handlers.go`). The overlay example keeps the opt-in
+  tagged `server/handlers.go`). Re-checked 2026-09-10: v2.45.1 is still the
+  newest dex release and the PR commit is diverged from that tag (GitHub
+  compare `v2.45.1...fec4f53`: ahead 22 / behind 3), so the image pin stays.
+  The OIDC compose profile keeps the opt-in
   `oauth2.grantTypes` entry so the MCP leg activates with the first release
   carrying the PR: <https://github.com/dexidp/dex/pull/4583>

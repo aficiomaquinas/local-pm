@@ -1,8 +1,9 @@
-# Minimal dex (dexidp) IdP config — EXAMPLE for the future OD-4 E2E overlay.
+# Minimal dex (dexidp) IdP config for the OIDC compose profile (--profile oidc).
 #
-# NOT used by `docker compose build` / `up` by default. It is mounted by
-# docker-compose.oidc.yml (opt-in) and exists so the OIDC E2E milestone
-# (SPC-006: "E2E IdP pending") has a working local IdP to run against.
+# Mounted read-only by the `dex` service in docker-compose.yml (profile
+# `oidc`):   COMPOSE_PROFILES=oidc docker compose up --build
+# It exists so the OIDC E2E milestone (SPC-006: "E2E IdP pending") has a
+# working local IdP to run against.
 #
 # Image this config targets: ghcr.io/dexidp/dex:v2.45.1
 #   docker run --rm -v "$PWD/config/dex:/etc/dex:ro" \
@@ -32,8 +33,11 @@ oauth2:
   # v2.45.1 (2026-09-10): this release DOES NOT ship that PR yet — the entry
   # below is accepted but inert (discovery omits client_credentials, token
   # endpoint answers 400 unsupported_grant_type). Keep it: it activates the
-  # MCP leg as soon as a dex release carries #4583 — pin the image tag in
-  # docker-compose.oidc.yml to that release. Until then, an m2m E2E needs
+  # MCP leg as soon as a dex release carries #4583 — re-checked 2026-09-10:
+  # v2.45.1 is still the newest release and the PR commit is diverged from
+  # it (GitHub compare: ahead 22 / behind 3), so the pin stays. Pin the
+  # image tag in docker-compose.yml (`dex` service) to the first release
+  # carrying the PR. Until then, an m2m E2E needs
   # either a dex build from the PR branch or a different IdP for that leg.
   grantTypes:
     - authorization_code

@@ -1,3 +1,36 @@
+# local-pm — ONE compose file, two runtime shapes selected by compose profile.
+#
+#   docker compose up --build
+#       Default: app + mongodb — byte-for-byte today's deployment (no OIDC).
+#
+#   COMPOSE_PROFILES=oidc docker compose up --build
+#       OIDC stack: app-oidc + mongodb + dex (local IdP, profile `oidc`).
+#       app-oidc is the SAME build/volumes/port as `app` plus the OIDC_* env
+#       wired to dex; `app` stays off (profile selection replaces the implicit
+#       default), so 127.0.0.1:3010 always has exactly one owner.
+#       Equivalent: `docker compose --profile oidc up --build` when the
+#       project .env pins COMPOSE_PROFILES=default (a CLI --profile flag
+#       REPLACES the .env value). Without that pin, --profile oidc activates
+#       oidc ON TOP of the implicit default and BOTH app variants would claim
+#       127.0.0.1:3010 — compose fails fast on the port collision (no
+#       split-brain stack), and the fix is the COMPOSE_PROFILES=oidc form.
+#
+#   Tear down (either shape): docker compose down  (add --volumes ONLY with
+#   operator authorization — data nuke rule).
+#
+# dex notes:
+#   - Binds 127.0.0.1:5556 loopback-only (ADR-001 D1 posture): the browser
+#     leg hits the operator host, the app talks server-to-server over the
+#     compose network (http://dex:5556/dex). Browser resolution of `dex`
+#     needs `127.0.0.1 dex` in /etc/hosts.
+#   - config/dex/config.yml (read-only bind mount) is the full client/user
+#     setup incl. the client_credentials limitation: dex v2.45.1 predates
+#     PR #4583 (no release carries it as of 2026-09-10) — the web login leg
+#     works end-to-end; the MCP machine-grant leg stays 400 until a dex
+#     release ships #4583. Re-pin the dex image tag then.
+#
+# Build/test are fully hermetic and need neither profile (see
+# docs/investigations/2026-09-10_docker-builder-tests-mongoose-timeout.md).
 services:
   app:
     build:
@@ -26,6 +59,60 @@ services:
       # SPC-004 §5.6 / D-3: named-snapshot files (plugin-import-export
       # `exports` uploads, staticDir /app/snapshots) persist across rebuilds.
       - local-pm-snapshots:/app/snapshots
+
+  # OIDC variant of `app` — profile `oidc` only. Same image build, same
+  # port/volumes; differs ONLY in the OIDC_* env below. Never runs at the
+  # same time as `app` (profile selection is exclusive; if both are somehow
+  # forced on, the shared 127.0.0.1:3010 publish makes compose fail fast).
+  app-oidc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
+    container_name: local-pm-app-oidc
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3010:3010"
+    environment:
+      DATABASE_URI: mongodb://mongodb:27017/local-pm
+      PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
+      # Must stay http://localhost:3010 so the redirect URI matches
+      # config/dex/config.yml staticClients.local-pm-web.redirectURIs.
+      NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
+      # ── OIDC (SPC-006 §13) wired to the dex service below ────────────────
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER: http://dex:5556/dex
+      OIDC_CLIENT_ID: local-pm-web
+      OIDC_CLIENT_SECRET: web-secret-dev-only
+      # Optional policy passthroughs (compose ${VAR:-default} reads the
+      # operator shell/.env; defaults keep behavior inert):
+      OIDC_AGENT_CLIENT_IDS: ${OIDC_AGENT_CLIENT_IDS:-[]}   # JSON array; T3 agent-denial E2E needs e.g. ["local-pm-mcp"]
+      OIDC_SUPERADMIN_GROUP: ${OIDC_SUPERADMIN_GROUP:-}     # e.g. local-pm-admins (see config/dex/config.yml groups)
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - local-pm-snapshots:/app/snapshots
+    profiles:
+      - oidc
+
+  # Local IdP (dex) — profile `oidc` only. In-memory storage: disposable by
+  # design, nothing to back up or migrate.
+  dex:
+    image: ghcr.io/dexidp/dex:v2.45.1
+    container_name: local-pm-dex
+    restart: unless-stopped
+    command: ["dex", "serve", "/etc/dex/config.yml"]
+    volumes:
+      - ./config/dex/config.yml:/etc/dex/config.yml:ro
+    ports:
+      # Loopback-only, matching the deployment's binding posture (ADR-001
+      # D1): dex serves the browser leg on the operator host, the app talks
+      # to it server-to-server over the compose network (http://dex:5556/dex).
+      - "127.0.0.1:5556:5556"
+    profiles:
+      - oidc
 
   mongodb:
     image: mongo:7.0
