@@ -32,20 +32,27 @@ type OidcStrategyUser = TypedUser & Record<string, unknown>
  * The existing `actorType` field keeps its SPC-004 semantics and is
  * re-derived from mapped roles on every OIDC login (§7 bridge
  * reconciliation). `active` is the local agent kill-switch (§6, AC-11).
+ *
+ * NOTE (Payload 3.88, verified 2026-09-10): `auth.disableLocalStrategy` must
+ * stay FALSY/omitted while OD-1 keeps the local strategy — a truthy value
+ * (including the object form) makes `loginOperation` throw Forbidden for
+ * every login and first-register (auth/operations/login.js:31). M7 flips it
+ * to `true` behind the operator gate.
  */
 export const Users: CollectionConfig = {
   slug: 'users',
   // OD-1 (open): the local strategy stays (first-register E-7 and fallback
-  // login preserved, §12). When the collection declares `auth.strategies`,
-  // Payload's `Auth` type requires `disableLocalStrategy` to be present —
-  // expressed here as the explicit object form enabling auth fields, which
-  // the sanitizer treats exactly like `false` (local strategy keeps running;
-  // §12). The gated M7 flip is `disableLocalStrategy: true`.
+  // login preserved, §12). `disableLocalStrategy` stays OMITTED — see the
+  // Payload 3.88 note above. The gated M7 flip is `disableLocalStrategy: true`.
   auth: {
-    disableLocalStrategy: {
-      enableFields: true,
-      optionalPassword: true,
-    },
+    // Payload 3.88 quirk (verified in source, auth/operations/login.js:31):
+    // `loginOperation` throws Forbidden when `auth.disableLocalStrategy` is
+    // TRUTHY — and the object form ({ enableFields, optionalPassword }) is
+    // truthy, so login/first-register 403 for everyone. The object form is
+    // only meaningful with `disableLocalStrategy: true`-style replacement;
+    // keeping the local strategy (OD-1) requires the key to stay FALSY.
+    // `strategies` does NOT require the key at all (IncomingAuthType:
+    // `strategies?: AuthStrategy[]`), so simply omit it.
     strategies: [
       {
         name: 'oidc',

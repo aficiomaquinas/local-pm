@@ -106,10 +106,11 @@ describe('SPC-006 §4: Users collection wiring (structural)', () => {
 
   it('OD-1: local strategy keeps running (first-register intact, AC-7)', () => {
     const auth = Users.auth as { disableLocalStrategy: unknown }
-    // Object form = the sanitizer's falsy-equivalent: local strategy stays.
-    const disabled = auth.disableLocalStrategy
-    expect(disabled === true).toBe(false)
-    expect(disabled === false || (typeof disabled === 'object' && disabled !== null)).toBe(true)
+    // Payload 3.88: loginOperation throws Forbidden when disableLocalStrategy
+    // is TRUTHY (even the object form) — so keeping the local strategy (OD-1)
+    // requires the key to be OMITTED/undefined. The previous "object form is
+    // a falsy-equivalent" assumption was wrong and broke login for everyone.
+    expect(auth.disableLocalStrategy).toBeUndefined()
   })
 
   it('§8 fields exist with the right types (identity pair, roles, rawGroups...)', () => {
