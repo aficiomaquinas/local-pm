@@ -40,6 +40,10 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
       sort: 'sortOrder',
       depth: 2,
       where: buildWhere(TicketStatus.TODO),
+      // Local API defaults to overrideAccess:true — the soft-delete read ACL
+      // (readExcludingDeleted) would never run and deleted tickets would
+      // render as draggable ghosts whose PATCH 404s silently. REQ-VIS-3.
+      overrideAccess: false,
     }),
     payload.find({
       collection: 'tickets',
@@ -48,6 +52,10 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
       sort: 'sortOrder',
       depth: 2,
       where: buildWhere(TicketStatus.IN_PROGRESS),
+      // Local API defaults to overrideAccess:true — the soft-delete read ACL
+      // (readExcludingDeleted) would never run and deleted tickets would
+      // render as draggable ghosts whose PATCH 404s silently. REQ-VIS-3.
+      overrideAccess: false,
     }),
     payload.find({
       collection: 'tickets',
@@ -56,6 +64,10 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
       sort: 'sortOrder',
       depth: 2,
       where: buildWhere(TicketStatus.DONE),
+      // Local API defaults to overrideAccess:true — the soft-delete read ACL
+      // (readExcludingDeleted) would never run and deleted tickets would
+      // render as draggable ghosts whose PATCH 404s silently. REQ-VIS-3.
+      overrideAccess: false,
     }),
     payload.find({
       collection: 'projects',
