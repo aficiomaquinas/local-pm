@@ -33,16 +33,22 @@ export async function GET(req: NextRequest) {
     }
   }
   if (!requestWithUser.user) {
-    // ...then the Payload session cookie (webUI admin login).
+    // ...then the Payload session cookie (webUI admin login). The JWT
+    // strategy's authenticate() is what reads the cookie — createLocalReq
+    // alone never runs authentication (req.user = user || req?.user ||
+    // null), so this path must call executeAuthStrategies with the request
+    // headers, exactly as createPayloadRequest does for REST routes.
     try {
       const { headers } = await import('next/headers')
       const hdrs = await headers()
-      const { createLocalReq } = await import('payload')
-      const localReq = await createLocalReq(
-        { req: { headers: hdrs } as unknown as PayloadRequest },
+      const { createLocalReq, executeAuthStrategies } = await import('payload')
+      const localReq = await createLocalReq({}, payload)
+      const { user } = await executeAuthStrategies({
+        headers: hdrs,
         payload,
-      )
-      requestWithUser.user = localReq.user
+        req: localReq,
+      })
+      requestWithUser.user = user ?? null
     } catch {
       requestWithUser.user = null
     }
