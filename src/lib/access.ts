@@ -5,7 +5,7 @@ import type { Access } from 'payload'
  *
  * Adapted from Ars Nova Singers (@ArsNovaSingers) in ArsNovaSingers/local-pm-Ars,
  * commit d488521 "Phase 0: auth, configurable statuses, milestones, custom
- * fields, atomic ticket IDs". See CREDITS.md.
+ * fields, atomic ticket IDs".
  *
  * Local PM ships with OPEN access so that a fresh `docker compose up` works
  * with no setup and the bundled MCP server keeps working out of the box. That

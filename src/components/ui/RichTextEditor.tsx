@@ -83,7 +83,7 @@ const SANITIZE_CONFIG = {
  * Display rich text content (read-only).
  *
  * The XSS fix originates with Brian Tafoya (@btafoya) in btafoya/local-pm,
- * commit 9de82f2. See CREDITS.md.
+ * commit 9de82f2.
  *
  * Changed here from `dompurify` to `isomorphic-dompurify`: plain DOMPurify
  * needs a live DOM, and on the server `DOMPurify.isSupported` is false, in

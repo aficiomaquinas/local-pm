@@ -300,12 +300,6 @@ npx playwright install chromium
 - **MCP Server**: TypeScript, @modelcontextprotocol/sdk
 - **Testing**: Vitest (unit), Playwright (E2E)
 
-## Contributors
-
-Several fixes and hardening measures in this project came from community forks.
-See **[CREDITS.md](./CREDITS.md)** for who contributed what, what changed on
-adoption and why, and which larger features were deliberately deferred.
-
 ## Special Thanks
 
 Built with [Payload CMS](https://payloadcms.com/)

@@ -7,7 +7,7 @@ import type { Ticket } from '@/payload-types'
  *
  * Adapted from Victor Gonzalez (@aficiomaquinas) in aficiomaquinas/local-pm,
  * commit bf1da41 "fix(kanban): apply full drop position in dragOver; PATCH
- * decided vs drag origin". See CREDITS.md.
+ * decided vs drag origin".
  *
  * Two defects motivated extracting this:
  *
