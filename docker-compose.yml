@@ -1,33 +1,67 @@
+# Local PM — local-first by default.
+#
+# Hardening adapted from Victor Gonzalez (@aficiomaquinas) in
+# aficiomaquinas/local-pm (ADR-001 "local-first loopback binding",
+# commits 231b1c5 / dfaafde). See CREDITS.md.
+#
+# Three deliberate choices, each of which was a real exposure before:
+#
+#   1. Published ports bind to 127.0.0.1, not 0.0.0.0. A bare "3010:3010"
+#      publishes on every interface, so a laptop on cafe wifi served its
+#      whole ticket database — and, with the default access rules, full
+#      write access — to that network. Set LOCAL_PM_BIND=0.0.0.0 only when
+#      you actually intend to expose it, and put auth in front of it first
+#      (see LOCAL_PM_REQUIRE_AUTH in .env.example).
+#
+#   2. MongoDB publishes NO host port. It previously bound 27018 on all
+#      interfaces with authentication disabled, which is an unauthenticated
+#      database reachable from the LAN. The app reaches it over the compose
+#      network; if you need a shell, use `docker compose exec mongodb mongosh`.
+#
+#   3. Secrets are injected at RUNTIME only, never as build args. Build args
+#      are baked into image layers and shown by `docker history`, so a
+#      PAYLOAD_SECRET passed at build time leaks to anyone holding the image.
+#      NEXT_PUBLIC_SERVER_URL stays a build arg because it is public by
+#      definition and Next.js inlines it into the client bundle.
+
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        DATABASE_URI: mongodb://mongodb:27017/local-pm
-        PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
         NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
     container_name: local-pm-app
     restart: unless-stopped
     ports:
-      - "3010:3010"
+      - "${LOCAL_PM_BIND:-127.0.0.1}:3010:3010"
     environment:
       DATABASE_URI: mongodb://mongodb:27017/local-pm
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
       NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
+      LOCAL_PM_REQUIRE_AUTH: ${LOCAL_PM_REQUIRE_AUTH:-false}
+      MONGO_SERVER_SELECTION_TIMEOUT_MS: ${MONGO_SERVER_SELECTION_TIMEOUT_MS:-10000}
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
 
   mongodb:
     image: mongo:7.0
     container_name: local-pm-mongodb
     restart: unless-stopped
-    ports:
-      - "27018:27017"
+    # No `ports:` on purpose — see note 2 above.
     volumes:
       - local-pm-mongodb-data:/data/db
     environment:
       MONGO_INITDB_DATABASE: local-pm
+    healthcheck:
+      # Gate app start on a live database so the bounded server-selection
+      # timeout never races mongo's cold start.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 volumes:
   local-pm-mongodb-data:
