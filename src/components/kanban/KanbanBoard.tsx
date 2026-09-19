@@ -366,7 +366,7 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     if (!isRealMove(result, origin)) return
 
     try {
-      await fetch(`/api/tickets/${activeId}`, {
+      const response = await fetch(`/api/tickets/${activeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -374,9 +374,37 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
           sortOrder: result.sortOrder,
         }),
       })
+      // fetch only rejects on network failure; a 4xx/5xx still resolves, and
+      // leaving the optimistic state after one is exactly the silent-revert
+      // the refetch would perform later.
+      if (!response.ok) {
+        throw new Error(`Failed to move ticket: ${response.status} ${response.statusText}`)
+      }
     } catch (error) {
       console.error('Failed to update ticket:', error)
+      // Put the card back where the server still believes it is, rather than
+      // leaving a move that looks saved and silently disappears on the next
+      // refetch (.claude/rules/05-board-and-dnd.md §5.5).
+      //
+      // TODO: the same rule also asks for a toast naming the reason. This repo
+      // has no toast primitive yet; adding one belongs with rules/07.
+      revertDrag(activeId, origin)
     }
+  }
+
+  /** Restore a ticket to the position the server last acknowledged. */
+  const revertDrag = (
+    ticketId: string,
+    origin: { status: TicketStatus; sortOrder: number } | null,
+  ) => {
+    if (!origin) return
+    const reverted = ticketsRef.current.map((ticket) =>
+      ticket.id === ticketId
+        ? { ...ticket, status: origin.status, sortOrder: origin.sortOrder }
+        : ticket,
+    )
+    ticketsRef.current = reverted
+    setTickets(reverted)
   }
 
   const handleCreateTicket = () => {
