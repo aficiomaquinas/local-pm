@@ -139,6 +139,9 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null)
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
+  // REQ-VIS-2 (SPC-007 draft): explicit mutation-error surface. Null = no
+  // error; a string renders as a dismissible banner above the board.
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   // Pagination state per column
   const [columnPagination, setColumnPagination] = useState<ColumnPaginationState>(
@@ -418,11 +421,37 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
 
       // Refetch only after the PATCH resolves (fresh column pagination and
       // authoritative order) — never before it, and never on no-op drops.
-      await fetch(`/api/tickets/${activeId}`, {
+      // REQ-VIS-2 (SPC-007 draft): a failed mutation must NOT fail silently.
+      // The card has already moved optimistically; on error we revert the
+      // move, surface an explicit dismissible error banner, and (for auth
+      // failures) point the user at the login.
+      const response = await fetch(`/api/tickets/${activeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       })
+
+      if (!response.ok) {
+        // Revert the optimistic move: re-fetch the authoritative state.
+        try {
+          const res = await fetch('/api/tickets?page=1&limit=100&depth=2&sort=sortOrder')
+          const data = await res.json()
+          if (Array.isArray(data.docs)) setTickets(data.docs)
+        } catch {
+          // even the revert refetch failed — leave the optimistic state and
+          // rely on the banner; a manual reload still heals the view.
+        }
+        if (response.status === 401 || response.status === 403) {
+          setMutationError(
+            'Your session is not active — the move was not saved. Log in and try again.',
+          )
+        } else {
+          setMutationError(
+            `The move could not be saved (server error ${response.status}). The board was restored to its previous state.`,
+          )
+        }
+        return
+      }
 
       const params = new URLSearchParams(window.location.search)
       if (params.get('project') || params.get('team')) {
@@ -507,6 +536,23 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
 
   return (
     <div className="flex flex-col h-full">
+      {mutationError && (
+        <div
+          role="alert"
+          data-testid="mutation-error"
+          className="flex items-start justify-between gap-4 border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200"
+        >
+          <span>{mutationError}</span>
+          <button
+            type="button"
+            onClick={() => setMutationError(null)}
+            aria-label="Dismiss error"
+            className="shrink-0 rounded px-2 text-red-300 hover:bg-red-500/20 hover:text-red-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <KanbanHeader
         projects={projects}
         teams={teams}

@@ -1,4 +1,5 @@
 import { Sidebar } from '@/components/Sidebar'
+import { AuthStatusBanner } from '@/components/auth/AuthStatusBanner'
 
 export default function FrontendLayout({
   children,
@@ -8,7 +9,10 @@ export default function FrontendLayout({
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        <AuthStatusBanner />
+        {children}
+      </main>
     </div>
   )
 }
