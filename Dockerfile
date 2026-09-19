@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-alpine AS base
-# pnpm 10: last line compatible with Node 20 (pnpm 11 needs node:sqlite,
-# a Node 22+ builtin). Lockfile v9.0 is shared across pnpm 10/11, so the
-# operator's pnpm 11 stays compatible with this lockfile.
-RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
+FROM node:22-alpine AS base
+# pnpm 11 (host version — keeps the lockfile's patchedDependencies section
+# byte-compatible with `pnpm install --frozen-lockfile`). pnpm 11 needs
+# node:sqlite, a Node 22+ builtin — hence the node:22 base. Engines floor
+# stays >=20.9 (package.json); 22 is the host standard (AGENTS.md).
+RUN corepack enable && corepack prepare pnpm@11.17.0 --activate
+# Mirror the host's pnpm build-scripts allowance (AGENTS.md): pnpm 11 hard-
+# errors on ignored native builds (esbuild/sharp) in non-interactive envs.
+# Set in BASE so deps AND deploy stages inherit it.
+RUN pnpm config set dangerouslyAllowAllBuilds true --location global
 
 # Install dependencies only when needed
 FROM base AS deps
