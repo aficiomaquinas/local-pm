@@ -1,14 +1,13 @@
-import { Sidebar } from '@/components/Sidebar'
+import { AppShell } from '@/components/shell/AppShell'
+import { ShortcutProvider } from '@/lib/shortcuts'
+import { ToastProvider } from '@/components/ui/Toast'
 
-export default function FrontendLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function FrontendLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
-    </div>
+    <ShortcutProvider>
+      <ToastProvider>
+        <AppShell>{children}</AppShell>
+      </ToastProvider>
+    </ShortcutProvider>
   )
 }

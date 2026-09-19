@@ -1,421 +1,551 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, MoreHorizontal, Pencil, Trash2, FolderKanban, Eye, Loader2 } from 'lucide-react'
-import { ProjectModal } from './ProjectModal'
-import { ProjectDetailModal } from './ProjectDetailModal'
-import { TicketDetailModal } from '@/components/kanban/TicketDetailModal'
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import { useShortcut } from '@/lib/shortcuts'
 import { PROJECT_STATUS_OPTIONS, ProjectStatus } from '@/types/enums'
-import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
-import type { Project, Team, Ticket } from '@/payload-types'
-import * as Icons from 'lucide-react'
+import { Button } from '@/components/ui/Button'
+import { Chip } from '@/components/ui/Badge'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Select } from '@/components/ui/Field'
+import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
+import { Menu } from '@/components/ui/Menu'
+import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
+import { ProjectStatusBadge } from '@/components/ui/StateIndicator'
+import { DensityControl, Table, Td, Th, Tr, useDensity } from '@/components/ui/Table'
+import { useToast } from '@/components/ui/Toast'
+import { ProjectFormDialog } from './ProjectFormDialog'
+import type { Project } from '@/payload-types'
 
-interface PaginationInfo {
+const PAGE_SIZE = 20
+const SEARCH_DEBOUNCE_MS = 300
+const MIN_SEARCH = 3
+
+type SortKey = 'name' | '-name' | 'createdAt' | '-createdAt' | 'prefix' | '-prefix'
+
+interface Pagination {
   page: number
   totalPages: number
   hasNextPage: boolean
+  totalDocs: number
 }
 
-interface ProjectsListProps {
+export function ProjectsList({
+  initialProjects,
+  initialPagination,
+}: {
   initialProjects: Project[]
-  initialPagination?: PaginationInfo
-}
+  initialPagination?: Pagination
+}) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [density, setDensity] = useDensity()
 
-const iconMap: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  folder: Icons.Folder,
-  rocket: Icons.Rocket,
-  zap: Icons.Zap,
-  star: Icons.Star,
-  heart: Icons.Heart,
-  flag: Icons.Flag,
-  target: Icons.Target,
-  briefcase: Icons.Briefcase,
-  code: Icons.Code,
-  box: Icons.Box,
-  layers: Icons.Layers,
-  database: Icons.Database,
-}
-
-export function ProjectsList({ initialProjects, initialPagination }: ProjectsListProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [viewingProject, setViewingProject] = useState<Project | null>(null)
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  // Pagination state
-  const [pagination, setPagination] = useState<PaginationInfo>(
-    initialPagination || { page: 1, totalPages: 1, hasNextPage: false }
+  const [pagination, setPagination] = useState<Pagination>(
+    initialPagination ?? { page: 1, totalPages: 1, hasNextPage: false, totalDocs: initialProjects.length },
   )
 
-  // Delete confirmation state
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    project: Project
-    ticketCount: number
-  } | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<ProjectStatus | ''>('')
+  const [sort, setSort] = useState<SortKey>('-createdAt')
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Ticket detail modal state
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
-  const [teams, setTeams] = useState<Team[]>([])
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<Project | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ project: Project; ticketCount: number } | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  // Load more projects for infinite scroll
-  const loadMoreProjects = useCallback(async () => {
-    if (!pagination.hasNextPage) return
+  const searchRef = useRef<HTMLInputElement>(null)
 
-    try {
-      const nextPage = pagination.page + 1
-      const response = await fetch(`/api/projects?page=${nextPage}&limit=20&sort=-createdAt`)
-      const data = await response.json()
-
-      if (data.docs && data.docs.length > 0) {
-        setProjects((prev) => [...prev, ...data.docs])
-        setPagination({
-          page: data.page,
-          totalPages: data.totalPages,
-          hasNextPage: data.hasNextPage,
-        })
-      }
-    } catch (error) {
-      console.error('Failed to load more projects:', error)
-    }
-  }, [pagination])
-
-  const { sentinelRef, isLoading: isLoadingMore } = useInfiniteScroll(
-    loadMoreProjects,
-    pagination.hasNextPage
-  )
+  const fetchedFor = useRef<string | null>(null)
+  const showSkeleton = useDelayedFlag(loading)
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(null)
-      }
+    const params = new URLSearchParams(window.location.search)
+    setQuery(params.get('q') ?? '')
+    const urlStatus = params.get('status')
+    if (urlStatus && PROJECT_STATUS_OPTIONS.some((o) => o.value === urlStatus)) {
+      setStatus(urlStatus as ProjectStatus)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    const urlSort = params.get('sort')
+    if (urlSort) setSort(urlSort as SortKey)
   }, [])
 
+  const syncUrl = useCallback((next: { q: string; status: string; sort: SortKey }, push: boolean) => {
+    const params = new URLSearchParams()
+    if (next.q) params.set('q', next.q)
+    if (next.status) params.set('status', next.status)
+    if (next.sort !== '-createdAt') params.set('sort', next.sort)
+    const qs = params.toString()
+    const url = qs ? `?${qs}` : window.location.pathname
+    if (push) window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  }, [])
+
+  const buildParams = useCallback(
+    (page: number) => {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+        sort,
+      })
+      if (status) params.set('where[status][equals]', status)
+      if (query.trim().length >= MIN_SEARCH) params.set('where[name][like]', query.trim())
+      return params
+    },
+    [sort, status, query],
+  )
+
   useEffect(() => {
-    // Load teams for ticket detail modal
-    const loadTeams = async () => {
+    const signature = buildParams(1).toString()
+    if (fetchedFor.current === null) {
+      fetchedFor.current = signature
+      return
+    }
+    if (signature === fetchedFor.current) return
+    fetchedFor.current = signature
+
+    const controller = new AbortController()
+    const run = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        const response = await fetch('/api/teams?limit=100')
+        const response = await fetch(`/api/projects?${buildParams(1)}`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
         const data = await response.json()
-        setTeams(data.docs || [])
-      } catch (error) {
-        console.error('Failed to load teams:', error)
+        setProjects(data.docs ?? [])
+        setPagination({
+          page: data.page ?? 1,
+          totalPages: data.totalPages ?? 1,
+          hasNextPage: data.hasNextPage ?? false,
+          totalDocs: data.totalDocs ?? 0,
+        })
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return
+        setError(err instanceof Error ? err.message : 'The request failed.')
+      } finally {
+        setLoading(false)
       }
     }
-    loadTeams()
-  }, [])
 
-  const handleCreateProject = () => {
-    setEditingProject(null)
-    setIsModalOpen(true)
+    const timer = setTimeout(run, query ? SEARCH_DEBOUNCE_MS : 0)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [buildParams, query])
+
+  useShortcut({
+    id: 'projects.search',
+    keys: 'slash',
+    description: 'Focus the project search',
+    group: 'Projects',
+    scope: 'list',
+    run: () => searchRef.current?.focus(),
+  })
+  useShortcut({
+    id: 'projects.create',
+    keys: 'c',
+    description: 'Create a project',
+    group: 'Projects',
+    scope: 'list',
+    run: () => {
+      setEditing(null)
+      setFormOpen(true)
+    },
+  })
+
+  const hasFilters = Boolean(query || status)
+  const activeSortLabel = useMemo(
+    () =>
+      ({
+        name: 'Name A–Z',
+        '-name': 'Name Z–A',
+        createdAt: 'Oldest first',
+        '-createdAt': 'Newest first',
+        prefix: 'Prefix A–Z',
+        '-prefix': 'Prefix Z–A',
+      })[sort],
+    [sort],
+  )
+
+  const setFilters = (next: Partial<{ q: string; status: ProjectStatus | ''; sort: SortKey }>, push = true) => {
+    const merged = {
+      q: next.q ?? query,
+      status: next.status ?? status,
+      sort: next.sort ?? sort,
+    }
+    if (next.q !== undefined) setQuery(next.q)
+    if (next.status !== undefined) setStatus(next.status)
+    if (next.sort !== undefined) setSort(next.sort)
+    syncUrl({ q: merged.q, status: merged.status, sort: merged.sort }, push)
   }
 
-  const handleViewProject = (project: Project) => {
-    setViewingProject(project)
-    setMenuOpen(null)
+  const toggleSort = (key: 'name' | 'prefix' | 'createdAt') => {
+    const next: SortKey = sort === key ? (`-${key}` as SortKey) : (key as SortKey)
+    setFilters({ sort: next })
   }
 
-  const handleEditProject = (project: Project) => {
-    setEditingProject(project)
-    setIsModalOpen(true)
-    setMenuOpen(null)
+  const sortDirection = (key: string): 'asc' | 'desc' | null =>
+    sort === key ? 'asc' : sort === `-${key}` ? 'desc' : null
+
+  const loadMore = async () => {
+    if (!pagination.hasNextPage || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const response = await fetch(`/api/projects?${buildParams(pagination.page + 1)}`)
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      const data = await response.json()
+      setProjects((prev) => [...prev, ...(data.docs ?? [])])
+      setPagination({
+        page: data.page,
+        totalPages: data.totalPages,
+        hasNextPage: data.hasNextPage,
+        totalDocs: data.totalDocs,
+      })
+    } catch (err) {
+      toast({
+        tone: 'error',
+        title: "Couldn't load more projects",
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
-  const handleInitiateDelete = async (project: Project) => {
-    setMenuOpen(null)
-
-    // Fetch ticket count for this project
+  const startDelete = async (project: Project) => {
     try {
       const response = await fetch(`/api/tickets?where[project][equals]=${project.id}&limit=0`)
       const data = await response.json()
-      const ticketCount = data.totalDocs || 0
-
-      setDeleteConfirm({ project, ticketCount })
-    } catch (error) {
-      console.error('Failed to fetch ticket count:', error)
-      // Show dialog with unknown count
-      setDeleteConfirm({ project, ticketCount: -1 })
+      setPendingDelete({ project, ticketCount: data.totalDocs ?? 0 })
+    } catch {
+      setPendingDelete({ project, ticketCount: -1 })
     }
   }
 
-  const handleConfirmDelete = async () => {
-    if (!deleteConfirm) return
-
-    setIsDeleting(true)
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    const { project, ticketCount } = pendingDelete
+    setDeleting(true)
     try {
-      const { project, ticketCount } = deleteConfirm
-
-      // First, delete all tickets associated with this project
-      if (ticketCount > 0) {
-        // Fetch all ticket IDs for this project
+      if (ticketCount !== 0) {
         const ticketsResponse = await fetch(
-          `/api/tickets?where[project][equals]=${project.id}&limit=1000`
+          `/api/tickets?where[project][equals]=${project.id}&limit=1000&depth=0`,
         )
         const ticketsData = await ticketsResponse.json()
-        const tickets = ticketsData.docs || []
-
-        // Delete each ticket
         await Promise.all(
-          tickets.map((ticket: { id: string }) =>
-            fetch(`/api/tickets/${ticket.id}`, { method: 'DELETE' })
-          )
+          (ticketsData.docs ?? []).map((t: { id: string }) =>
+            fetch(`/api/tickets/${t.id}`, { method: 'DELETE' }),
+          ),
         )
       }
+      const response = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
 
-      // Then delete the project
-      await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
       setProjects((prev) => prev.filter((p) => p.id !== project.id))
-      setDeleteConfirm(null)
-    } catch (error) {
-      console.error('Failed to delete project:', error)
+      setPagination((p) => ({ ...p, totalDocs: Math.max(0, p.totalDocs - 1) }))
+      setPendingDelete(null)
+      toast({ title: `${project.name} deleted`, tone: 'info' })
+    } catch (err) {
+      toast({
+        tone: 'error',
+        title: "Couldn't delete that project",
+        description: err instanceof Error ? err.message : undefined,
+      })
     } finally {
-      setIsDeleting(false)
+      setDeleting(false)
     }
   }
 
-  const handleProjectSaved = (savedProject: Project) => {
-    if (editingProject) {
-      setProjects((prev) =>
-        prev.map((p) => (p.id === savedProject.id ? savedProject : p))
-      )
-    } else {
-      setProjects((prev) => [savedProject, ...prev])
-    }
-    setIsModalOpen(false)
-    setEditingProject(null)
-  }
-
-  const handleProjectUpdated = (updatedProject: Project) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === updatedProject.id ? updatedProject : p))
-    )
-    setViewingProject(updatedProject)
-  }
-
-  const handleProjectDeleted = (projectId: string) => {
-    const project = projects.find((p) => p.id === projectId)
-    if (project) {
-      handleInitiateDelete(project)
-    }
-    setViewingProject(null)
-  }
-
-  const handleTicketClick = (ticket: Ticket) => {
-    setSelectedTicket(ticket)
-  }
-
-  const handleTicketUpdate = (updatedTicket: Ticket) => {
-    setSelectedTicket(updatedTicket)
-  }
-
-  const handleTicketDelete = async (ticketId: string) => {
-    try {
-      await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' })
-      setSelectedTicket(null)
-    } catch (error) {
-      console.error('Failed to delete ticket:', error)
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      [ProjectStatus.ACTIVE]: 'bg-green-500/20 text-green-400',
-      [ProjectStatus.ON_HOLD]: 'bg-yellow-500/20 text-yellow-400',
-      [ProjectStatus.COMPLETED]: 'bg-blue-500/20 text-blue-400',
-      [ProjectStatus.CANCELLED]: 'bg-red-500/20 text-red-400',
-    }
-    return colors[status] || 'bg-gray-500/20 text-gray-400'
-  }
-
-  const getDeleteMessage = () => {
-    if (!deleteConfirm) return ''
-    const { project, ticketCount } = deleteConfirm
-
-    if (ticketCount === -1) {
-      return `Are you sure you want to delete "${project.name}"?\n\nThis will also delete all associated tickets.`
-    }
-
-    if (ticketCount === 0) {
-      return `Are you sure you want to delete "${project.name}"?\n\nThis project has no tickets.`
-    }
-
-    return `Are you sure you want to delete "${project.name}"?\n\nThis will permanently delete ${ticketCount} ticket${ticketCount === 1 ? '' : 's'} associated with this project.`
+  const deleteConsequence = () => {
+    if (!pendingDelete) return undefined
+    const { ticketCount } = pendingDelete
+    if (ticketCount < 0) return 'Any tickets in this project will be permanently deleted too.'
+    if (ticketCount === 0) return 'This project has no tickets. This cannot be undone.'
+    return `Permanently deletes ${ticketCount} ticket${ticketCount === 1 ? '' : 's'} and their history. This cannot be undone.`
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-white">Projects</h1>
-        <button
-          onClick={handleCreateProject}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Project
-        </button>
+    <div className="flex h-full flex-col">
+      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold text-text">Projects</h1>
+
+          <label className="relative flex h-8 min-w-48 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-80">
+            <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
+            <span className="sr-only">Search projects by name</span>
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setFilters({ q: e.target.value }, false)}
+              placeholder="Search projects"
+              className="min-w-0 flex-1 bg-transparent text-base text-text outline-none max-sm:text-md"
+            />
+            <kbd className="hidden shrink-0 font-sans text-xs text-text-muted can-hover:inline">/</kbd>
+          </label>
+
+          <label className="sr-only" htmlFor="projects-status-filter">
+            Filter by status
+          </label>
+          <Select
+            id="projects-status-filter"
+            value={status}
+            onChange={(e) => setFilters({ status: e.target.value as ProjectStatus | '' })}
+            className="w-40"
+          >
+            <option value="">All statuses</option>
+            {PROJECT_STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+
+          <Button
+            variant="primary"
+            icon={Plus}
+            shortcut="C"
+            className="ml-auto"
+            onClick={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+          >
+            New project
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-text-muted tabular" aria-live="polite">
+            {pagination.totalDocs} {pagination.totalDocs === 1 ? 'project' : 'projects'} ·{' '}
+            {activeSortLabel}
+          </span>
+
+          {status && (
+            <Chip tone="accent" onRemove={() => setFilters({ status: '' })} removeLabel="Remove status filter">
+              Status: {PROJECT_STATUS_OPTIONS.find((o) => o.value === status)?.label}
+            </Chip>
+          )}
+          {query && (
+            <Chip tone="accent" onRemove={() => setFilters({ q: '' })} removeLabel="Clear the search">
+              Search: {query}
+            </Chip>
+          )}
+          {hasFilters && (
+            <Button variant="ghost" size="sm" icon={X} onClick={() => setFilters({ q: '', status: '' })}>
+              Clear all
+            </Button>
+          )}
+
+          <div className="ml-auto">
+            <DensityControl value={density} onChange={setDensity} />
+          </div>
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {error ? (
+          <EmptyState
+            kind="error"
+            title="Couldn't load projects"
+            description={error}
+            action={{ label: 'Retry', onClick: () => setFilters({}, false) }}
+            className="m-6"
+          />
+        ) : showSkeleton && projects.length === 0 ? (
+          <RowSkeletonList count={5} />
+        ) : projects.length === 0 && hasFilters ? (
+          <EmptyState
+            kind="no-match"
+            title="No projects match"
+            description="Nothing here fits the current search and status. The project you want may still exist."
+            action={{ label: 'Clear filters', onClick: () => setFilters({ q: '', status: '' }) }}
+          />
+        ) : projects.length === 0 ? (
+          <EmptyState
+            kind="no-data"
+            title="No projects yet"
+            description="A project groups tickets and gives them their key, like ABC-12. Create the first one to get started."
+            action={{
+              label: 'Create project',
+              onClick: () => {
+                setEditing(null)
+                setFormOpen(true)
+              },
+            }}
+          />
+        ) : (
+          <>
+            <Table caption="Projects, with their prefix, status and ticket count">
+              <thead>
+                <tr>
+                  <Th
+                    sortable
+                    sortDirection={sortDirection('name')}
+                    onSort={() => toggleSort('name')}
+                  >
+                    Project
+                  </Th>
+                  <Th
+                    sortable
+                    sortDirection={sortDirection('prefix')}
+                    onSort={() => toggleSort('prefix')}
+                    width="8rem"
+                  >
+                    Prefix
+                  </Th>
+                  <Th width="10rem">Status</Th>
+                  <Th align="right" width="8rem">
+                    Tickets
+                  </Th>
+                  <Th
+                    sortable
+                    sortDirection={sortDirection('createdAt')}
+                    onSort={() => toggleSort('createdAt')}
+                    width="10rem"
+                  >
+                    Created
+                  </Th>
+                  <Th width="4rem">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map((project) => (
+                  <Tr
+                    key={project.id}
+                    density={density}
+                    onOpen={() => router.push(`/projects/${project.id}`)}
+                  >
+                    <Td>
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <EntityMark icon={projectIcon(project.icon)} color={project.color} size="sm" />
+                        <Link
+                          href={`/projects/${project.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="truncate font-medium text-text hover:underline"
+                          title={project.name}
+                        >
+                          {project.name}
+                        </Link>
+                      </span>
+                    </Td>
+                    <Td className="tabular text-text-muted">{project.prefix}</Td>
+                    <Td>
+                      <ProjectStatusBadge status={project.status} />
+                    </Td>
+                    <Td numeric className="text-text-muted">
+                      {project.ticketCounter ?? 0}
+                    </Td>
+                    <Td className="tabular text-text-muted">
+                      {new Date(project.createdAt).toLocaleDateString()}
+                    </Td>
+                    <Td align="right">
+                      <span
+                        className={cn(
+                          'inline-flex',
+
+                          'can-hover:opacity-0 can-hover:group-hover:opacity-100 can-hover:group-focus-within:opacity-100',
+                          'transition-opacity duration-fast',
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Menu
+                          label={`Actions for ${project.name}`}
+                          items={[
+                            {
+                              id: 'edit',
+                              label: 'Edit project',
+                              icon: Pencil,
+                              onSelect: () => {
+                                setEditing(project)
+                                setFormOpen(true)
+                              },
+                            },
+                            {
+                              id: 'delete',
+                              label: 'Delete project',
+                              icon: Trash2,
+                              destructive: true,
+                              separatorBefore: true,
+                              onSelect: () => startDelete(project),
+                            },
+                          ]}
+                        >
+                          {(trigger) => (
+                            <Button
+                              {...trigger}
+                              variant="ghost"
+                              size="sm"
+                              iconOnly
+                              icon={MoreHorizontal}
+                              aria-label={`Actions for ${project.name}`}
+                            />
+                          )}
+                        </Menu>
+                      </span>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+
+            {pagination.hasNextPage && (
+              <div className="flex justify-center p-4">
+                <Button variant="secondary" loading={loadingMore} onClick={loadMore}>
+                  Load more ({projects.length} of {pagination.totalDocs})
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Projects Grid */}
-      {projects.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <FolderKanban className="w-12 h-12 text-gray-500 mb-4" />
-          <h2 className="text-lg font-medium text-white mb-2">No projects yet</h2>
-          <p className="text-gray-400 mb-4">Create your first project to get started</p>
-          <button
-            onClick={handleCreateProject}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Project
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((project) => {
-              const IconComponent = iconMap[project.icon as string] || Icons.Folder
-              return (
-                <div
-                  key={project.id}
-                  onClick={() => handleViewProject(project)}
-                  className="bg-[#18181b] border border-[#27272a] rounded-lg p-4 hover:border-[#3f3f46] transition-colors cursor-pointer"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: `${project.color}20` }}
-                      >
-                        <IconComponent
-                          className="w-5 h-5"
-                          style={{ color: project.color as string }}
-                        />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-medium">{project.name}</h3>
-                        <span className="text-xs text-gray-500">{project.prefix}</span>
-                      </div>
-                    </div>
-
-                    <div className="relative" ref={menuOpen === project.id ? menuRef : null}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setMenuOpen(menuOpen === project.id ? null : project.id)
-                        }}
-                        className="p-1 text-gray-400 hover:text-white transition-colors"
-                      >
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-
-                      {menuOpen === project.id && (
-                        <div className="absolute right-0 top-full mt-1 bg-[#27272a] border border-[#3f3f46] rounded-md shadow-lg py-1 z-10 min-w-[120px]">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleViewProject(project)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3f3f46] transition-colors"
-                          >
-                            <Eye className="w-3 h-3" />
-                            View
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEditProject(project)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3f3f46] transition-colors"
-                          >
-                            <Pencil className="w-3 h-3" />
-                            Edit
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleInitiateDelete(project)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:bg-[#3f3f46] transition-colors"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs px-2 py-1 rounded ${getStatusBadge(project.status as string)}`}>
-                      {PROJECT_STATUS_OPTIONS.find((o) => o.value === project.status)?.label || project.status}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {project.ticketCounter || 0} tickets
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Infinite scroll sentinel and loading indicator */}
-          <div ref={sentinelRef} className="h-4" />
-          {isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-            </div>
-          )}
-        </>
-      )}
-
-      <ProjectModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        project={editingProject}
-        onSave={handleProjectSaved}
+      <ProjectFormDialog
+        open={formOpen}
+        onClose={() => {
+          setFormOpen(false)
+          setEditing(null)
+        }}
+        project={editing}
+        onSaved={(saved, created) => {
+          setProjects((prev) =>
+            created ? [saved, ...prev] : prev.map((p) => (p.id === saved.id ? saved : p)),
+          )
+          if (created) setPagination((p) => ({ ...p, totalDocs: p.totalDocs + 1 }))
+          setFormOpen(false)
+          setEditing(null)
+          toast({
+            title: created ? `${saved.name} created` : 'Changes saved',
+            tone: 'success',
+            action: created
+              ? { label: 'Open', onClick: () => router.push(`/projects/${saved.id}`) }
+              : undefined,
+          })
+        }}
       />
 
-      {viewingProject && (
-        <ProjectDetailModal
-          isOpen={!!viewingProject}
-          onClose={() => setViewingProject(null)}
-          project={viewingProject}
-          onUpdate={handleProjectUpdated}
-          onDelete={handleProjectDeleted}
-          onTicketClick={handleTicketClick}
-        />
-      )}
-
-      {selectedTicket && (
-        <TicketDetailModal
-          isOpen={!!selectedTicket}
-          onClose={() => setSelectedTicket(null)}
-          ticket={selectedTicket}
-          projects={projects}
-          teams={teams}
-          allTickets={[]}
-          onUpdate={handleTicketUpdate}
-          onDelete={handleTicketDelete}
-        />
-      )}
-
       <ConfirmDialog
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        onConfirm={handleConfirmDelete}
-        title="Delete Project"
-        message={getDeleteMessage()}
-        confirmText="Delete Project"
-        isDestructive={true}
-        isLoading={isDeleting}
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Delete this project?"
+        message={pendingDelete ? `“${pendingDelete.project.name}” (${pendingDelete.project.prefix})` : ''}
+        consequence={deleteConsequence()}
+
+        confirmPhrase={pendingDelete && pendingDelete.ticketCount > 0 ? pendingDelete.project.name : undefined}
+        confirmLabel="Delete project"
       />
     </div>
   )

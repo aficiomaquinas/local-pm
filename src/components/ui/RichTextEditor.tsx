@@ -8,7 +8,7 @@ import 'react-quill-new/dist/quill.snow.css'
 const ReactQuill = dynamic(() => import('react-quill-new'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[150px] bg-secondary/30 border border-border/50 rounded-md animate-pulse" />
+    <div className="h-[150px] w-full animate-pulse-soft rounded-sm bg-surface-hover" aria-hidden />
   ),
 })
 
@@ -103,7 +103,7 @@ export function RichTextDisplay({ content }: { content: string }) {
   )
 
   if (!content || content === '<p><br></p>' || !sanitized.trim()) {
-    return <p className="text-sm text-muted-foreground italic">No description</p>
+    return <p className="text-base text-text-muted">No description yet.</p>
   }
 
   return (

@@ -1,367 +1,441 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, MoreHorizontal, Pencil, Trash2, Users, Eye, Loader2 } from 'lucide-react'
-import { TeamModal } from './TeamModal'
-import { TeamDetailModal } from './TeamDetailModal'
-import { TicketDetailModal } from '@/components/kanban/TicketDetailModal'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { MoreHorizontal, Pencil, Plus, Search, Trash2, Users, X } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import { useShortcut } from '@/lib/shortcuts'
+import { Button } from '@/components/ui/Button'
+import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { EntityMark } from '@/components/ui/EntityMark'
+import { Menu } from '@/components/ui/Menu'
+import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
+import { DensityControl, Table, Td, Th, Tr, useDensity } from '@/components/ui/Table'
+import { useToast } from '@/components/ui/Toast'
+import { TeamFormDialog } from './TeamFormDialog'
+import type { Team } from '@/payload-types'
 
-import type { Team, Project, Ticket } from '@/payload-types'
+const PAGE_SIZE = 20
+const SEARCH_DEBOUNCE_MS = 300
+const MIN_SEARCH = 3
 
-interface PaginationInfo {
+type SortKey = 'name' | '-name' | 'createdAt' | '-createdAt'
+
+interface Pagination {
   page: number
   totalPages: number
   hasNextPage: boolean
+  totalDocs: number
 }
 
-interface TeamsListProps {
+export function TeamsList({
+  initialTeams,
+  initialPagination,
+}: {
   initialTeams: Team[]
-  initialPagination?: PaginationInfo
-}
+  initialPagination?: Pagination
+}) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [density, setDensity] = useDensity()
 
-export function TeamsList({ initialTeams, initialPagination }: TeamsListProps) {
   const [teams, setTeams] = useState<Team[]>(initialTeams)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingTeam, setEditingTeam] = useState<Team | null>(null)
-  const [viewingTeam, setViewingTeam] = useState<Team | null>(null)
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  // Pagination state
-  const [pagination, setPagination] = useState<PaginationInfo>(
-    initialPagination || { page: 1, totalPages: 1, hasNextPage: false }
+  const [pagination, setPagination] = useState<Pagination>(
+    initialPagination ?? { page: 1, totalPages: 1, hasNextPage: false, totalDocs: initialTeams.length },
   )
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<SortKey>('-createdAt')
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Delete confirmation state
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    team: Team
-    ticketCount: number
-  } | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<Team | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ team: Team; ticketCount: number } | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  // Ticket detail modal state
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
-  const [projects, setProjects] = useState<Project[]>([])
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  // Load more teams for infinite scroll
-  const loadMoreTeams = useCallback(async () => {
-    if (!pagination.hasNextPage) return
-
-    try {
-      const nextPage = pagination.page + 1
-      const response = await fetch(`/api/teams?page=${nextPage}&limit=20&sort=-createdAt`)
-      const data = await response.json()
-
-      if (data.docs && data.docs.length > 0) {
-        setTeams((prev) => [...prev, ...data.docs])
-        setPagination({
-          page: data.page,
-          totalPages: data.totalPages,
-          hasNextPage: data.hasNextPage,
-        })
-      }
-    } catch (error) {
-      console.error('Failed to load more teams:', error)
-    }
-  }, [pagination])
-
-  const { sentinelRef, isLoading: isLoadingMore } = useInfiniteScroll(
-    loadMoreTeams,
-    pagination.hasNextPage
-  )
+  const fetchedFor = useRef<string | null>(null)
+  const showSkeleton = useDelayedFlag(loading)
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    const params = new URLSearchParams(window.location.search)
+    setQuery(params.get('q') ?? '')
+    const urlSort = params.get('sort')
+    if (urlSort) setSort(urlSort as SortKey)
   }, [])
 
+  const syncUrl = useCallback((next: { q: string; sort: SortKey }, push: boolean) => {
+    const params = new URLSearchParams()
+    if (next.q) params.set('q', next.q)
+    if (next.sort !== '-createdAt') params.set('sort', next.sort)
+    const qs = params.toString()
+    const url = qs ? `?${qs}` : window.location.pathname
+    if (push) window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  }, [])
+
+  const buildParams = useCallback(
+    (page: number) => {
+      const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort })
+      if (query.trim().length >= MIN_SEARCH) params.set('where[name][like]', query.trim())
+      return params
+    },
+    [sort, query],
+  )
+
   useEffect(() => {
-    // Load projects for ticket detail modal
-    const loadProjects = async () => {
+    const signature = buildParams(1).toString()
+    if (fetchedFor.current === null) {
+      fetchedFor.current = signature
+      return
+    }
+    if (signature === fetchedFor.current) return
+    fetchedFor.current = signature
+
+    const controller = new AbortController()
+    const run = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        const response = await fetch('/api/projects?limit=100')
+        const response = await fetch(`/api/teams?${buildParams(1)}`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
         const data = await response.json()
-        setProjects(data.docs || [])
-      } catch (error) {
-        console.error('Failed to load projects:', error)
+        setTeams(data.docs ?? [])
+        setPagination({
+          page: data.page ?? 1,
+          totalPages: data.totalPages ?? 1,
+          hasNextPage: data.hasNextPage ?? false,
+          totalDocs: data.totalDocs ?? 0,
+        })
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return
+        setError(err instanceof Error ? err.message : 'The request failed.')
+      } finally {
+        setLoading(false)
       }
     }
-    loadProjects()
-  }, [])
 
-  const handleCreateTeam = () => {
-    setEditingTeam(null)
-    setIsModalOpen(true)
+    const timer = setTimeout(run, query ? SEARCH_DEBOUNCE_MS : 0)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [buildParams, query])
+
+  useShortcut({
+    id: 'teams.search',
+    keys: 'slash',
+    description: 'Focus the team search',
+    group: 'Teams',
+    scope: 'list',
+    run: () => searchRef.current?.focus(),
+  })
+  useShortcut({
+    id: 'teams.create',
+    keys: 'c',
+    description: 'Create a team',
+    group: 'Teams',
+    scope: 'list',
+    run: () => {
+      setEditing(null)
+      setFormOpen(true)
+    },
+  })
+
+  const setFilters = (next: Partial<{ q: string; sort: SortKey }>, push = true) => {
+    const merged = { q: next.q ?? query, sort: next.sort ?? sort }
+    if (next.q !== undefined) setQuery(next.q)
+    if (next.sort !== undefined) setSort(next.sort)
+    syncUrl(merged, push)
   }
 
-  const handleViewTeam = (team: Team) => {
-    setViewingTeam(team)
-    setMenuOpen(null)
+  const toggleSort = (key: 'name' | 'createdAt') => {
+    setFilters({ sort: sort === key ? (`-${key}` as SortKey) : (key as SortKey) })
+  }
+  const sortDirection = (key: string): 'asc' | 'desc' | null =>
+    sort === key ? 'asc' : sort === `-${key}` ? 'desc' : null
+
+  const loadMore = async () => {
+    if (!pagination.hasNextPage || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const response = await fetch(`/api/teams?${buildParams(pagination.page + 1)}`)
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      const data = await response.json()
+      setTeams((prev) => [...prev, ...(data.docs ?? [])])
+      setPagination({
+        page: data.page,
+        totalPages: data.totalPages,
+        hasNextPage: data.hasNextPage,
+        totalDocs: data.totalDocs,
+      })
+    } catch (err) {
+      toast({
+        tone: 'error',
+        title: "Couldn't load more teams",
+        description: err instanceof Error ? err.message : undefined,
+      })
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
-  const handleEditTeam = (team: Team) => {
-    setEditingTeam(team)
-    setIsModalOpen(true)
-    setMenuOpen(null)
-  }
-
-  const handleInitiateDelete = async (team: Team) => {
-    setMenuOpen(null)
-
-    // Fetch ticket count for this team
+  const startDelete = async (team: Team) => {
     try {
       const response = await fetch(`/api/tickets?where[team][equals]=${team.id}&limit=0`)
       const data = await response.json()
-      const ticketCount = data.totalDocs || 0
-
-      setDeleteConfirm({ team, ticketCount })
-    } catch (error) {
-      console.error('Failed to fetch ticket count:', error)
-      setDeleteConfirm({ team, ticketCount: -1 })
+      setPendingDelete({ team, ticketCount: data.totalDocs ?? 0 })
+    } catch {
+      setPendingDelete({ team, ticketCount: -1 })
     }
   }
 
-  const handleConfirmDelete = async () => {
-    if (!deleteConfirm) return
-
-    setIsDeleting(true)
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    setDeleting(true)
     try {
-      const { team } = deleteConfirm
-
-      // Delete the team (tickets will be orphaned, not deleted)
-      await fetch(`/api/teams/${team.id}`, { method: 'DELETE' })
-      setTeams((prev) => prev.filter((t) => t.id !== team.id))
-      setDeleteConfirm(null)
-    } catch (error) {
-      console.error('Failed to delete team:', error)
+      const response = await fetch(`/api/teams/${pendingDelete.team.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      setTeams((prev) => prev.filter((t) => t.id !== pendingDelete.team.id))
+      setPagination((p) => ({ ...p, totalDocs: Math.max(0, p.totalDocs - 1) }))
+      setPendingDelete(null)
+      toast({ title: `${pendingDelete.team.name} deleted`, tone: 'info' })
+    } catch (err) {
+      toast({
+        tone: 'error',
+        title: "Couldn't delete that team",
+        description: err instanceof Error ? err.message : undefined,
+      })
     } finally {
-      setIsDeleting(false)
+      setDeleting(false)
     }
-  }
-
-  const handleTeamSaved = (savedTeam: Team) => {
-    if (editingTeam) {
-      setTeams((prev) =>
-        prev.map((t) => (t.id === savedTeam.id ? savedTeam : t))
-      )
-    } else {
-      setTeams((prev) => [savedTeam, ...prev])
-    }
-    setIsModalOpen(false)
-    setEditingTeam(null)
-  }
-
-  const handleTeamUpdated = (updatedTeam: Team) => {
-    setTeams((prev) =>
-      prev.map((t) => (t.id === updatedTeam.id ? updatedTeam : t))
-    )
-    setViewingTeam(updatedTeam)
-  }
-
-  const handleTeamDeleted = (teamId: string) => {
-    const team = teams.find((t) => t.id === teamId)
-    if (team) {
-      handleInitiateDelete(team)
-    }
-    setViewingTeam(null)
-  }
-
-  const handleTicketClick = (ticket: Ticket) => {
-    setSelectedTicket(ticket)
-  }
-
-  const handleTicketUpdate = (updatedTicket: Ticket) => {
-    setSelectedTicket(updatedTicket)
-  }
-
-  const handleTicketDelete = async (ticketId: string) => {
-    try {
-      await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' })
-      setSelectedTicket(null)
-    } catch (error) {
-      console.error('Failed to delete ticket:', error)
-    }
-  }
-
-  const getDeleteMessage = () => {
-    if (!deleteConfirm) return ''
-    const { team, ticketCount } = deleteConfirm
-
-    if (ticketCount === -1) {
-      return `Are you sure you want to delete "${team.name}"?\n\nTickets assigned to this team will become unassigned.`
-    }
-
-    if (ticketCount === 0) {
-      return `Are you sure you want to delete "${team.name}"?\n\nNo tickets are assigned to this team.`
-    }
-
-    return `Are you sure you want to delete "${team.name}"?\n\n${ticketCount} ticket${ticketCount === 1 ? ' is' : 's are'} assigned to this team and will become unassigned.`
   }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-white">Teams</h1>
-        <button
-          onClick={handleCreateTeam}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Team
-        </button>
+    <div className="flex h-full flex-col">
+      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-semibold text-text">Teams</h1>
+
+          <label className="relative flex h-8 min-w-48 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-80">
+            <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
+            <span className="sr-only">Search teams by name</span>
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setFilters({ q: e.target.value }, false)}
+              placeholder="Search teams"
+              className="min-w-0 flex-1 bg-transparent text-base text-text outline-none max-sm:text-md"
+            />
+            <kbd className="hidden shrink-0 font-sans text-xs text-text-muted can-hover:inline">/</kbd>
+          </label>
+
+          <Button
+            variant="primary"
+            icon={Plus}
+            shortcut="C"
+            className="ml-auto"
+            onClick={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+          >
+            New team
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-text-muted tabular" aria-live="polite">
+            {pagination.totalDocs} {pagination.totalDocs === 1 ? 'team' : 'teams'}
+          </span>
+          {query && (
+            <>
+              <Chip tone="accent" onRemove={() => setFilters({ q: '' })} removeLabel="Clear the search">
+                Search: {query}
+              </Chip>
+              <Button variant="ghost" size="sm" icon={X} onClick={() => setFilters({ q: '' })}>
+                Clear all
+              </Button>
+            </>
+          )}
+          <div className="ml-auto">
+            <DensityControl value={density} onChange={setDensity} />
+          </div>
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {error ? (
+          <EmptyState
+            kind="error"
+            title="Couldn't load teams"
+            description={error}
+            action={{ label: 'Retry', onClick: () => setFilters({}, false) }}
+            className="m-6"
+          />
+        ) : showSkeleton && teams.length === 0 ? (
+          <RowSkeletonList count={5} />
+        ) : teams.length === 0 && query ? (
+          <EmptyState
+            kind="no-match"
+            title="No teams match"
+            description="Nothing here fits that search. The team you want may still exist."
+            action={{ label: 'Clear filters', onClick: () => setFilters({ q: '' }) }}
+          />
+        ) : teams.length === 0 ? (
+          <EmptyState
+            kind="no-data"
+            title="No teams yet"
+            description="Teams say who owns a ticket. Create one and it becomes available on every board filter."
+            action={{
+              label: 'Create team',
+              onClick: () => {
+                setEditing(null)
+                setFormOpen(true)
+              },
+            }}
+          />
+        ) : (
+          <>
+            <Table caption="Teams, with the date each was created">
+              <thead>
+                <tr>
+                  <Th sortable sortDirection={sortDirection('name')} onSort={() => toggleSort('name')}>
+                    Team
+                  </Th>
+                  <Th
+                    sortable
+                    sortDirection={sortDirection('createdAt')}
+                    onSort={() => toggleSort('createdAt')}
+                    width="10rem"
+                  >
+                    Created
+                  </Th>
+                  <Th width="4rem">
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {teams.map((team) => (
+                  <Tr key={team.id} density={density} onOpen={() => router.push(`/teams/${team.id}`)}>
+                    <Td>
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <EntityMark icon={Users} color={team.color} size="sm" />
+                        <Link
+                          href={`/teams/${team.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="truncate font-medium text-text hover:underline"
+                          title={team.name}
+                        >
+                          {team.name}
+                        </Link>
+                      </span>
+                    </Td>
+                    <Td className="tabular text-text-muted">
+                      {new Date(team.createdAt).toLocaleDateString()}
+                    </Td>
+                    <Td align="right">
+                      <span
+                        className={cn(
+                          'inline-flex',
+                          'can-hover:opacity-0 can-hover:group-hover:opacity-100 can-hover:group-focus-within:opacity-100',
+                          'transition-opacity duration-fast',
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Menu
+                          label={`Actions for ${team.name}`}
+                          items={[
+                            {
+                              id: 'edit',
+                              label: 'Edit team',
+                              icon: Pencil,
+                              onSelect: () => {
+                                setEditing(team)
+                                setFormOpen(true)
+                              },
+                            },
+                            {
+                              id: 'delete',
+                              label: 'Delete team',
+                              icon: Trash2,
+                              destructive: true,
+                              separatorBefore: true,
+                              onSelect: () => startDelete(team),
+                            },
+                          ]}
+                        >
+                          {(trigger) => (
+                            <Button
+                              {...trigger}
+                              variant="ghost"
+                              size="sm"
+                              iconOnly
+                              icon={MoreHorizontal}
+                              aria-label={`Actions for ${team.name}`}
+                            />
+                          )}
+                        </Menu>
+                      </span>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+
+            {pagination.hasNextPage && (
+              <div className="flex justify-center p-4">
+                <Button variant="secondary" loading={loadingMore} onClick={loadMore}>
+                  Load more ({teams.length} of {pagination.totalDocs})
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Teams Grid */}
-      {teams.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <Users className="w-12 h-12 text-gray-500 mb-4" />
-          <h2 className="text-lg font-medium text-white mb-2">No teams yet</h2>
-          <p className="text-gray-400 mb-4">Create your first team to organize work</p>
-          <button
-            onClick={handleCreateTeam}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Team
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {teams.map((team) => (
-              <div
-                key={team.id}
-                onClick={() => handleViewTeam(team)}
-                className="bg-[#18181b] border border-[#27272a] rounded-lg p-4 hover:border-[#3f3f46] transition-colors cursor-pointer"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${team.color}20` }}
-                    >
-                      <Users
-                        className="w-5 h-5"
-                        style={{ color: team.color as string }}
-                      />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-medium">{team.name}</h3>
-                      <span className="text-xs text-gray-500">
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="relative" ref={menuOpen === team.id ? menuRef : null}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setMenuOpen(menuOpen === team.id ? null : team.id)
-                      }}
-                      className="p-1 text-gray-400 hover:text-white transition-colors"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-
-                    {menuOpen === team.id && (
-                      <div className="absolute right-0 top-full mt-1 bg-[#27272a] border border-[#3f3f46] rounded-md shadow-lg py-1 z-10 min-w-[120px]">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleViewTeam(team)
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3f3f46] transition-colors"
-                        >
-                          <Eye className="w-3 h-3" />
-                          View
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditTeam(team)
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:bg-[#3f3f46] transition-colors"
-                        >
-                          <Pencil className="w-3 h-3" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleInitiateDelete(team)
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:bg-[#3f3f46] transition-colors"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            ))}
-          </div>
-
-          {/* Infinite scroll sentinel and loading indicator */}
-          <div ref={sentinelRef} className="h-4" />
-          {isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-            </div>
-          )}
-        </>
-      )}
-
-      <TeamModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        team={editingTeam}
-        onSave={handleTeamSaved}
+      <TeamFormDialog
+        open={formOpen}
+        onClose={() => {
+          setFormOpen(false)
+          setEditing(null)
+        }}
+        team={editing}
+        onSaved={(saved, created) => {
+          setTeams((prev) => (created ? [saved, ...prev] : prev.map((t) => (t.id === saved.id ? saved : t))))
+          if (created) setPagination((p) => ({ ...p, totalDocs: p.totalDocs + 1 }))
+          setFormOpen(false)
+          setEditing(null)
+          toast({
+            title: created ? `${saved.name} created` : 'Changes saved',
+            tone: 'success',
+            action: created ? { label: 'Open', onClick: () => router.push(`/teams/${saved.id}`) } : undefined,
+          })
+        }}
       />
 
-      {viewingTeam && (
-        <TeamDetailModal
-          isOpen={!!viewingTeam}
-          onClose={() => setViewingTeam(null)}
-          team={viewingTeam}
-          onUpdate={handleTeamUpdated}
-          onDelete={handleTeamDeleted}
-          onTicketClick={handleTicketClick}
-        />
-      )}
-
-      {selectedTicket && (
-        <TicketDetailModal
-          isOpen={!!selectedTicket}
-          onClose={() => setSelectedTicket(null)}
-          ticket={selectedTicket}
-          projects={projects}
-          teams={teams}
-          allTickets={[]}
-          onUpdate={handleTicketUpdate}
-          onDelete={handleTicketDelete}
-        />
-      )}
-
       <ConfirmDialog
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        onConfirm={handleConfirmDelete}
-        title="Delete Team"
-        message={getDeleteMessage()}
-        confirmText="Delete Team"
-        isDestructive={true}
-        isLoading={isDeleting}
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        title="Delete this team?"
+        message={pendingDelete ? `“${pendingDelete.team.name}”` : ''}
+        consequence={
+          pendingDelete && pendingDelete.ticketCount > 0
+            ? `${pendingDelete.ticketCount} ticket${
+                pendingDelete.ticketCount === 1 ? ' becomes' : 's become'
+              } unassigned. The tickets themselves are kept.`
+            : 'No tickets are assigned to this team.'
+        }
+        confirmLabel="Delete team"
       />
     </div>
   )

@@ -3,15 +3,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react'
-import { cn } from '@/lib/cn'
-import { PROJECT_STATUS_OPTIONS, ProjectStatus, TicketStatus } from '@/types/enums'
+import { ArrowLeft, ExternalLink, Trash2, Users } from 'lucide-react'
+import { TicketStatus } from '@/types/enums'
 import { useOptimisticPatch, saveStateLabel } from '@/hooks/useOptimisticPatch'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Field, Select } from '@/components/ui/Field'
-import { EntityMark, TicketKey, projectIcon } from '@/components/ui/EntityMark'
+import { EntityMark, TicketKey } from '@/components/ui/EntityMark'
 import { InlineEdit } from '@/components/ui/InlineEdit'
 import { PriorityIndicator, TicketStatusBadge } from '@/components/ui/StateIndicator'
 import { Table, Td, Th, Tr, useDensity } from '@/components/ui/Table'
@@ -19,23 +17,23 @@ import { useToast } from '@/components/ui/Toast'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import type { Project, Team, Ticket } from '@/payload-types'
 
-export function ProjectDetail({
-  project: initialProject,
+export function TeamDetail({
+  team: initialTeam,
   tickets,
-  teams,
+  projects,
 }: {
-  project: Project
+  team: Team
   tickets: Ticket[]
-  teams: Team[]
+  projects: Project[]
 }) {
   const router = useRouter()
   const { toast } = useToast()
   const [density] = useDensity()
-  const [project, setProject] = useState(initialProject)
-  const apply = useCallback((next: Project) => setProject(next), [])
-  const { patch, state } = useOptimisticPatch<Project>({
-    collection: 'projects',
-    record: project,
+  const [team, setTeam] = useState(initialTeam)
+  const apply = useCallback((next: Team) => setTeam(next), [])
+  const { patch, state } = useOptimisticPatch<Team>({
+    collection: 'teams',
+    record: team,
     onApply: apply,
   })
 
@@ -45,25 +43,23 @@ export function ProjectDetail({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const description = (project.description as unknown as string) || ''
+  const description = (team.description as unknown as string) || ''
   const savingLabel = saveStateLabel(state)
 
-  const stats = useMemo(() => {
-    const total = tickets.length
-    const done = tickets.filter((t) => t.status === TicketStatus.DONE).length
-    return {
-      total,
+  const stats = useMemo(
+    () => ({
+      total: tickets.length,
       todo: tickets.filter((t) => t.status === TicketStatus.TODO).length,
       inProgress: tickets.filter((t) => t.status === TicketStatus.IN_PROGRESS).length,
-      done,
-      percent: total ? Math.round((done / total) * 100) : 0,
-    }
-  }, [tickets])
+      done: tickets.filter((t) => t.status === TicketStatus.DONE).length,
+    }),
+    [tickets],
+  )
 
   const saveDescription = async () => {
     setSavingDescription(true)
     const ok = await patch(
-      { description: (draftDescription || null) as Project['description'] },
+      { description: (draftDescription || null) as Team['description'] },
       'the description',
     )
     setSavingDescription(false)
@@ -73,20 +69,17 @@ export function ProjectDetail({
     }
   }
 
-  const deleteProject = async () => {
+  const deleteTeam = async () => {
     setDeleting(true)
     try {
-      await Promise.all(
-        tickets.map((t) => fetch(`/api/tickets/${t.id}`, { method: 'DELETE' })),
-      )
-      const response = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+      const response = await fetch(`/api/teams/${team.id}`, { method: 'DELETE' })
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
-      toast({ title: `${project.name} deleted`, tone: 'info' })
-      router.push('/projects')
+      toast({ title: `${team.name} deleted`, tone: 'info' })
+      router.push('/teams')
     } catch (error) {
       toast({
         tone: 'error',
-        title: "Couldn't delete that project",
+        title: "Couldn't delete that team",
         description: error instanceof Error ? error.message : undefined,
       })
       setDeleting(false)
@@ -99,39 +92,34 @@ export function ProjectDetail({
         <div className="mx-auto flex max-w-[1140px] flex-col gap-3 px-6 py-4 max-md:px-4">
           <nav aria-label="Breadcrumb">
             <Link
-              href="/projects"
+              href="/teams"
               className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-muted hover:text-text"
             >
               <ArrowLeft className="size-3.5" aria-hidden />
-              Projects
+              Teams
             </Link>
           </nav>
 
           <div className="flex flex-wrap items-center gap-3">
-            <EntityMark icon={projectIcon(project.icon)} color={project.color} size="lg" />
+            <EntityMark icon={Users} color={team.color} size="lg" />
 
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-semibold text-text">
                 <InlineEdit
-                  label="Project name"
-                  value={project.name}
+                  label="Team name"
+                  value={team.name}
                   validate={(next) => (next ? null : 'A name is required.')}
                   onCommit={(next) => patch({ name: next }, 'the name')}
                 />
               </h1>
               <p className="mt-1 flex items-center gap-2 text-xs text-text-muted">
-                <span className="tabular">{project.prefix}</span>
-                <span aria-hidden>·</span>
                 <span className="tabular">
-                  {stats.total} {stats.total === 1 ? 'ticket' : 'tickets'}
+                  {stats.total} assigned {stats.total === 1 ? 'ticket' : 'tickets'}
                 </span>
                 {savingLabel && (
                   <>
                     <span aria-hidden>·</span>
-                    <span
-                      aria-live="polite"
-                      className={state === 'error' ? 'text-danger-text' : undefined}
-                    >
+                    <span aria-live="polite" className={state === 'error' ? 'text-danger-text' : undefined}>
                       {savingLabel}
                     </span>
                   </>
@@ -143,7 +131,7 @@ export function ProjectDetail({
               <Button
                 variant="secondary"
                 trailingIcon={ExternalLink}
-                onClick={() => router.push(`/board?project=${project.id}`)}
+                onClick={() => router.push(`/board?team=${team.id}`)}
               >
                 Open board
               </Button>
@@ -204,7 +192,7 @@ export function ProjectDetail({
                 <RichTextEditor
                   value={draftDescription}
                   onChange={setDraftDescription}
-                  placeholder="Goals, scope, anything worth knowing…"
+                  placeholder="Responsibilities, areas of ownership…"
                 />
                 <p className="mt-2 text-xs text-text-muted">⌘/Ctrl + Enter saves.</p>
               </div>
@@ -215,9 +203,11 @@ export function ProjectDetail({
 
           <section className="flex min-w-0 flex-col gap-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">Tickets</h2>
+              <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                Assigned tickets
+              </h2>
               <Link
-                href={`/board?project=${project.id}`}
+                href={`/board?team=${team.id}`}
                 className="ml-auto rounded-sm text-xs text-accent-text hover:underline"
               >
                 View on the board
@@ -228,13 +218,13 @@ export function ProjectDetail({
               <EmptyState
                 kind="no-data"
                 compact
-                title="No tickets in this project"
-                description="Tickets created on the board with this project selected will appear here."
-                action={{ label: 'Open board', onClick: () => router.push(`/board?project=${project.id}`) }}
+                title="No tickets assigned"
+                description="Assign this team on a ticket and it will show up here."
+                action={{ label: 'Open board', onClick: () => router.push('/board') }}
               />
             ) : (
               <div className="rounded-md border border-border-subtle">
-                <Table caption={`Tickets in ${project.name}`}>
+                <Table caption={`Tickets assigned to ${team.name}`}>
                   <thead>
                     <tr>
                       <Th width="6rem">Key</Th>
@@ -243,23 +233,23 @@ export function ProjectDetail({
                         <span className="sr-only">Priority</span>
                       </Th>
                       <Th width="9rem">Status</Th>
-                      <Th width="9rem">Team</Th>
+                      <Th width="10rem">Project</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {tickets.map((ticket) => {
-                      const team =
-                        typeof ticket.team === 'object'
-                          ? ticket.team
-                          : teams.find((t) => t.id === ticket.team)
+                      const project =
+                        typeof ticket.project === 'object'
+                          ? ticket.project
+                          : projects.find((p) => p.id === ticket.project)
                       return (
                         <Tr
                           key={ticket.id}
                           density={density}
-                          onOpen={() => router.push(`/board?project=${project.id}&ticket=${ticket.id}`)}
+                          onOpen={() => router.push(`/board?team=${team.id}&ticket=${ticket.id}`)}
                         >
                           <Td>
-                            <TicketKey value={ticket.ticketId} color={project.color} />
+                            <TicketKey value={ticket.ticketId} color={project?.color} />
                           </Td>
                           <Td>
                             <span className="block truncate text-text" title={ticket.title}>
@@ -272,7 +262,7 @@ export function ProjectDetail({
                           <Td>
                             <TicketStatusBadge status={ticket.status} />
                           </Td>
-                          <Td className="truncate text-text-muted">{team?.name ?? '—'}</Td>
+                          <Td className="truncate text-text-muted">{project?.name ?? '—'}</Td>
                         </Tr>
                       )
                     })}
@@ -284,44 +274,8 @@ export function ProjectDetail({
         </div>
 
         <aside className="flex flex-col gap-6">
-          <Field label="Status">
-            {({ id }) => (
-              <Select
-                id={id}
-                value={project.status}
-                onChange={(e) => patch({ status: e.target.value as ProjectStatus }, 'the status')}
-              >
-                {PROJECT_STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-
           <section className="flex flex-col gap-3">
-            <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">Progress</h2>
-
-            <div>
-              <div
-                role="progressbar"
-                aria-valuenow={stats.percent}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Tickets complete"
-                className="h-2 overflow-hidden rounded-full bg-surface-hover"
-              >
-                <div
-                  className="h-full rounded-full bg-success transition-[width] duration-standard"
-                  style={{ width: `${stats.percent}%` }}
-                />
-              </div>
-              <p className="mt-1.5 text-xs text-text-muted tabular">
-                {stats.percent}% complete · {stats.done} of {stats.total} done
-              </p>
-            </div>
-
+            <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">Workload</h2>
             <dl className="flex flex-col">
               {(
                 [
@@ -334,10 +288,10 @@ export function ProjectDetail({
                   key={label}
                   className="flex h-8 items-center justify-between gap-2 border-b border-border-subtle last:border-b-0"
                 >
-                  <dt className="flex items-center gap-2 text-base text-text-muted">
+                  <dt>
                     <TicketStatusBadge status={status} />
                   </dt>
-                  <dd className={cn('text-base text-text tabular')}>{value}</dd>
+                  <dd className="text-base text-text tabular">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -346,11 +300,11 @@ export function ProjectDetail({
           <dl className="flex flex-col gap-2 border-t border-border-subtle pt-4 text-xs text-text-muted">
             <div className="flex justify-between gap-2">
               <dt>Created</dt>
-              <dd className="text-text tabular">{new Date(project.createdAt).toLocaleDateString()}</dd>
+              <dd className="text-text tabular">{new Date(team.createdAt).toLocaleDateString()}</dd>
             </div>
             <div className="flex justify-between gap-2">
               <dt>Updated</dt>
-              <dd className="text-text tabular">{new Date(project.updatedAt).toLocaleDateString()}</dd>
+              <dd className="text-text tabular">{new Date(team.updatedAt).toLocaleDateString()}</dd>
             </div>
           </dl>
         </aside>
@@ -359,17 +313,16 @@ export function ProjectDetail({
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        onConfirm={deleteProject}
+        onConfirm={deleteTeam}
         loading={deleting}
-        title="Delete this project?"
-        message={`“${project.name}” (${project.prefix})`}
+        title="Delete this team?"
+        message={`“${team.name}”`}
         consequence={
           stats.total > 0
-            ? `Permanently deletes ${stats.total} ticket${stats.total === 1 ? '' : 's'} and their history. This cannot be undone.`
-            : 'This project has no tickets. This cannot be undone.'
+            ? `${stats.total} ticket${stats.total === 1 ? ' becomes' : 's become'} unassigned. The tickets themselves are kept.`
+            : 'No tickets are assigned to this team.'
         }
-        confirmPhrase={stats.total > 0 ? project.name : undefined}
-        confirmLabel="Delete project"
+        confirmLabel="Delete team"
       />
     </div>
   )
