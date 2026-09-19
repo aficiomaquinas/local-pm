@@ -71,6 +71,9 @@ export function KanbanCard({ ticket, isOverlay, onClick, onDelete }: KanbanCardP
     <div
       ref={setNodeRef}
       style={style}
+      data-testid={isOverlay ? 'kanban-card-overlay' : 'kanban-card'}
+      data-ticket-id={ticket.id}
+      data-ticket-key={ticket.ticketId ?? ''}
       className={`relative group bg-card hover:bg-card/80 border border-border/40 hover:border-border p-3.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 cursor-grab active:cursor-grabbing ${isOverlay ? 'shadow-2xl ring-2 ring-primary/20 rotate-2 cursor-grabbing' : ''
         }`}
     >

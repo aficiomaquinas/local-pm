@@ -30,3 +30,15 @@ npm-debug.log*
 
 # Misc
 *.tgz
+
+# Local runtime logs
+logs/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# TypeScript build artifact
+tsconfig.tsbuildinfo

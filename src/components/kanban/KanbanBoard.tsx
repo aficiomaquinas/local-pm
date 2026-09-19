@@ -14,12 +14,13 @@ import {
   type DragEndEvent,
   type DragOverEvent,
 } from '@dnd-kit/core'
-import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { KanbanHeader } from './KanbanHeader'
 import { TicketModal } from './TicketModal'
 import { TicketDetailModal } from './TicketDetailModal'
+import { applyDrop, isRealMove, resultFromPreview, type DragResult } from './dragLogic'
 import { TicketStatus } from '@/types/enums'
 import type { Project, Team, Ticket } from '@/payload-types'
 
@@ -142,10 +143,25 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     [TicketStatus.IN_PROGRESS]: false,
     [TicketStatus.DONE]: false,
   })
-  const [isRefetching, setIsRefetching] = useState(false)
 
   // Track if this is the initial mount to avoid refetching on first render
   const isInitialMount = useRef(true)
+
+  // Position the server knows at drag-start, captured so handleDragEnd can
+  // distinguish a real move from a drop confirming the live preview.
+  const dragOriginRef = useRef<{ status: TicketStatus; sortOrder: number } | null>(null)
+
+  // Synchronous mirror of `tickets`, used for the drag math.
+  //
+  // `setTickets(prev => ...)` does NOT run the updater synchronously — React
+  // defers it to the next render — so a handler cannot read the result of its
+  // own update. handleDragEnd needs exactly that, to decide whether to PATCH.
+  // The ref is written synchronously by the drag handlers and re-synced from
+  // state whenever tickets change from anywhere else (refetch, create, delete).
+  const ticketsRef = useRef<Ticket[]>(tickets)
+  useEffect(() => {
+    ticketsRef.current = tickets
+  }, [tickets])
 
   // Refetch tickets when filters change
   useEffect(() => {
@@ -155,7 +171,6 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     }
 
     const refetchTickets = async () => {
-      setIsRefetching(true)
       try {
         // Fetch all three columns in parallel
         const fetchColumn = async (status: TicketStatus) => {
@@ -210,8 +225,6 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
         })
       } catch (error) {
         console.error('Failed to refetch tickets:', error)
-      } finally {
-        setIsRefetching(false)
       }
     }
 
@@ -298,6 +311,12 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
   const handleDragStart = (event: DragStartEvent) => {
     const ticket = tickets.find((t) => t.id === event.active.id)
     setActiveTicket(ticket || null)
+    // Snapshot the position the SERVER knows, so handleDragEnd can tell a real
+    // move from a drop that merely confirms the live preview handleDragOver
+    // has already applied. See dragLogic.ts.
+    dragOriginRef.current = ticket
+      ? { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
+      : null
   }
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -307,92 +326,52 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     const activeId = active.id as string
     const overId = over.id as string
 
-    const activeTicket = tickets.find((t) => t.id === activeId)
-    if (!activeTicket) return
-
-    // Check if we're over a column
-    const isOverColumn = COLUMNS.some((col) => col.id === overId)
-    if (isOverColumn) {
-      const newStatus = overId as TicketStatus
-      if (activeTicket.status !== newStatus) {
-        setTickets((prev) =>
-          prev.map((ticket) =>
-            ticket.id === activeId ? { ...ticket, status: newStatus } : ticket
-          )
-        )
-      }
-      return
-    }
-
-    // We're over another ticket
-    const overTicket = tickets.find((t) => t.id === overId)
-    if (!overTicket) return
-
-    if (activeTicket.status !== overTicket.status) {
-      setTickets((prev) =>
-        prev.map((ticket) =>
-          ticket.id === activeId ? { ...ticket, status: overTicket.status } : ticket
-        )
-      )
-    }
+    // Commit the FULL landing position (status *and* sortOrder) to the preview,
+    // not just the status: a preview carrying the source column's sortOrder
+    // makes the eventual drop look like a no-op, so the PATCH never fires and
+    // the next refetch silently reverts the card.
+    const next = applyDrop(ticketsRef.current, activeId, overId).tickets
+    ticketsRef.current = next
+    setTickets(next)
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveTicket(null)
 
+    const origin = dragOriginRef.current
+    dragOriginRef.current = null
+
     if (!over) return
 
     const activeId = active.id as string
     const overId = over.id as string
 
-    if (activeId === overId) return
+    // Recompute from the synchronous mirror: handleDragOver has been advancing
+    // it throughout the drag, and React state would not yet reflect that here.
+    //
+    // `over === active` is not a self-drop: once the preview has moved the card
+    // into the target slot, the card is the droppable nearest the pointer, so
+    // dnd-kit names it. That means "land where the preview put you".
+    const result: DragResult =
+      overId === activeId
+        ? resultFromPreview(ticketsRef.current, activeId)
+        : applyDrop(ticketsRef.current, activeId, overId)
+    ticketsRef.current = result.tickets
+    setTickets(result.tickets)
 
-    const activeTicket = tickets.find((t) => t.id === activeId)
-    if (!activeTicket) return
+    // Decided against the DRAG ORIGIN, not against current state — the live
+    // preview has legitimately already moved the card, and comparing to that
+    // would read every confirmed drop as a no-op.
+    if (!isRealMove(result, origin)) return
 
-    // Determine the target status
-    let targetStatus = activeTicket.status
-    const isOverColumn = COLUMNS.some((col) => col.id === overId)
-    if (isOverColumn) {
-      targetStatus = overId as TicketStatus
-    } else {
-      const overTicket = tickets.find((t) => t.id === overId)
-      if (overTicket) {
-        targetStatus = overTicket.status as TicketStatus
-      }
-    }
-
-    // Get tickets in the target column
-    const columnTickets = tickets.filter((t) => t.status === targetStatus)
-    const oldIndex = columnTickets.findIndex((t) => t.id === activeId)
-    const newIndex = isOverColumn
-      ? columnTickets.length
-      : columnTickets.findIndex((t) => t.id === overId)
-
-    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-      const reorderedTickets = arrayMove(columnTickets, oldIndex, newIndex)
-
-      // Update sort order for all tickets in the column
-      const updatedTickets = tickets.map((ticket) => {
-        const reorderedIndex = reorderedTickets.findIndex((t) => t.id === ticket.id)
-        if (reorderedIndex !== -1) {
-          return { ...ticket, sortOrder: reorderedIndex, status: targetStatus }
-        }
-        return ticket
-      })
-
-      setTickets(updatedTickets)
-    }
-
-    // Update the ticket in the database
     try {
       await fetch(`/api/tickets/${activeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: targetStatus,
-          sortOrder: columnTickets.findIndex((t) => t.id === overId) + 1,
+          status: result.status,
+          sortOrder: result.sortOrder,
         }),
       })
     } catch (error) {

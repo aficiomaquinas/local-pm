@@ -57,6 +57,8 @@ export function KanbanColumn({
       {/* Droppable Area */}
       <div
         ref={setNodeRef}
+        data-testid={`column-${id}`}
+        data-column-status={id}
         className="flex-1 overflow-y-auto bg-muted/10 rounded-xl px-2 py-2 border border-border/20 shadow-inner"
       >
         <div className="flex flex-col gap-3 min-h-[100px] p-1">

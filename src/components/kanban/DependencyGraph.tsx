@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ArrowRight, CheckCircle2, Circle, Ban, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { Circle, ZoomIn, ZoomOut } from 'lucide-react'
 import type { Ticket } from '@/payload-types'
 
 interface DependencyGraphProps {

@@ -213,12 +213,98 @@ AI: [Moves AUTH-1 to In Progress, implements the feature,
 - **Control**: Customize and extend as needed
 - **Offline**: Works without internet connection
 
+## Security
+
+Local PM is **local-first**. Out of the box it is open, which is the right
+default for a tool bound to loopback on your own machine and the wrong one for
+anything another host can reach.
+
+### Access control
+
+By default the REST and GraphQL APIs are fully open: any client that can reach
+the port can read and write every ticket, project and team. To require a
+logged-in user for every operation, set:
+
+```bash
+LOCAL_PM_REQUIRE_AUTH=true
+```
+
+Bootstrap the first account over REST:
+
+```bash
+curl -X POST http://localhost:3010/api/users \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"a-strong-password","role":"admin"}'
+```
+
+Then authenticate as either a person or an automated caller:
+
+```bash
+# Person — log in, then send the returned token
+curl -X POST http://localhost:3010/api/users/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"a-strong-password"}'
+
+curl -H "Authorization: JWT <token>" http://localhost:3010/api/tickets
+
+# Automation — issue an API key per caller in the users collection
+curl -H "Authorization: users API-Key <key>" http://localhost:3010/api/tickets
+```
+
+Roles: `admin` (may delete and manage accounts), `member` (read/write), and
+`agent` (automated callers, which should hold an API key rather than a
+password).
+
+> Turn the flag on **only once every caller holds a credential** — the bundled
+> MCP server included — or you will lock out your own automation.
+
+### Network exposure
+
+`docker compose` publishes the app on `127.0.0.1` and gives MongoDB no host
+port at all. To expose the app deliberately, set `LOCAL_PM_BIND=0.0.0.0` — and
+enable `LOCAL_PM_REQUIRE_AUTH` before you do.
+
+Secrets (`PAYLOAD_SECRET`, `DATABASE_URI`) are passed at runtime only, never as
+Docker build args, since build args are baked into image layers and readable
+through `docker history`.
+
+### Known issue
+
+The Payload admin panel at `/admin` currently returns 500 (`Cannot destructure
+property 'config'` from `@payloadcms/ui`). This is pre-existing and unrelated to
+access control — create the first account over REST as shown above. Everything
+else, including the whole REST API, is unaffected.
+
+## Testing
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm run test        # vitest — pure logic (drag math, access rules)
+npm run test:e2e    # playwright — full browser E2E
+npm run verify      # all three
+```
+
+E2E tests run against their **own database** (`local-pm-e2e`, derived from
+`DATABASE_URI`) on their own port, and refuse to start if that would resolve to
+the same database as your working one. First run needs browsers:
+
+```bash
+npx playwright install chromium
+```
+
 ## Tech Stack
 
 - **Frontend**: Next.js 15, React, Tailwind CSS
 - **Backend**: Payload CMS 3.0
 - **Database**: MongoDB
 - **MCP Server**: TypeScript, @modelcontextprotocol/sdk
+- **Testing**: Vitest (unit), Playwright (E2E)
+
+## Contributors
+
+Several fixes and hardening measures in this project came from community forks.
+See **[CREDITS.md](./CREDITS.md)** for who contributed what, what changed on
+adoption and why, and which larger features were deliberately deferred.
 
 ## Special Thanks
 
