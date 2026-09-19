@@ -14,6 +14,9 @@ WORKDIR /app
 # Copy workspace definition + manifests (cacheable per-manifest layers)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY .npmrc* ./
+# Vendored dependency patches (payload#17095 workaround) — required by
+# `pnpm install --frozen-lockfile` (patchedDependencies in package.json).
+COPY patches/ patches/
 COPY apps/web/package.json apps/web/
 COPY packages/mcp-server/package.json packages/mcp-server/
 

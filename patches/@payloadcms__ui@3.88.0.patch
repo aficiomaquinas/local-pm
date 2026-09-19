@@ -1,0 +1,27 @@
+diff --git a/dist/providers/Config/index.js b/dist/providers/Config/index.js
+index b3d5e60f56b1b4404e0cb6a4b02400bc9eca2643..6ce900bd3ec5a22c58c131c54585c7f5c6bcf2cf 100644
+--- a/dist/providers/Config/index.js
++++ b/dist/providers/Config/index.js
+@@ -69,10 +69,18 @@ export const PageConfigProvider = t0 => {
+     children,
+     config: configFromProps
+   } = t0;
+-  const {
+-    config: rootConfig,
+-    setConfig: setRootConfig
+-  } = useConfig();
++  const { config: rootConfig, setConfig: setRootConfig } = useConfig() ?? {};
++
++  // BEGIN LOCAL PATCH (payload#17095 workaround; see patches/README.md):
++  // no layout ConfigProvider above us (e.g. /admin/login SSR path) → the
++  // context default is undefined; BECOME the provider instead of crashing.
++  if (!rootConfig || !setRootConfig) {
++    return _jsx(ConfigProvider, {
++      config: configFromProps,
++      children
++    });
++  }
++  // END LOCAL PATCH
+   let t1;
+   let t2;
+   if ($[0] !== configFromProps || $[1] !== setRootConfig) {
