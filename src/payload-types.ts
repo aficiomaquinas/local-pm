@@ -121,7 +121,7 @@ export interface UserAuthOperations {
   };
 }
 /**
- * Login accounts and API keys. Assignable people live in Team Members.
+ * Login accounts and API keys. These are credentials, not assignable people — tickets are assigned to a team.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".

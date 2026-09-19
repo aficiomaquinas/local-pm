@@ -67,8 +67,8 @@ export function useInfiniteScroll(
         rootMargin,
         // Was hard-coded to 0, so the documented `threshold` option was
         // silently ignored and the hook could not be tuned by its callers.
-        // Spotted by Brian Tafoya (@btafoya), btafoya/local-pm commit 9de82f2;
-        // see CREDITS.md for why the option's units changed alongside.
+        // Spotted by Brian Tafoya (@btafoya), btafoya/local-pm commit 9de82f2.
+        // Note the option's units changed alongside: see the interface above.
         threshold: safeThreshold,
       }
     )

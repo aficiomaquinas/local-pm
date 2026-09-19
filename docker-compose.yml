@@ -2,7 +2,7 @@
 #
 # Hardening adapted from Victor Gonzalez (@aficiomaquinas) in
 # aficiomaquinas/local-pm (ADR-001 "local-first loopback binding",
-# commits 231b1c5 / dfaafde). See CREDITS.md.
+# commits 231b1c5 / dfaafde).
 #
 # Three deliberate choices, each of which was a real exposure before:
 #

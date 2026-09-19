@@ -180,7 +180,7 @@ class CycleError extends APIError {
  * `blockedBy` is a self-referential graph with nothing stopping A → B → A.
  *
  * Adapted from Ars Nova Singers (@ArsNovaSingers) in ArsNovaSingers/local-pm-Ars,
- * commit d488521. See CREDITS.md.
+ * commit d488521.
  *
  * A cycle is not merely untidy data: it makes "what is ready to work on?"
  * unanswerable, and it hangs any layered graph layout that walks the edges —
@@ -255,7 +255,7 @@ function toIdArray(value: unknown): string[] {
  * Allocate the next ticket number ATOMICALLY.
  *
  * Adapted from Ars Nova Singers (@ArsNovaSingers) in ArsNovaSingers/local-pm-Ars,
- * commit d488521. See CREDITS.md.
+ * commit d488521.
  *
  * The original implementation read `project.ticketCounter`, incremented it in
  * JavaScript and wrote it back. Two creates landing together both read 5, both

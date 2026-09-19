@@ -3,7 +3,7 @@ import { seedProject, createTicket, getTicket, type SeedRefs } from './helpers'
 
 /**
  * End-to-end coverage for the fixes ported from community forks.
- * Each block names the defect it pins. See CREDITS.md.
+ * Each block names the defect it pins.
  */
 
 let refs: SeedRefs
