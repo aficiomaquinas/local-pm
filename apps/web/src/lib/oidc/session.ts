@@ -64,7 +64,10 @@ export async function createUserSession(args: {
   ]
 
   const token = await new SignJWT({ id: args.id, collection: 'users', email: args.email, sid })
-    .setProtectedHeader({ typ: 'JWT', alg: 'HS256' })
+    // Payload 3.90 verifies `authVersion` in the protected header
+    // (JWT_AUTH_VERSION = 1, dist/auth/jwtAuth.js) and rejects tokens
+    // without it — session.ts must mirror payload's own signer.
+    .setProtectedHeader({ typ: 'JWT', alg: 'HS256', authVersion: 1 })
     .setIssuedAt()
     .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
     .sign(new TextEncoder().encode(args.secret))
