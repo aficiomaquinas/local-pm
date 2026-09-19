@@ -58,6 +58,38 @@ test('moving a card to another column persists across a reload', async ({ page, 
   ).toBeVisible()
 })
 
+test('a failed save returns the card to its origin instead of silently reverting later', async ({
+  page,
+  request,
+}) => {
+  // .claude/rules/05-board-and-dnd.md §5.5: "On server failure: animate the
+  // card back to its origin and toast the reason. Never silently revert on
+  // next refresh."
+  const ticket = (await (await createTicket(request, refs, {
+    title: 'Save will fail',
+    status: 'TODO',
+    sortOrder: 0,
+  })).json()).doc
+
+  await page.goto(`/board?project=${refs.projectId}`)
+  await page.waitForLoadState('networkidle')
+
+  // Make the move fail at the server.
+  await page.route(`**/api/tickets/${ticket.id}`, (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: '{"errors":[]}' }),
+  )
+
+  await dragTo(page, `[data-ticket-id="${ticket.id}"]`, '[data-testid="column-DONE"]')
+
+  // The card must come back to TODO on its own, without a reload.
+  await expect(
+    page.locator('[data-testid="column-TODO"]').locator(`[data-ticket-id="${ticket.id}"]`),
+  ).toBeVisible({ timeout: 15_000 })
+
+  // And the server genuinely never moved it.
+  expect((await getTicket(request, ticket.id)).status).toBe('TODO')
+})
+
 test('a card dropped on empty column space does not collapse to sortOrder 0', async ({
   page,
   request,
