@@ -40,19 +40,6 @@ export const PROJECT_STATUS_OPTIONS = [
   { label: 'Cancelled', value: ProjectStatus.CANCELLED },
 ]
 
-export const PRIORITY_COLORS: Record<TicketPriority, string> = {
-  [TicketPriority.NO_PRIORITY]: '#6b7280',
-  [TicketPriority.URGENT]: '#ef4444',
-  [TicketPriority.HIGH]: '#f97316',
-  [TicketPriority.MEDIUM]: '#eab308',
-  [TicketPriority.LOW]: '#22c55e',
-}
-
-export const STATUS_COLORS: Record<TicketStatus, string> = {
-  [TicketStatus.TODO]: '#6b7280',
-  [TicketStatus.IN_PROGRESS]: '#3b82f6',
-  [TicketStatus.DONE]: '#22c55e',
-}
 
 export const PROJECT_ICONS = [
   'folder',
@@ -73,17 +60,17 @@ export const PROJECT_ICONS = [
 ]
 
 export const PROJECT_COLORS = [
-  '#6366f1', // Indigo
-  '#8b5cf6', // Violet
-  '#a855f7', // Purple
-  '#d946ef', // Fuchsia
-  '#ec4899', // Pink
-  '#ef4444', // Red
-  '#f97316', // Orange
-  '#f59e0b', // Amber/Yellow
-  '#eab308', // Yellow
-  '#22c55e', // Green
-  '#14b8a6', // Teal
-  '#06b6d4', // Cyan
-  '#3b82f6', // Blue
+  '#6366f1', 
+  '#8b5cf6', 
+  '#a855f7', 
+  '#d946ef', 
+  '#ec4899', 
+  '#ef4444', 
+  '#f97316', 
+  '#f59e0b', 
+  '#eab308', 
+  '#22c55e', 
+  '#14b8a6', 
+  '#06b6d4', 
+  '#3b82f6', 
 ]

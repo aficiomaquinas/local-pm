@@ -9,43 +9,38 @@ interface ProjectPageProps {
   params: Promise<{ id: string }>
 }
 
+export async function generateMetadata({ params }: ProjectPageProps) {
+  const { id } = await params
+  try {
+    const payload = await getPayload({ config })
+    const project = await payload.findByID({ collection: 'projects', id, depth: 0 })
+    return { title: `${project.name} · local-pm` }
+  } catch {
+    return { title: 'Project · local-pm' }
+  }
+}
+
 export default async function ProjectPage({ params }: ProjectPageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
 
   try {
-    const project = await payload.findByID({
-      collection: 'projects',
-      id,
-      depth: 0,
-    })
+    const project = await payload.findByID({ collection: 'projects', id, depth: 0 })
+    if (!project) notFound()
 
-    if (!project) {
-      notFound()
-    }
-
-    // Get tickets for this project
-    const ticketsResult = await payload.find({
-      collection: 'tickets',
-      where: {
-        project: { equals: id },
-      },
-      limit: 1000,
-      depth: 1,
-    })
-
-    // Get teams for dropdown
-    const teamsResult = await payload.find({
-      collection: 'teams',
-      limit: 100,
-    })
+    const [ticketsResult, teamsResult] = await Promise.all([
+      payload.find({
+        collection: 'tickets',
+        where: { project: { equals: id } },
+        limit: 200,
+        depth: 1,
+        sort: 'sortOrder',
+      }),
+      payload.find({ collection: 'teams', limit: 100 }),
+    ])
 
     return (
-      <ProjectDetail
-        project={project}
-        tickets={ticketsResult.docs}
-        teams={teamsResult.docs}
-      />
+      <ProjectDetail project={project} tickets={ticketsResult.docs} teams={teamsResult.docs} />
     )
   } catch {
     notFound()

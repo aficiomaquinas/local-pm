@@ -55,6 +55,10 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
+      // Build into a separate directory. Sharing `.next` with a production
+      // server running the app locally would replace its build with dev
+      // artifacts and break it (see next.config.ts).
+      NEXT_DIST_DIR: '.next-e2e',
       DATABASE_URI: E2E_DATABASE_URI,
       PAYLOAD_SECRET: process.env.PAYLOAD_SECRET ?? 'e2e-secret-not-for-production',
       NEXT_PUBLIC_SERVER_URL: BASE_URL,
