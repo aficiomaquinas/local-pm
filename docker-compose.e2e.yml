@@ -52,6 +52,10 @@ services:
       OIDC_REDIRECT_URI: http://localhost:3012/api/auth/oidc/callback
       # Master user's dex groups (config/dex-e2e/config.yml staticPasswords)
       # map to superadmin for the feed-write check (§7).
+      # §7: roles come from the token's groups claim. The OIDC_SCOPE default
+      # (openid profile email) does NOT request groups — the mirror's roles
+      # stay ['human'] forever without it (verified live 2026-09-19).
+      OIDC_SCOPE: openid profile email groups
       OIDC_SUPERADMIN_GROUP: local-pm-admins
       OIDC_AGENT_CLIENT_IDS: '["local-pm-mcp"]'
       # ── E2E harness handles (consumed by scripts/e2e-oidc.sh) ───────────
