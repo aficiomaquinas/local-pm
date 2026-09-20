@@ -73,6 +73,8 @@ export interface Config {
     tickets: Ticket;
     users: User;
     comments: Comment;
+    attachments: Attachment;
+    activity: Activity;
     exports: Export;
     imports: Import;
     'payload-kv': PayloadKv;
@@ -89,6 +91,8 @@ export interface Config {
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     comments: CommentsSelect<false> | CommentsSelect<true>;
+    attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
+    activity: ActivitySelect<false> | ActivitySelect<true>;
     exports: ExportsSelect<false> | ExportsSelect<true>;
     imports: ImportsSelect<false> | ImportsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
@@ -562,6 +566,66 @@ export interface Comment {
   createdAt: string;
 }
 /**
+ * Files dropped, pasted, or picked inside a comment or a description.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments".
+ */
+export interface Attachment {
+  id: string;
+  /**
+   * What the image shows, for anyone who cannot see it.
+   */
+  alt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
+ * Append-only record of what changed on a ticket, and who changed it.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity".
+ */
+export interface Activity {
+  id: string;
+  /**
+   * The ticket this entry belongs to
+   */
+  ticket: string | Ticket;
+  action: 'created' | 'changed' | 'commented' | 'replied' | 'edited' | 'resolved' | 'reopened' | 'deleted';
+  /**
+   * The comment this entry is about. Empty once that comment is deleted.
+   */
+  comment?: (string | null) | Comment;
+  /**
+   * Which field changed. Empty when the ticket was created.
+   */
+  field?: string | null;
+  /**
+   * The value, or comment text, as it read before the change
+   */
+  from?: string | null;
+  /**
+   * The value, or comment text, as it read after the change
+   */
+  to?: string | null;
+  /**
+   * Who made the change. Empty when nobody was signed in.
+   */
+  actor?: (string | null) | Member;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "exports".
  */
@@ -774,6 +838,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'comments';
         value: string | Comment;
+      } | null)
+    | ({
+        relationTo: 'attachments';
+        value: string | Attachment;
+      } | null)
+    | ({
+        relationTo: 'activity';
+        value: string | Activity;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -960,6 +1032,39 @@ export interface CommentsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments_select".
+ */
+export interface AttachmentsSelect<T extends boolean = true> {
+  alt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity_select".
+ */
+export interface ActivitySelect<T extends boolean = true> {
+  ticket?: T;
+  action?: T;
+  comment?: T;
+  field?: T;
+  from?: T;
+  to?: T;
+  actor?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "exports_select".
  */
 export interface ExportsSelect<T extends boolean = true> {
@@ -1106,7 +1211,17 @@ export interface TaskCreateCollectionExport {
     id: string;
     name: string;
     batchSize?: number | null;
-    collectionSlug: 'projects' | 'teams' | 'members' | 'tickets' | 'users' | 'comments' | 'exports' | 'imports';
+    collectionSlug:
+      | 'projects'
+      | 'teams'
+      | 'members'
+      | 'tickets'
+      | 'users'
+      | 'comments'
+      | 'attachments'
+      | 'activity'
+      | 'exports'
+      | 'imports';
     drafts?: ('yes' | 'no') | null;
     exportCollection: string;
     fields?: string[] | null;

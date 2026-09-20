@@ -4,6 +4,8 @@ import { authenticatedMutations } from '@/access/authenticatedAccess'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
 import { extractMentionIds } from '@/lib/mentions'
+import { plainSummary } from '@/lib/markdown'
+import type { Activity } from '@/payload-types'
 
 export const MAX_COMMENT_LENGTH = 10_000
 
@@ -83,8 +85,14 @@ export const Comments: CollectionConfig = {
         return data
       },
     ],
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        await recordCommentActivity(req, doc, previousDoc, operation)
+      },
+    ],
     afterDelete: [
-      async ({ req, id }) => {
+      async ({ req, id, doc }) => {
+        await recordCommentDeleted(req, doc)
         await req.payload.delete({
           req,
           collection: 'comments',
@@ -231,6 +239,88 @@ async function resolveMentions(req: PayloadRequest, body: string): Promise<strin
 
   const live = new Set(found.docs.map((doc) => String(doc.id)))
   return ids.filter((id) => live.has(id))
+}
+
+interface ActivityInput {
+  ticket: string
+  action: NonNullable<Activity['action']>
+  comment?: string | null
+  from?: string | null
+  to?: string | null
+  actor?: string | null
+}
+
+async function writeActivity(req: PayloadRequest, data: ActivityInput): Promise<void> {
+  await req.payload.create({
+    req,
+    collection: 'activity',
+    depth: 0,
+    overrideAccess: true,
+    data,
+  })
+}
+
+async function recordCommentActivity(
+  req: PayloadRequest,
+  doc: Record<string, unknown>,
+  previousDoc: Record<string, unknown> | undefined,
+  operation: 'create' | 'update',
+): Promise<void> {
+  const ticket = toId(doc.ticket)
+  if (!ticket) return
+
+  const summary = plainSummary(typeof doc.body === 'string' ? doc.body : '', 140)
+
+  if (operation === 'create') {
+    await writeActivity(req, {
+      ticket,
+      action: toId(doc.parent) ? 'replied' : 'commented',
+      comment: String(doc.id),
+      to: summary,
+      actor: toId(doc.author) ?? (await memberForRequest(req)),
+    })
+    return
+  }
+
+  if (!previousDoc) return
+
+  const actor = await memberForRequest(req)
+
+  if (Boolean(doc.resolved) !== Boolean(previousDoc.resolved)) {
+    await writeActivity(req, {
+      ticket,
+      action: doc.resolved ? 'resolved' : 'reopened',
+      comment: String(doc.id),
+      to: summary,
+      actor: toId(doc.resolvedBy) ?? actor,
+    })
+  }
+
+  if (typeof doc.body === 'string' && doc.body !== previousDoc.body) {
+    await writeActivity(req, {
+      ticket,
+      action: 'edited',
+      comment: String(doc.id),
+      from: plainSummary(typeof previousDoc.body === 'string' ? previousDoc.body : '', 140),
+      to: summary,
+      actor: toId(doc.author) ?? actor,
+    })
+  }
+}
+
+async function recordCommentDeleted(
+  req: PayloadRequest,
+  doc: Record<string, unknown> | undefined,
+): Promise<void> {
+  const ticket = doc ? toId(doc.ticket) : null
+  if (!doc || !ticket) return
+
+  await writeActivity(req, {
+    ticket,
+    action: 'deleted',
+    from: plainSummary(typeof doc.body === 'string' ? doc.body : '', 140),
+    actor: await memberForRequest(req),
+  })
 }
 
 async function memberForRequest(req: PayloadRequest): Promise<string | null> {

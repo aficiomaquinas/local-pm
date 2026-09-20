@@ -5,6 +5,7 @@ import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
 import { TicketStatus, TicketPriority, TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
+import { diffTicket } from '@/lib/activity'
 
 export const Tickets: CollectionConfig = {
   slug: 'tickets',
@@ -66,9 +67,15 @@ export const Tickets: CollectionConfig = {
     // (This fork's request-path delete is soft — blockHardDelete below — so
     // this cascade only ever runs for the operator's terminal purge script
     // or a future explicit policy change; kept for parity.)
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        await recordActivity(req, doc, previousDoc, operation)
+      },
+    ],
     afterDelete: [
       async ({ req, id }) => {
         await deleteCommentsFor(req, id)
+        await deleteActivityFor(req, id)
       },
     ],
     // SPC-001 §6: native restore (POST /api/tickets/versions/:id) runs the
@@ -249,6 +256,61 @@ async function deleteCommentsFor(req: PayloadRequest, id: string | number): Prom
     where: { ticket: { equals: id } },
     depth: 0,
   })
+}
+
+async function deleteActivityFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.delete({
+    req,
+    collection: 'activity',
+    where: { ticket: { equals: id } },
+    depth: 0,
+    overrideAccess: true,
+  })
+}
+
+async function recordActivity(
+  req: PayloadRequest,
+  doc: Record<string, unknown>,
+  previousDoc: Record<string, unknown> | undefined,
+  operation: 'create' | 'update',
+): Promise<void> {
+  const events = diffTicket(operation === 'create' ? null : previousDoc, doc)
+  if (events.length === 0) return
+
+  const actor = await memberForRequest(req)
+
+  for (const event of events) {
+    await req.payload.create({
+      req,
+      collection: 'activity',
+      depth: 0,
+      overrideAccess: true,
+      data: {
+        ticket: doc.id as string,
+        action: event.action,
+        field: event.field,
+        from: event.from,
+        to: event.to,
+        actor,
+      },
+    })
+  }
+}
+
+async function memberForRequest(req: PayloadRequest): Promise<string | null> {
+  const userId = req.user?.id
+  if (!userId) return null
+
+  const found = await req.payload.find({
+    req,
+    collection: 'members',
+    where: { user: { equals: userId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const member = found.docs[0]
+  return member ? String(member.id) : null
 }
 
 class CycleError extends APIError {

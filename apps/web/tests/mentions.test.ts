@@ -5,8 +5,8 @@ import {
   findMentionQuery,
   mentionNames,
   mentionToken,
-  wrapSelection,
 } from '@/lib/mentions'
+import { prefixLines, wrapSelection } from '@/lib/markdown-edit'
 
 describe('mentionToken', () => {
   it('encodes a member as a token', () => {
@@ -102,5 +102,30 @@ describe('wrapSelection', () => {
   it('supports asymmetric markers for links', () => {
     const result = wrapSelection('see docs', 4, 8, '[', '](https://)')
     expect(result.text).toBe('see [docs](https://)')
+  })
+})
+
+describe('prefixLines', () => {
+  it('prefixes every line the selection touches', () => {
+    const result = prefixLines('one\ntwo', 0, 7, '- ')
+    expect(result.text).toBe('- one\n- two')
+  })
+
+  it('strips the prefix again when every line already carries it', () => {
+    const result = prefixLines('- one\n- two', 0, 11, '- ')
+    expect(result.text).toBe('one\ntwo')
+  })
+
+  it('numbers an ordered list from one', () => {
+    const result = prefixLines('one\ntwo\nthree', 0, 13, '1. ', true)
+    expect(result.text).toBe('1. one\n2. two\n3. three')
+  })
+
+  it('leaves blank lines alone', () => {
+    expect(prefixLines('one\n\ntwo', 0, 8, '> ').text).toBe('> one\n\n> two')
+  })
+
+  it('extends to the whole line when the caret sits mid-word', () => {
+    expect(prefixLines('hello there', 3, 3, '> ').text).toBe('> hello there')
   })
 })

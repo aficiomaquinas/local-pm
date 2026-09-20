@@ -79,6 +79,22 @@ describe('renderMarkdown', () => {
   it('does not mistake a mention token for a markdown link', () => {
     expect(renderMarkdown('@[Bo](member:b2)')).not.toContain('<a')
   })
+
+  it('renders an attached image', () => {
+    expect(renderMarkdown('![shot.png](/api/attachments/file/shot.png)')).toBe(
+      '<p><img src="/api/attachments/file/shot.png" alt="shot.png" loading="lazy" decoding="async"></p>',
+    )
+  })
+
+  it('renders a non-image attachment as a link, not an image', () => {
+    const html = renderMarkdown('[notes.pdf](/api/attachments/file/notes.pdf)')
+    expect(html).toContain('<a href="/api/attachments/file/notes.pdf"')
+    expect(html).not.toContain('<img')
+  })
+
+  it('refuses an image with an unsafe source', () => {
+    expect(renderMarkdown('![x](javascript:alert(1))')).not.toContain('<img')
+  })
 })
 
 describe('plainSummary', () => {
@@ -88,5 +104,9 @@ describe('plainSummary', () => {
 
   it('truncates long bodies', () => {
     expect(plainSummary('x'.repeat(200), 10)).toBe(`${'x'.repeat(9)}…`)
+  })
+
+  it('reduces an image to its alt text', () => {
+    expect(plainSummary('see ![the crash](/api/attachments/file/a.png)')).toBe('see the crash')
   })
 })
