@@ -1,0 +1,384 @@
+'use client'
+
+import { useCallback, useState } from 'react'
+import { Ban, Check, GitBranch, Plus, Tag } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import { BLOCKED_META, ticketPriorityOptions, ticketStatusOptions } from '@/lib/status'
+import { formatDateTimeRelative } from '@/lib/format'
+import { TicketPriority, TicketStatus } from '@/types/enums'
+import { useOptimisticPatch } from '@/hooks/useOptimisticPatch'
+import { useTicketDependencies } from '@/hooks/useTicketDependencies'
+import { Badge, Chip } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { Expandable } from '@/components/ui/Expandable'
+import { Field, Input } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
+import { TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import { TicketKey } from '@/components/ui/EntityMark'
+import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
+import { DependencyGraph } from '@/components/kanban/DependencyGraph'
+import { SubtaskList } from './SubtaskList'
+import type { Project, Ticket } from '@/payload-types'
+
+export function Section({
+  title,
+  icon: Icon,
+  action,
+  children,
+}: {
+  title: string
+  icon?: React.ComponentType<{ className?: string }>
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="flex min-w-0 flex-col gap-3">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className="size-4 shrink-0 text-text-muted" />}
+        <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">{title}</h3>
+        {action && <div className="ml-auto">{action}</div>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export function TicketBody({
+  ticket,
+  onUpdate,
+  columns = 2,
+}: {
+  ticket: Ticket
+  onUpdate: (next: Ticket) => void
+  columns?: 1 | 2
+}) {
+  const apply = useCallback((next: Ticket) => onUpdate(next), [onUpdate])
+  const { patch } = useOptimisticPatch<Ticket>({
+    collection: 'tickets',
+    record: ticket,
+    onApply: apply,
+  })
+
+  const [editingDescription, setEditingDescription] = useState(false)
+  const [draftDescription, setDraftDescription] = useState('')
+  const [savingDescription, setSavingDescription] = useState(false)
+  const [newLabel, setNewLabel] = useState('')
+
+  const { blockers, blocking, refresh } = useTicketDependencies(ticket)
+
+  const project: Project | null = typeof ticket.project === 'object' ? ticket.project : null
+  const team = typeof ticket.team === 'object' ? ticket.team : null
+  const teamId = typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? '')
+  const description = (ticket.description as unknown as string) || ''
+  const subtasks = ticket.subtasks ?? []
+  const labels = ticket.labels ?? []
+  const blockedByIds = blockers.map((b) => b.id)
+
+  const saveDescription = async () => {
+    setSavingDescription(true)
+    const ok = await patch(
+      { description: (draftDescription || null) as Ticket['description'] },
+      'the description',
+    )
+    setSavingDescription(false)
+    if (ok) setEditingDescription(false)
+  }
+
+  const patchBlockers = async (ids: string[]) => {
+    const ok = await patch({ blockedBy: ids } as Partial<Ticket>, 'the blockers')
+    if (ok) refresh()
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-7">
+      <Section
+        title="Description"
+        action={
+          editingDescription ? (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditingDescription(false)}
+                disabled={savingDescription}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                loading={savingDescription}
+                onClick={saveDescription}
+              >
+                Save
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setDraftDescription(description)
+                setEditingDescription(true)
+              }}
+            >
+              Edit
+            </Button>
+          )
+        }
+      >
+        {editingDescription ? (
+          <div
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                void saveDescription()
+              }
+            }}
+          >
+            <RichTextEditor
+              value={draftDescription}
+              onChange={setDraftDescription}
+              placeholder="Describe the work…"
+            />
+            <p className="mt-2 text-xs text-text-muted">⌘/Ctrl + Enter saves.</p>
+          </div>
+        ) : (
+          <Expandable lines={10}>
+            <RichTextDisplay content={description} />
+          </Expandable>
+        )}
+      </Section>
+
+      <Section title="Details">
+        <dl className={cn('grid gap-4', columns === 2 ? 'grid-cols-2 max-sm:grid-cols-1' : 'grid-cols-1')}>
+          <Field label="Status">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={ticket.status}
+                options={ticketStatusOptions()}
+                onValueChange={(next) =>
+                  patch({ status: next as TicketStatus } as Partial<Ticket>, 'the status')
+                }
+              />
+            )}
+          </Field>
+
+          <Field label="Priority">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={ticket.priority ?? TicketPriority.NO_PRIORITY}
+                options={ticketPriorityOptions()}
+                onValueChange={(next) =>
+                  patch({ priority: next as TicketPriority } as Partial<Ticket>, 'the priority')
+                }
+              />
+            )}
+          </Field>
+
+          <Field label="Team" optional>
+            {({ id }) => (
+              <TeamSelect
+                id={id}
+                value={teamId}
+                selected={team}
+                allLabel="No team"
+                aria-label="Team"
+                onChange={(next) => patch({ team: next || null } as Partial<Ticket>, 'the team')}
+              />
+            )}
+          </Field>
+
+          <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
+            {({ id, describedBy }) => (
+              <DatePicker
+                id={id}
+                aria-describedby={describedBy}
+                value={ticket.dueDate ? ticket.dueDate.slice(0, 10) : ''}
+                onChange={(next) =>
+                  patch({ dueDate: next || null } as Partial<Ticket>, 'the due date')
+                }
+              />
+            )}
+          </Field>
+        </dl>
+
+        <p className="text-xs text-text-muted">
+          Project: <span className="text-text">{project?.name ?? 'Unassigned'}</span>. Moving a
+          ticket between projects changes its key, so that lives on the edit page.
+        </p>
+      </Section>
+
+      <Section title="Labels" icon={Tag}>
+        <div className={cn('flex flex-wrap gap-2', labels.length === 0 && 'hidden')}>
+          {labels.map((label, index) => (
+            <Chip
+              key={label.id ?? index}
+              shape="tag"
+              onRemove={() =>
+                patch(
+                  { labels: labels.filter((_, i) => i !== index) } as Partial<Ticket>,
+                  'the labels',
+                )
+              }
+              removeLabel={`Remove label ${label.name}`}
+            >
+              {label.name}
+            </Chip>
+          ))}
+        </div>
+        {labels.length === 0 && <p className="text-base text-text-muted">No labels.</p>}
+
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const name = newLabel.trim()
+            if (!name) return
+            setNewLabel('')
+            void patch({ labels: [...labels, { name }] } as Partial<Ticket>, 'the labels')
+          }}
+        >
+          <Field label="New label" hideLabel className="flex-1">
+            {({ id }) => (
+              <Input
+                id={id}
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                placeholder="Add a label"
+                autoComplete="off"
+              />
+            )}
+          </Field>
+          <Button type="submit" icon={Plus} variant="secondary">
+            Add
+          </Button>
+        </form>
+      </Section>
+
+      <SubtaskList
+        subtasks={subtasks}
+        onToggle={(index) =>
+          patch(
+            {
+              subtasks: subtasks.map((s, i) =>
+                i === index ? { ...s, completed: !s.completed } : s,
+              ),
+            } as Partial<Ticket>,
+            'the subtask',
+          )
+        }
+        onDelete={(index) =>
+          patch(
+            { subtasks: subtasks.filter((_, i) => i !== index) } as Partial<Ticket>,
+            'the subtasks',
+          )
+        }
+        onAdd={(title) =>
+          patch(
+            { subtasks: [...subtasks, { title, completed: false }] } as Partial<Ticket>,
+            'the subtasks',
+          )
+        }
+      />
+
+      <Section title="Blocked by" icon={Ban}>
+        <ul className="flex flex-col gap-2">
+          {blockers.length === 0 && (
+            <li className="text-base text-text-muted">Nothing is blocking this ticket.</li>
+          )}
+          {blockers.map((blocker) => (
+            <li
+              key={blocker.id}
+              className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1.5"
+            >
+              <TicketKey value={blocker.ticketId} />
+              <span
+                className={cn(
+                  'min-w-0 flex-1 truncate text-base',
+                  blocker.status === TicketStatus.DONE
+                    ? 'text-text-muted line-through'
+                    : 'text-text',
+                )}
+                title={blocker.title}
+              >
+                {blocker.title}
+              </span>
+              {blocker.status === TicketStatus.DONE ? (
+                <Badge tone="success" icon={Check}>
+                  Done
+                </Badge>
+              ) : (
+                <Badge tone={BLOCKED_META.tone} icon={BLOCKED_META.icon}>
+                  Blocking
+                </Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                icon={Ban}
+                aria-label={`Stop ${blocker.ticketId ?? 'this ticket'} blocking this ticket`}
+                onClick={() => patchBlockers(blockedByIds.filter((id) => id !== blocker.id))}
+              />
+            </li>
+          ))}
+        </ul>
+
+        <Field label="Add a blocking ticket" optional>
+          {({ id }) => (
+            <TicketSelect
+              id={id}
+              value=""
+              selected={null}
+              aria-label="Add a blocking ticket"
+              placeholder="Search for a ticket…"
+              onChange={(next) => {
+                if (!next || next === ticket.id || blockedByIds.includes(next)) return
+                void patchBlockers([...blockedByIds, next])
+              }}
+            />
+          )}
+        </Field>
+      </Section>
+
+      {blocking.length > 0 && (
+        <Section title="Blocks" icon={Ban}>
+          <ul className="flex flex-col gap-2">
+            {blocking.map((t) => (
+              <li
+                key={t.id}
+                className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1.5"
+              >
+                <TicketKey value={t.ticketId} />
+                <span className="min-w-0 flex-1 truncate text-base text-text" title={t.title}>
+                  {t.title}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {(blockers.length > 0 || blocking.length > 0) && (
+        <Section title="Dependency graph" icon={GitBranch}>
+          <DependencyGraph ticket={ticket} blockers={blockers} blocking={blocking} />
+        </Section>
+      )}
+
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 border-t border-border-subtle pt-4 text-xs text-text-muted max-sm:grid-cols-1">
+        <div className="flex justify-between gap-2">
+          <dt>Created</dt>
+          <dd className="text-text tabular">{formatDateTimeRelative(ticket.createdAt)}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt>Updated</dt>
+          <dd className="text-text tabular">{formatDateTimeRelative(ticket.updatedAt)}</dd>
+        </div>
+      </dl>
+    </div>
+  )
+}

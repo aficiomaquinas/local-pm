@@ -3,10 +3,11 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Menu as MenuIcon, Search, X } from 'lucide-react'
+import { Menu as MenuIcon, Search } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useShortcut } from '@/lib/shortcuts'
 import { Button } from '@/components/ui/Button'
+import { Kbd } from '@/components/ui/Kbd'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { NAV_ITEMS, Sidebar } from './Sidebar'
 import { ThemeToggle } from './ThemeToggle'
@@ -26,8 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem(COLLAPSED_KEY) === '1')
-    } catch {
-    }
+    } catch {}
   }, [])
 
   const toggleCollapsed = () => {
@@ -35,8 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const next = !c
       try {
         localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0')
-      } catch {
-      }
+      } catch {}
       return next
     })
   }
@@ -109,15 +108,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
             <div className="relative h-full w-64 animate-panel-in">
               <Sidebar collapsed={false} onToggleCollapsed={() => setDrawerOpen(false)} />
-              <Button
-                variant="ghost"
-                size="md"
-                iconOnly
-                icon={X}
-                aria-label="Close navigation"
-                onClick={() => setDrawerOpen(false)}
-                className="absolute right-2 top-2"
-              />
             </div>
           </div>
         )}
@@ -161,13 +151,14 @@ function PaletteTrigger({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        'flex h-8 w-full max-w-72 items-center gap-2 rounded-sm border border-border bg-surface px-2.5',
-        'text-base text-text-muted transition-colors duration-micro hover:border-border-strong',
+        'flex h-8 w-full max-w-80 items-center gap-2 rounded-sm border border-border bg-surface px-2.5',
+        'text-base text-text-muted transition-colors duration-micro ease-standard',
+        'hover:border-border-strong hover:bg-surface-hover',
       )}
     >
       <Search className="size-4 shrink-0" aria-hidden />
       <span className="truncate">Search or jump to…</span>
-      <kbd className="ml-auto hidden shrink-0 font-sans text-xs sm:inline">⌘K</kbd>
+      <Kbd keys="mod+k" className="ml-auto max-sm:hidden" />
     </button>
   )
 }

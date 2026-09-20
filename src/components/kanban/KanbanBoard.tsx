@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   DndContext,
   DragOverlay,
@@ -27,10 +27,9 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { BoardToolbar, type BoardFilters } from './BoardToolbar'
 import { KanbanCard } from './KanbanCard'
 import { KanbanColumn } from './KanbanColumn'
-import { TicketFormDialog } from './TicketFormDialog'
 import { TicketPanel } from './TicketPanel'
 import { applyDrop, isRealMove, resultFromPreview, type DragResult } from './dragLogic'
-import type { Project, Team, Ticket } from '@/payload-types'
+import type { Ticket } from '@/payload-types'
 
 interface ColumnPaginationInfo {
   page: number
@@ -52,8 +51,7 @@ interface InitialColumnPagination {
 
 interface KanbanBoardProps {
   initialTickets: Ticket[]
-  projects: Project[]
-  teams: Team[]
+  hasProjects: boolean
   initialColumnPagination?: InitialColumnPagination[]
 }
 
@@ -106,10 +104,10 @@ function filtersToSearch(filters: BoardFilters, ticketId: string | null): string
 
 export function KanbanBoard({
   initialTickets,
-  projects,
-  teams,
+  hasProjects,
   initialColumnPagination,
 }: KanbanBoardProps) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
 
@@ -125,9 +123,6 @@ export function KanbanBoard({
   })
   const [openTicketId, setOpenTicketId] = useState<string | null>(searchParams.get('ticket'))
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null)
-  const [formStatus, setFormStatus] = useState<TicketStatus>(TicketStatus.TODO)
   const [pendingDelete, setPendingDelete] = useState<Ticket | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -165,8 +160,7 @@ export function KanbanBoard({
     try {
       const stored = localStorage.getItem(COLLAPSED_COLUMNS_KEY)
       if (stored) setCollapsedColumns(JSON.parse(stored) as TicketStatus[])
-    } catch {
-    }
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -207,6 +201,24 @@ export function KanbanBoard({
       syncUrl(filters, ticket?.id ?? null, true)
     },
     [filters, syncUrl],
+  )
+
+  const createTicket = useCallback(
+    (status: TicketStatus) => {
+      const params = new URLSearchParams({ status })
+      if (filters.projectId) params.set('project', filters.projectId)
+      params.set('returnTo', filtersToSearch(filters, null))
+      router.push(`/tickets/new?${params}`)
+    },
+    [filters, router],
+  )
+
+  const editTicket = useCallback(
+    (ticket: Ticket) => {
+      const params = new URLSearchParams({ returnTo: filtersToSearch(filters, ticket.id) })
+      router.push(`/tickets/${ticket.id}/edit?${params}`)
+    },
+    [filters, router],
   )
 
   useEffect(() => {
@@ -278,7 +290,6 @@ export function KanbanBoard({
   }, [filters.projectId, filters.teamId, filters.query, toast])
 
   const sensors = useSensors(
-
     useSensor(MousePointerSensor, { activationConstraint: { distance: 8 } }),
 
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -476,8 +487,7 @@ export function KanbanBoard({
       const next = prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
       try {
         localStorage.setItem(COLLAPSED_COLUMNS_KEY, JSON.stringify(next))
-      } catch {
-      }
+      } catch {}
       return next
     })
   }
@@ -556,16 +566,10 @@ export function KanbanBoard({
   return (
     <div className="flex h-full flex-col">
       <BoardToolbar
-        projects={projects}
-        teams={teams}
         filters={filters}
         onChange={updateFilters}
         resultCount={totalLoaded}
-        onCreateTicket={() => {
-          setEditingTicket(null)
-          setFormStatus(TicketStatus.TODO)
-          setFormOpen(true)
-        }}
+        onCreateTicket={() => createTicket(TicketStatus.TODO)}
       />
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -573,7 +577,7 @@ export function KanbanBoard({
       </p>
 
       <ErrorBoundary region="The board">
-        {projects.length === 0 ? (
+        {!hasProjects ? (
           <EmptyState
             kind="no-data"
             title="No projects yet"
@@ -612,17 +616,10 @@ export function KanbanBoard({
                   tickets={ticketsByStatus(status)}
                   collapsed={collapsedColumns.includes(status)}
                   onToggleCollapsed={() => toggleColumn(status)}
-                  onAddCard={() => {
-                    setEditingTicket(null)
-                    setFormStatus(status)
-                    setFormOpen(true)
-                  }}
+                  onAddCard={() => createTicket(status)}
                   onOpenTicket={openTicket}
                   ticketHref={(ticket) => filtersToSearch(filters, ticket.id)}
-                  onEditTicket={(ticket) => {
-                    setEditingTicket(ticket)
-                    setFormOpen(true)
-                  }}
+                  onEditTicket={editTicket}
                   onDeleteTicket={setPendingDelete}
                   onMoveToColumn={moveToColumn}
                   onReorder={reorder}
@@ -650,50 +647,9 @@ export function KanbanBoard({
         )}
       </ErrorBoundary>
 
-      <TicketFormDialog
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false)
-          setEditingTicket(null)
-        }}
-        ticket={editingTicket}
-        projects={projects}
-        teams={teams}
-        allTickets={tickets}
-        defaultProjectId={filters.projectId}
-        defaultStatus={formStatus}
-        onSaved={(saved, created) => {
-          setTickets((prev) =>
-            created ? [...prev, saved] : prev.map((t) => (t.id === saved.id ? saved : t)),
-          )
-          if (created) {
-            const status = saved.status as TicketStatus
-            setColumnPagination((prev) => ({
-              ...prev,
-              [status]: {
-                ...prev[status],
-                totalDocs: prev[status].totalDocs + 1,
-                loadedCount: prev[status].loadedCount + 1,
-              },
-            }))
-          }
-          setFormOpen(false)
-          setEditingTicket(null)
-
-          toast({
-            title: created ? `${saved.ticketId ?? 'Ticket'} created` : 'Changes saved',
-            tone: 'success',
-            action: created ? { label: 'Open', onClick: () => openTicket(saved) } : undefined,
-          })
-        }}
-      />
-
       {openedTicket && (
         <TicketPanel
           ticket={openedTicket}
-          projects={projects}
-          teams={teams}
-          allTickets={tickets}
           onClose={() => openTicket(null)}
           onUpdate={(next) => setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)))}
           onDelete={setPendingDelete}

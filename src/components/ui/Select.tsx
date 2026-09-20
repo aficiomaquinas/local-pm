@@ -2,17 +2,15 @@
 
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Check, ChevronDown, ChevronUp } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { TONE_TEXT, type Tone } from '@/lib/status'
+import { TONE_TEXT, type StateIcon, type Tone } from '@/lib/status'
 
 const EMPTY = '__empty__'
 
 export interface SelectOption {
   value: string
   label: string
-  icon?: LucideIcon
-  glyph?: string
+  icon?: StateIcon
   tone?: Tone
   swatch?: string | null
   hint?: string
@@ -40,17 +38,6 @@ function OptionBody({ option }: { option: SelectOption }) {
   const Icon = option.icon
   return (
     <span className="flex min-w-0 items-center gap-2">
-      {option.glyph !== undefined && (
-        <span
-          aria-hidden
-          className={cn(
-            'inline-block w-7 shrink-0 text-right text-2xs leading-none tracking-[-0.08em]',
-            option.tone ? TONE_TEXT[option.tone] : 'text-text-muted',
-          )}
-        >
-          {option.glyph}
-        </span>
-      )}
       {option.swatch && (
         <span
           aria-hidden

@@ -190,7 +190,8 @@ export function SidePanel({
           className={cn(
             'fixed right-0 top-0 z-50 flex h-dvh w-full flex-col overflow-hidden',
             'border-l border-border-subtle bg-overlay shadow-e3 animate-panel-in',
-            'md:max-w-[min(640px,50vw)] md:min-w-[480px]',
+
+            'md:w-1/2 md:min-w-[520px]',
             'max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:h-[92vh]',
             'max-md:rounded-t-xl max-md:border-l-0 max-md:border-t',
             className,

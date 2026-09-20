@@ -97,22 +97,22 @@ test('the create form reports errors inline and in a summary, and never blocks s
   await page.goto('/board')
   await page.getByRole('button', { name: /New ticket/ }).click()
 
-  const dialog = page.getByRole('dialog', { name: 'New ticket' })
-  const submit = dialog.getByRole('button', { name: 'Create ticket' })
+  await expect(page).toHaveURL(/\/tickets\/new/)
 
+  // Scoped to the form: Next's route announcer is a page-level role="alert".
+  const form = page.locator('#ticket-form')
+  const submit = page.getByRole('button', { name: 'Create ticket' })
   await expect(submit).toBeEnabled()
-
-  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await expect(form.getByRole('alert')).toHaveCount(0)
 
   await submit.click()
 
-  const summary = dialog.getByRole('alert').filter({ hasText: 'There is a problem' })
+  const summary = form.getByRole('alert').filter({ hasText: 'There is a problem' })
   await expect(summary).toBeVisible()
-
   await expect(summary).toBeFocused()
 
   await expect(summary).toContainText('Enter a title for this ticket.')
-  await expect(dialog.locator('#ticket-form-title')).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.locator('#ticket-form-title')).toHaveAttribute('aria-invalid', 'true')
 })
 
 test('skip to main content is the first tabbable element', async ({ page }) => {
@@ -148,18 +148,14 @@ test('the project filter listbox is keyboard-operable and writes to the URL', as
 })
 
 test('the due date accepts both typing and a calendar pick', async ({ page }) => {
-  await page.goto('/board')
-  await page.getByRole('button', { name: /New ticket/ }).click()
+  await page.goto('/tickets/new')
 
-  const dialog = page.getByRole('dialog', { name: 'New ticket' })
-  await dialog.getByRole('button', { name: /Due date, labels/ }).click()
-
-  const input = dialog.getByRole('textbox', { name: 'Due date' })
+  const input = page.getByRole('textbox', { name: 'Due date' })
   await input.fill('2030-04-17')
   await input.blur()
   await expect(input).toHaveValue('2030-04-17')
 
-  await dialog.getByRole('button', { name: 'Choose a date from the calendar' }).click()
+  await page.getByRole('button', { name: 'Choose a date from the calendar' }).click()
   const today = page.getByRole('button', { name: 'Today' })
   await expect(today).toBeVisible()
   await today.click()
@@ -168,6 +164,6 @@ test('the due date accepts both typing and a calendar pick', async ({ page }) =>
   const iso = `${expected.getFullYear()}-${`${expected.getMonth() + 1}`.padStart(2, '0')}-${`${expected.getDate()}`.padStart(2, '0')}`
   await expect(input).toHaveValue(iso)
 
-  await dialog.getByRole('button', { name: 'Clear the date' }).click()
+  await page.getByRole('button', { name: 'Clear the date' }).click()
   await expect(input).toHaveValue('')
 })

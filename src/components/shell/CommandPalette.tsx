@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CornerDownLeft, FolderKanban, LayoutDashboard, Search, Ticket, Users } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatKeys, useShortcut, useShortcutRegistry } from '@/lib/shortcuts'
+import { useShortcut, useShortcutRegistry } from '@/lib/shortcuts'
 import { Dialog } from '@/components/ui/Dialog'
+import { Kbd } from '@/components/ui/Kbd'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 const DEBOUNCE_MS = 300
@@ -163,7 +164,7 @@ export function CommandPalette({
             sublabel: t.ticketId ?? undefined,
             icon: Ticket,
             group: 'Tickets',
-            run: () => router.push(`/board?ticket=${t.id}`),
+            run: () => router.push(`/tickets/${t.id}`),
           })),
           ...(projects.docs ?? []).map((p: SearchDoc) => ({
             id: `project.${p.id}`,
@@ -305,11 +306,7 @@ export function CommandPalette({
                     <Highlight text={row.label} query={query.trim()} />
                   </span>
                   {row.sublabel && <span className="shrink-0 text-xs tabular">{row.sublabel}</span>}
-                  {row.shortcut && (
-                    <kbd className="shrink-0 font-sans text-xs text-text-muted">
-                      {formatKeys(row.shortcut)}
-                    </kbd>
-                  )}
+                  {row.shortcut && <Kbd keys={row.shortcut} />}
                 </div>
               </div>
             )

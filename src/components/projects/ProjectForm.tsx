@@ -1,17 +1,20 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Check } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Check } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { PROJECT_COLORS, PROJECT_ICONS, ProjectStatus } from '@/types/enums'
 import { projectStatusOptions } from '@/lib/status'
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { Dialog } from '@/components/ui/Dialog'
 import { ErrorSummary, Field, Input } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
+import { useToast } from '@/components/ui/Toast'
 import type { Project } from '@/payload-types'
 
 interface FormState {
@@ -43,46 +46,45 @@ function validateField(name: FieldName, form: FormState): string | null {
   return null
 }
 
-export function ProjectFormDialog({
-  open,
-  onClose,
+export function ProjectForm({
   project,
-  onSaved,
+  returnTo,
 }: {
-  open: boolean
-  onClose: () => void
   project: Project | null
-  onSaved: (project: Project, created: boolean) => void
+  returnTo?: string
 }) {
-  const [form, setForm] = useState<FormState>(EMPTY)
-  const [initial, setInitial] = useState<FormState>(EMPTY)
+  const router = useRouter()
+  const { toast } = useToast()
+
+  const initialState: FormState = project
+    ? {
+        name: project.name,
+        prefix: project.prefix,
+        description: (project.description as unknown as string) || '',
+        status: project.status as ProjectStatus,
+        icon: (project.icon as string) || 'folder',
+        color: (project.color as string) || PROJECT_COLORS[0],
+      }
+    : EMPTY
+
+  const [form, setForm] = useState<FormState>(initialState)
+  const [initial] = useState<FormState>(initialState)
   const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({})
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+
   const summaryRef = useRef<HTMLDivElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  const dirty = !submitting && JSON.stringify(form) !== JSON.stringify(initial)
+  useUnsavedChangesGuard(dirty)
 
   useEffect(() => {
-    if (!open) return
-    const next: FormState = project
-      ? {
-          name: project.name,
-          prefix: project.prefix,
-          description: (project.description as unknown as string) || '',
-          status: project.status as ProjectStatus,
-          icon: (project.icon as string) || 'folder',
-          color: (project.color as string) || PROJECT_COLORS[0],
-        }
-      : EMPTY
-    setForm(next)
-    setInitial(next)
-    setTouched({})
-    setSubmitAttempted(false)
-    setFormError(null)
-  }, [open, project])
+    if (!project) nameRef.current?.focus()
+  }, [project])
 
-  const dirty = JSON.stringify(form) !== JSON.stringify(initial)
   const errors = (['name', 'prefix'] as FieldName[])
     .map((field) => ({ field, message: validateField(field, form) }))
     .filter((e): e is { field: FieldName; message: string } => e.message !== null)
@@ -93,8 +95,15 @@ export function ProjectFormDialog({
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const cancelHref = returnTo ?? (project ? `/projects/${project.id}` : '/projects')
+
+  const leave = (href: string) => {
+    router.push(href)
+    router.refresh()
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setSubmitAttempted(true)
     if (errors.length > 0) {
       requestAnimationFrame(() => summaryRef.current?.focus())
@@ -120,43 +129,59 @@ export function ProjectFormDialog({
         const payload = await response.json().catch(() => null)
         throw new Error(payload?.errors?.[0]?.message || `Saving failed (${response.status}).`)
       }
-      const saved = await response.json()
-      onSaved((saved.doc ?? saved) as Project, !project)
+      const saved = ((await response.json()).doc ?? {}) as Project
+      toast({
+        tone: 'success',
+        title: project ? 'Changes saved' : `${saved.name ?? 'Project'} created`,
+      })
+      leave(returnTo ?? `/projects/${saved.id ?? project?.id}`)
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Something went wrong saving this project.')
-      requestAnimationFrame(() => summaryRef.current?.focus())
-    } finally {
       setSubmitting(false)
+      setFormError(
+        error instanceof Error ? error.message : 'Something went wrong saving this project.',
+      )
+      requestAnimationFrame(() => summaryRef.current?.focus())
     }
   }
 
   const Icon = projectIcon(form.icon)
 
   return (
-    <>
-      <Dialog
-        open={open}
-        onClose={onClose}
-        title={project ? 'Edit project' : 'New project'}
-        size="md"
-        dismissible={!dirty && !submitting}
-        onDismissBlocked={() => (dirty ? setConfirmDiscard(true) : onClose())}
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              onClick={() => (dirty ? setConfirmDiscard(true) : onClose())}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" form="project-form" variant="primary" loading={submitting}>
-              {project ? 'Save changes' : 'Create project'}
-            </Button>
-          </>
-        }
-      >
-        <form id="project-form" noValidate onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <div className="h-full overflow-y-auto">
+      <form id="project-form" noValidate onSubmit={handleSubmit}>
+        <header className="sticky top-0 z-20 border-b border-border-subtle bg-bg">
+          <div className="mx-auto flex max-w-[960px] flex-wrap items-center gap-3 px-6 py-4 max-md:px-4">
+            <div className="min-w-0 flex-1">
+              <nav aria-label="Breadcrumb">
+                <Link
+                  href={cancelHref}
+                  className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-muted transition-colors duration-micro hover:text-text"
+                >
+                  <ArrowLeft className="size-3.5" aria-hidden />
+                  {project ? project.name : 'Projects'}
+                </Link>
+              </nav>
+              <h1 className="mt-1 text-xl font-semibold text-text">
+                {project ? 'Edit project' : 'New project'}
+              </h1>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                disabled={submitting}
+                onClick={() => (dirty ? setConfirmDiscard(true) : leave(cancelHref))}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" form="project-form" variant="primary" loading={submitting}>
+                {project ? 'Save changes' : 'Create project'}
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <div className="mx-auto flex max-w-[960px] flex-col gap-6 px-6 py-6 max-md:px-4">
           {(submitAttempted && errors.length > 0) || formError ? (
             <ErrorSummary
               ref={summaryRef}
@@ -172,7 +197,7 @@ export function ProjectFormDialog({
             />
           ) : null}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface px-4 py-3">
             <EntityMark icon={Icon} color={form.color} size="lg" />
             <p className="text-base text-text-muted">
               Tickets in this project will be numbered{' '}
@@ -184,6 +209,7 @@ export function ProjectFormDialog({
             <Field label="Name" required error={errorFor('name')}>
               {({ describedBy, invalid }) => (
                 <Input
+                  ref={nameRef}
                   id="project-form-name"
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
@@ -209,7 +235,9 @@ export function ProjectFormDialog({
                   onChange={(e) =>
                     set('prefix', e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6))
                   }
-                  onBlur={(e) => e.target.value.trim() && setTouched((t) => ({ ...t, prefix: true }))}
+                  onBlur={(e) =>
+                    e.target.value.trim() && setTouched((t) => ({ ...t, prefix: true }))
+                  }
                   aria-invalid={invalid || undefined}
                   aria-describedby={describedBy}
                   aria-required
@@ -240,7 +268,7 @@ export function ProjectFormDialog({
             />
           </div>
 
-          <fieldset className="flex flex-col gap-2">
+          <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
             <legend className="text-xs font-medium text-text-muted">Icon</legend>
             <div className="flex flex-wrap gap-1">
               {PROJECT_ICONS.map((name) => {
@@ -251,10 +279,11 @@ export function ProjectFormDialog({
                     key={name}
                     title={name}
                     className={cn(
-                      'flex size-8 cursor-pointer items-center justify-center rounded-sm border',
+                      'flex size-9 cursor-pointer items-center justify-center rounded-sm border',
+                      'transition-colors duration-micro ease-standard',
                       selected
                         ? 'border-accent bg-accent-subtle text-accent-text'
-                        : 'border-transparent text-text-muted hover:bg-surface-hover',
+                        : 'border-transparent text-text-muted hover:bg-surface-hover hover:text-text',
                     )}
                   >
                     <input
@@ -265,7 +294,7 @@ export function ProjectFormDialog({
                       onChange={() => set('icon', name)}
                       className="sr-only"
                     />
-                    <Option className="size-4" aria-hidden />
+                    <Option className="size-4.5" aria-hidden />
                     <span className="sr-only">{name}</span>
                   </label>
                 )
@@ -273,17 +302,18 @@ export function ProjectFormDialog({
             </div>
           </fieldset>
 
-          <fieldset className="flex flex-col gap-2">
+          <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
             <legend className="text-xs font-medium text-text-muted">Colour</legend>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               {PROJECT_COLORS.map((color) => {
                 const selected = form.color === color
                 return (
                   <label
                     key={color}
                     className={cn(
-                      'flex size-7 cursor-pointer items-center justify-center rounded-full border-2',
-                      selected ? 'border-text' : 'border-transparent',
+                      'flex size-8 cursor-pointer items-center justify-center rounded-full border-2',
+                      'transition-colors duration-micro ease-standard',
+                      selected ? 'border-text' : 'border-transparent hover:border-border-strong',
                     )}
                   >
                     <input
@@ -295,11 +325,10 @@ export function ProjectFormDialog({
                       className="sr-only"
                     />
                     <span
-                      className="flex size-5 items-center justify-center rounded-full"
+                      className="flex size-6 items-center justify-center rounded-full"
                       style={{ backgroundColor: color }}
                     >
-
-                      {selected && <Check className="size-3 text-white" aria-hidden />}
+                      {selected && <Check className="size-3.5 text-white" aria-hidden />}
                     </span>
                     <span className="sr-only">{color}</span>
                   </label>
@@ -307,21 +336,21 @@ export function ProjectFormDialog({
               })}
             </div>
           </fieldset>
-        </form>
-      </Dialog>
+        </div>
+      </form>
 
       <ConfirmDialog
         open={confirmDiscard}
         onClose={() => setConfirmDiscard(false)}
         onConfirm={() => {
           setConfirmDiscard(false)
-          onClose()
+          leave(cancelHref)
         }}
         title="Discard your changes?"
-        message="This project has unsaved edits. Closing now loses them."
+        message="This project has unsaved edits. Leaving now loses them."
         confirmLabel="Discard"
         cancelLabel="Keep editing"
       />
-    </>
+    </div>
   )
 }

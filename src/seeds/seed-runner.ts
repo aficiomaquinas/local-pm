@@ -116,7 +116,6 @@ const SEED_TEAMS: SeedTeam[] = [
 ]
 
 const SEED_TICKETS: SeedTicket[] = [
-  // Website Redesign (WEB)
   {
     title: 'Finalize new brand guidelines',
     status: TicketStatus.DONE,
@@ -153,7 +152,6 @@ const SEED_TICKETS: SeedTicket[] = [
     blockedByTitles: ['Design homepage wireframes'],
   },
 
-  // Mobile App v2 (APP)
   {
     title: 'Define API contract for Auth',
     status: TicketStatus.DONE,
@@ -189,7 +187,6 @@ const SEED_TICKETS: SeedTicket[] = [
     blockedByTitles: ['Implement OAuth logic'],
   },
 
-  // Marketing (MKT)
   {
     title: 'Identify target audience for Q1',
     status: TicketStatus.DONE,
@@ -217,7 +214,6 @@ const SEED_TICKETS: SeedTicket[] = [
     blockedByTitles: ['Create social media assets'],
   },
 
-  // DevOps (OPS)
   {
     title: 'Migrate DB to new cluster',
     status: TicketStatus.IN_PROGRESS,
@@ -250,13 +246,11 @@ async function seed() {
 
   const payload = await getPayload({ config })
 
-  // Clear existing data
   console.log('Clearing existing data...')
   await payload.delete({ collection: 'tickets', where: {} })
   await payload.delete({ collection: 'projects', where: {} })
   await payload.delete({ collection: 'teams', where: {} })
 
-  // Create teams
   console.log('Creating teams...')
   const teamMap = new Map<string, string>()
   for (const team of SEED_TEAMS) {
@@ -267,7 +261,6 @@ async function seed() {
     teamMap.set(team.name, created.id)
   }
 
-  // Create projects
   console.log('Creating projects...')
   const projectMap = new Map<string, string>()
   for (const project of SEED_PROJECTS) {
@@ -278,7 +271,6 @@ async function seed() {
     projectMap.set(project.prefix, created.id)
   }
 
-  // Create tickets (first pass)
   console.log('Creating tickets (first pass)...')
   const ticketMap = new Map<string, string>()
 
@@ -303,12 +295,9 @@ async function seed() {
       },
     })
 
-    // Store in map so we can reference for blockedBy
-    // Using title as key (assume unique titles in seed data for simplicity)
     ticketMap.set(ticket.title, created.id)
   }
 
-  // Second pass: link dependencies
   console.log('Linking dependencies...')
   for (const ticket of SEED_TICKETS) {
     if (ticket.blockedByTitles && ticket.blockedByTitles.length > 0) {

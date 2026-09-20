@@ -1,15 +1,15 @@
 'use client'
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, type LucideIcon } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatKeys } from '@/lib/shortcuts'
-import { TONE_TEXT, type Tone } from '@/lib/status'
+import { Kbd } from './Kbd'
+import { TONE_TEXT, type StateIcon, type Tone } from '@/lib/status'
 
 export interface MenuItem {
   id: string
   label: string
-  icon?: LucideIcon
+  icon?: StateIcon
   tone?: Tone
   shortcut?: string
   destructive?: boolean
@@ -89,11 +89,7 @@ export function Menu({ items, trigger, label, align = 'end' }: MenuProps) {
                     />
                   )}
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.shortcut && (
-                    <kbd className="shrink-0 font-sans text-xs text-text-muted tabular">
-                      {formatKeys(item.shortcut)}
-                    </kbd>
-                  )}
+                  {item.shortcut && <Kbd keys={item.shortcut} />}
                 </DropdownMenu.Item>
               </div>
             )

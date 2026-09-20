@@ -1,14 +1,12 @@
 'use client'
 
-import { X, type LucideIcon } from 'lucide-react'
+import { X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { TONE_CHIP, type Tone } from '@/lib/status'
+import { TONE_CHIP, type StateIcon, type Tone } from '@/lib/status'
 
 export interface BadgeProps {
   tone?: Tone
-  icon?: LucideIcon
-
-  glyph?: string
+  icon?: StateIcon
   children: React.ReactNode
 
   maxWidth?: string
@@ -16,7 +14,7 @@ export interface BadgeProps {
   className?: string
 }
 
-export function Badge({ tone = 'neutral', icon: Icon, glyph, children, maxWidth, title, className }: BadgeProps) {
+export function Badge({ tone = 'neutral', icon: Icon, children, maxWidth, title, className }: BadgeProps) {
   return (
     <span
       title={title}
@@ -28,7 +26,6 @@ export function Badge({ tone = 'neutral', icon: Icon, glyph, children, maxWidth,
         className,
       )}
     >
-      {glyph && <span aria-hidden className="tracking-tighter">{glyph}</span>}
       {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
       <span className="truncate">{children}</span>
     </span>
@@ -37,9 +34,8 @@ export function Badge({ tone = 'neutral', icon: Icon, glyph, children, maxWidth,
 
 export interface ChipProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   tone?: Tone
-  icon?: LucideIcon
+  icon?: StateIcon
   children: React.ReactNode
-
   onRemove?: () => void
   removeLabel?: string
 
@@ -91,9 +87,9 @@ export function Chip({
           type="button"
           onClick={onRemove}
           aria-label={removeLabel ?? `Remove ${typeof children === 'string' ? children : 'item'}`}
-          className="relative -mr-1 inline-flex size-4 shrink-0 items-center justify-center rounded-full hover:bg-surface-active after:absolute after:size-11 after:content-[''] can-hover:after:hidden"
+          className="relative -mr-1 inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors duration-micro hover:bg-surface-active after:absolute after:size-11 after:content-[''] can-hover:after:hidden"
         >
-          <X className="size-3" aria-hidden />
+          <X className="size-3.5" aria-hidden />
         </button>
       </span>
     )
