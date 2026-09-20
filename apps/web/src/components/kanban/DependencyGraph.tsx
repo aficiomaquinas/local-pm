@@ -1,356 +1,161 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { ArrowRight, CheckCircle2, Circle, Ban, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { useMemo } from 'react'
+import { TicketStatus } from '@/types/enums'
 import type { Ticket } from '@/payload-types'
-
-interface DependencyGraphProps {
-  ticket: Ticket
-  allTickets: Ticket[]
-  onTicketClick?: (ticket: Ticket) => void
-}
 
 interface GraphNode {
   ticket: Ticket
   x: number
   y: number
-  level: number
-  type: 'blocker' | 'current' | 'blocked'
+  kind: 'blocker' | 'current' | 'blocked'
 }
 
-interface GraphEdge {
-  from: GraphNode
-  to: GraphNode
-}
+const NODE_W = 176
+const NODE_H = 56
+const GAP_X = 20
+const GAP_Y = 72
+const PAD = 16
 
-export function DependencyGraph({ ticket, allTickets, onTicketClick }: DependencyGraphProps) {
-  const [zoom, setZoom] = useState(1)
+export function DependencyGraph({
+  ticket,
+  blockers,
+  blocking,
+}: {
+  ticket: Ticket
+  blockers: Ticket[]
+  blocking: Ticket[]
+}) {
+  const { nodes, edges, width, height } = useMemo(() => {
+    const blocked = blocking
 
-  // Build the dependency graph
-  const { nodes, edges, hasGraph } = useMemo(() => {
-    const nodeMap = new Map<string, GraphNode>()
-    const edges: GraphEdge[] = []
+    const rowWidth = (count: number) => Math.max(count, 1) * (NODE_W + GAP_X) - GAP_X
+    const span = Math.max(rowWidth(blockers.length), rowWidth(blocked.length), NODE_W)
+    const startX = (count: number) => (span - rowWidth(count)) / 2
 
-    // Get blocking tickets (blockers of current ticket)
-    const blockerIds = (ticket.blockedBy || []).map(t => typeof t === 'string' ? t : t.id)
-    const blockers = blockerIds
-      .map(id => allTickets.find(t => t.id === id))
-      .filter((t): t is Ticket => t !== undefined)
-
-    // Get blocked tickets (tickets that are blocked by current ticket)
-    const blockedTickets = allTickets.filter(t => {
-      const blockedByIds = (t.blockedBy || []).map(b => typeof b === 'string' ? b : b.id)
-      return blockedByIds.includes(ticket.id)
-    })
-
-    // No graph if no dependencies
-    if (blockers.length === 0 && blockedTickets.length === 0) {
-      return { nodes: [], edges: [], hasGraph: false }
+    const rows: GraphNode[][] = []
+    if (blockers.length) {
+      rows.push(
+        blockers.map((t, i) => ({
+          ticket: t,
+          x: startX(blockers.length) + i * (NODE_W + GAP_X),
+          y: 0,
+          kind: 'blocker' as const,
+        })),
+      )
+    }
+    const currentY = rows.length * (NODE_H + GAP_Y)
+    rows.push([{ ticket, x: (span - NODE_W) / 2, y: currentY, kind: 'current' as const }])
+    if (blocked.length) {
+      rows.push(
+        blocked.map((t, i) => ({
+          ticket: t,
+          x: startX(blocked.length) + i * (NODE_W + GAP_X),
+          y: currentY + NODE_H + GAP_Y,
+          kind: 'blocked' as const,
+        })),
+      )
     }
 
-    // Layout constants
-    const nodeWidth = 180
-    const nodeHeight = 60
-    const levelGap = 100
-    const nodeGap = 20
-
-    // Add blocker nodes (level 0)
-    blockers.forEach((blocker, i) => {
-      const node: GraphNode = {
-        ticket: blocker,
-        x: i * (nodeWidth + nodeGap),
-        y: 0,
-        level: 0,
-        type: 'blocker'
-      }
-      nodeMap.set(blocker.id, node)
-    })
-
-    // Add current ticket node (level 1)
-    const blockersTotalWidth = blockers.length * (nodeWidth + nodeGap) - nodeGap
-    const blockedTotalWidth = blockedTickets.length * (nodeWidth + nodeGap) - nodeGap
-    const maxWidth = Math.max(blockersTotalWidth, blockedTotalWidth, nodeWidth)
-
-    const currentNode: GraphNode = {
-      ticket,
-      x: (maxWidth - nodeWidth) / 2,
-      y: blockers.length > 0 ? nodeHeight + levelGap : 0,
-      level: 1,
-      type: 'current'
-    }
-    nodeMap.set(ticket.id, currentNode)
-
-    // Add blocked nodes (level 2)
-    const blockedStartX = (maxWidth - blockedTotalWidth) / 2
-    blockedTickets.forEach((blocked, i) => {
-      const node: GraphNode = {
-        ticket: blocked,
-        x: blockedStartX + i * (nodeWidth + nodeGap),
-        y: currentNode.y + nodeHeight + levelGap,
-        level: 2,
-        type: 'blocked'
-      }
-      nodeMap.set(blocked.id, node)
-    })
-
-    // Center blocker nodes
-    if (blockers.length > 0) {
-      const blockerStartX = (maxWidth - blockersTotalWidth) / 2
-      blockers.forEach((blocker, i) => {
-        const node = nodeMap.get(blocker.id)!
-        node.x = blockerStartX + i * (nodeWidth + nodeGap)
-      })
-    }
-
-    // Create edges from blockers to current
-    blockers.forEach(blocker => {
-      const fromNode = nodeMap.get(blocker.id)!
-      edges.push({ from: fromNode, to: currentNode })
-    })
-
-    // Create edges from current to blocked
-    blockedTickets.forEach(blocked => {
-      const toNode = nodeMap.get(blocked.id)!
-      edges.push({ from: currentNode, to: toNode })
-    })
+    const flat = rows.flat()
+    const current = flat.find((n) => n.kind === 'current')!
+    const links = [
+      ...flat.filter((n) => n.kind === 'blocker').map((n) => ({ from: n, to: current })),
+      ...flat.filter((n) => n.kind === 'blocked').map((n) => ({ from: current, to: n })),
+    ]
 
     return {
-      nodes: Array.from(nodeMap.values()),
-      edges,
-      hasGraph: true
+      nodes: flat,
+      edges: links,
+      width: span + PAD * 2,
+      height: (rows.length - 1) * (NODE_H + GAP_Y) + NODE_H + PAD * 2,
     }
-  }, [ticket, allTickets])
+  }, [ticket, blockers, blocking])
 
-  if (!hasGraph) {
+  if (edges.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground bg-secondary/10 rounded-xl border border-border/40 border-dashed">
-        <Circle className="w-10 h-10 mb-3 opacity-20" />
-        <p className="text-sm font-medium">No dependencies for this ticket</p>
-      </div>
+      <p className="rounded-md border border-dashed border-border-subtle px-3 py-6 text-center text-base text-text-muted">
+        This ticket has no dependencies.
+      </p>
     )
   }
 
-  // Calculate SVG dimensions
-  const padding = 40
-  const nodeWidth = 180
-  const nodeHeight = 60
-  const maxX = Math.max(...nodes.map(n => n.x)) + nodeWidth + padding * 2
-  const maxY = Math.max(...nodes.map(n => n.y)) + nodeHeight + padding * 2
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'DONE': return { bg: '#22c55e', text: '#dcfce7', border: '#16a34a' }
-      case 'IN_PROGRESS': return { bg: '#6366f1', text: '#e0e7ff', border: '#4f46e5' }
-      default: return { bg: '#71717a', text: '#e4e4e7', border: '#52525b' }
-    }
-  }
-
-  const getNodeBorderColor = (node: GraphNode) => {
-    if (node.type === 'current') return '#6366f1' // Primary
-    if (node.ticket.status === 'DONE') return '#22c55e' // Success
-    return '#f59e0b' // Warning/Amber
-  }
+  const strokeFor = (node: GraphNode) =>
+    node.kind === 'current'
+      ? 'var(--color-accent)'
+      : node.ticket.status === TicketStatus.DONE
+        ? 'var(--color-success)'
+        : 'var(--color-warning)'
 
   return (
-    <div className="relative group">
-      {/* Zoom controls */}
-      <div className="absolute top-3 right-3 flex items-center gap-1 z-10 bg-card border border-border/50 rounded-lg p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={() => setZoom(z => Math.max(0.5, z - 0.1))}
-          className="p-1.5 hover:bg-secondary rounded-md transition-colors text-muted-foreground hover:text-foreground"
-          title="Zoom out"
-        >
-          <ZoomOut className="w-4 h-4" />
-        </button>
-        <span className="text-xs font-medium text-muted-foreground px-1 min-w-[32px] text-center">{Math.round(zoom * 100)}%</span>
-        <button
-          onClick={() => setZoom(z => Math.min(1.5, z + 0.1))}
-          className="p-1.5 hover:bg-secondary rounded-md transition-colors text-muted-foreground hover:text-foreground"
-          title="Zoom in"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-      </div>
+    <div className="overflow-x-auto rounded-md border border-border-subtle bg-bg-subtle p-2">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width={width}
+        height={height}
+        role="img"
+        aria-label={`Dependency graph for ${ticket.ticketId ?? ticket.title}: ${
+          edges.length
+        } relationship${edges.length === 1 ? '' : 's'}.`}
+        className="max-w-none"
+      >
+        <defs>
+          <marker id="dep-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--color-border-strong)" />
+          </marker>
+        </defs>
 
-      {/* Legend */}
-      <div className="absolute top-3 left-3 flex items-center gap-4 z-10 text-xs font-medium text-muted-foreground bg-card/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border/30">
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-amber-500" />
-          <span>Blocking</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-primary" />
-          <span>Current</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>Done</span>
-        </div>
-      </div>
+        {edges.map((edge, i) => {
+          const fromX = edge.from.x + PAD + NODE_W / 2
+          const fromY = edge.from.y + PAD + NODE_H
+          const toX = edge.to.x + PAD + NODE_W / 2
+          const toY = edge.to.y + PAD
+          const midY = (fromY + toY) / 2
+          const done = edge.from.ticket.status === TicketStatus.DONE
+          return (
+            <path
+              key={i}
+              d={`M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY - 8}`}
+              fill="none"
+              stroke="var(--color-border-strong)"
+              strokeWidth={2}
 
-      {/* Graph */}
-      <div className="overflow-auto max-h-[400px] mt-2 bg-secondary/10 rounded-xl border border-border/40 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-        <svg
-          width={maxX * zoom}
-          height={maxY * zoom}
-          viewBox={`0 0 ${maxX} ${maxY}`}
-          className="min-w-full"
-        >
-          <defs>
-            {/* Arrow marker */}
-            <marker
-              id="arrowhead"
-              markerWidth="10"
-              markerHeight="7"
-              refX="9"
-              refY="3.5"
-              orient="auto"
-            >
-              <polygon
-                points="0 0, 10 3.5, 0 7"
-                fill="#71717a"
-              />
-            </marker>
-            <marker
-              id="arrowhead-green"
-              markerWidth="10"
-              markerHeight="7"
-              refX="9"
-              refY="3.5"
-              orient="auto"
-            >
-              <polygon
-                points="0 0, 10 3.5, 0 7"
-                fill="#22c55e"
-              />
-            </marker>
-          </defs>
+              strokeDasharray={done ? undefined : '5 4'}
+              markerEnd="url(#dep-arrow)"
+            />
+          )
+        })}
 
-          {/* Edges */}
-          {edges.map((edge, i) => {
-            const fromX = edge.from.x + padding + nodeWidth / 2
-            const fromY = edge.from.y + padding + nodeHeight
-            const toX = edge.to.x + padding + nodeWidth / 2
-            const toY = edge.to.y + padding
-
-            const isDone = edge.from.ticket.status === 'DONE'
-            const midY = (fromY + toY) / 2
-
-            return (
-              <g key={i}>
-                {/* Curved path */}
-                <path
-                  d={`M ${fromX} ${fromY}
-                      C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY - 10}`}
-                  fill="none"
-                  stroke={isDone ? '#22c55e' : '#52525b'}
-                  strokeWidth="2"
-                  strokeDasharray={isDone ? 'none' : '5,5'}
-                  markerEnd={isDone ? 'url(#arrowhead-green)' : 'url(#arrowhead)'}
-                  className="transition-all duration-300"
-                />
-              </g>
-            )
-          })}
-
-          {/* Nodes */}
-          {nodes.map((node) => {
-            const project = typeof node.ticket.project === 'object' ? node.ticket.project : null
-            const statusColors = getStatusColor(node.ticket.status as string)
-            const borderColor = getNodeBorderColor(node)
-            const isClickable = node.type !== 'current' && onTicketClick
-
-            return (
-              <g
-                key={node.ticket.id}
-                transform={`translate(${node.x + padding}, ${node.y + padding})`}
-                onClick={() => isClickable && onTicketClick?.(node.ticket)}
-                className={isClickable ? 'cursor-pointer' : ''}
-              >
-                {/* Node background */}
-                <rect
-                  x="0"
-                  y="0"
-                  width={nodeWidth}
-                  height={nodeHeight}
-                  rx="10"
-                  fill="#18181b"
-                  stroke={borderColor}
-                  strokeWidth={node.type === 'current' ? '2.5' : '1.5'}
-                  className={`${isClickable ? 'hover:brightness-110 transition-all' : ''} drop-shadow-lg`}
-                />
-
-                {/* Status indicator */}
-                <circle
-                  cx="16"
-                  cy={nodeHeight / 2}
-                  r="4"
-                  fill={statusColors.bg}
-                />
-                {node.ticket.status === 'DONE' && (
-                  <path
-                    d="M13 30 L15 32 L19 28"
-                    stroke="white"
-                    strokeWidth="1.5"
-                    fill="none"
-                    transform={`translate(-1, ${nodeHeight / 2 - 30}) scale(0.9)`}
-                  />
-                )}
-
-                {/* Ticket ID */}
-                <text
-                  x="28"
-                  y="20"
-                  fontSize="10"
-                  fontWeight="600"
-                  fill={project?.color as string || '#a1a1aa'}
-                  style={{ fontFamily: 'var(--font-inter), sans-serif' }}
-                >
-                  {node.ticket.ticketId}
-                </text>
-
-                {/* Title (truncated) */}
-                <text
-                  x="28"
-                  y="36"
-                  fontSize="11"
-                  fill="#fafafa"
-                  className="font-medium"
-                  style={{ fontFamily: 'var(--font-inter), sans-serif' }}
-                >
-                  {node.ticket.title.length > 20
-                    ? node.ticket.title.substring(0, 19) + '...'
-                    : node.ticket.title}
-                </text>
-
-                {/* Type indicator for current node */}
-                {node.type === 'current' && (
-                  <g transform={`translate(${nodeWidth - 18}, 10)`}>
-                    <circle r="3" fill="#6366f1" />
-                  </g>
-                )}
-
-                {/* Blocked indicator */}
-                {node.type === 'blocked' && node.ticket.status !== 'DONE' && (
-                  <g transform={`translate(${nodeWidth - 38}, ${nodeHeight - 16})`}>
-                    <rect
-                      x="0"
-                      y="0"
-                      width="30"
-                      height="12"
-                      rx="3"
-                      fill="#f59e0b20"
-                    />
-                    <text x="15" y="8" fontSize="8" fill="#f59e0b" textAnchor="middle" dominantBaseline="middle">
-                      blocked
-                    </text>
-                  </g>
-                )}
-              </g>
-            )
-          })}
-        </svg>
-      </div>
+        {nodes.map((node) => (
+          <g key={node.ticket.id} transform={`translate(${node.x + PAD}, ${node.y + PAD})`}>
+            <rect
+              width={NODE_W}
+              height={NODE_H}
+              rx={8}
+              fill="var(--color-surface)"
+              stroke={strokeFor(node)}
+              strokeWidth={node.kind === 'current' ? 2 : 1}
+            />
+            <text x={12} y={21} fontSize={10} fontWeight={600} fill="var(--color-text-muted)">
+              {node.ticket.ticketId ?? '—'}
+            </text>
+            <text x={12} y={37} fontSize={11} fill="var(--color-text)">
+              {node.ticket.title.length > 22
+                ? `${node.ticket.title.slice(0, 21)}…`
+                : node.ticket.title}
+            </text>
+            <text x={12} y={50} fontSize={9} fill="var(--color-text-muted)">
+              {node.kind === 'current'
+                ? 'this ticket'
+                : node.ticket.status === TicketStatus.DONE
+                  ? 'done'
+                  : node.kind === 'blocker'
+                    ? 'blocking'
+                    : 'waiting'}
+            </text>
+          </g>
+        ))}
+      </svg>
     </div>
   )
 }

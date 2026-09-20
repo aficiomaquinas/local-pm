@@ -1,34 +1,36 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  TouchSensor,
+  closestCorners,
   useSensor,
   useSensors,
-  type DragStartEvent,
+  type Announcements,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { KanbanColumn } from './KanbanColumn'
-import { KanbanCard } from './KanbanCard'
-import { KanbanHeader } from './KanbanHeader'
-import { TicketModal } from './TicketModal'
-import { TicketDetailModal } from './TicketDetailModal'
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import {
-  applyDrop,
-  isRealMove,
-  resolveDragTarget,
-  KANBAN_COLUMNS,
-} from './dragLogic'
-import { prioritizePointerWithin } from './collision'
+import { MousePointerSensor } from './sensors'
+import { ticketStatusMeta } from '@/lib/status'
+import { useShortcut } from '@/lib/shortcuts'
 import { TicketStatus } from '@/types/enums'
-import type { Project, Team, Ticket } from '@/payload-types'
+import { AUTH_NUDGE_EVENT } from '@/components/auth/AuthStatusBanner'
+import { useToast } from '@/components/ui/Toast'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import { BoardToolbar, type BoardFilters } from './BoardToolbar'
+import { KanbanCard } from './KanbanCard'
+import { KanbanColumn } from './KanbanColumn'
+import { TicketPanel } from './TicketPanel'
+import { applyDrop, isRealMove, resultFromPreview, type DragResult } from './dragLogic'
+import type { Ticket } from '@/payload-types'
 
 interface ColumnPaginationInfo {
   page: number
@@ -50,302 +52,338 @@ interface InitialColumnPagination {
 
 interface KanbanBoardProps {
   initialTickets: Ticket[]
-  projects: Project[]
-  teams: Team[]
+  hasProjects: boolean
   initialColumnPagination?: InitialColumnPagination[]
 }
 
-const COLUMNS = [
-  { id: TicketStatus.TODO, title: 'Todo' },
-  { id: TicketStatus.IN_PROGRESS, title: 'In Progress' },
-  { id: TicketStatus.DONE, title: 'Done' },
-]
+const COLUMNS: TicketStatus[] = [TicketStatus.TODO, TicketStatus.IN_PROGRESS, TicketStatus.DONE]
+const PAGE_SIZE = 20
+const COLLAPSED_COLUMNS_KEY = 'local-pm:board-collapsed'
+const BOARD_PATH = '/board'
 
-// Helper to create initial pagination state per column
-function createInitialColumnPagination(
-  initialTickets: Ticket[],
-  initialColumnPagination?: InitialColumnPagination[]
-): ColumnPaginationState {
-  const defaultPagination: ColumnPaginationState = {
+function emptyPagination(): ColumnPaginationState {
+  return {
     [TicketStatus.TODO]: { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 },
     [TicketStatus.IN_PROGRESS]: { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 },
     [TicketStatus.DONE]: { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 },
   }
+}
 
-  // If we have initial column pagination from server, use it
-  if (initialColumnPagination) {
-    for (const colPag of initialColumnPagination) {
-      const loadedCount = initialTickets.filter(t => t.status === colPag.status).length
-      defaultPagination[colPag.status] = {
-        page: colPag.page,
-        totalPages: colPag.totalPages,
-        hasNextPage: colPag.hasNextPage,
-        totalDocs: colPag.totalDocs,
-        loadedCount,
+function createInitialColumnPagination(
+  initialTickets: Ticket[],
+  initial?: InitialColumnPagination[],
+): ColumnPaginationState {
+  const state = emptyPagination()
+  if (initial) {
+    for (const column of initial) {
+      state[column.status] = {
+        page: column.page,
+        totalPages: column.totalPages,
+        hasNextPage: column.hasNextPage,
+        totalDocs: column.totalDocs,
+        loadedCount: initialTickets.filter((t) => t.status === column.status).length,
       }
     }
   } else {
-    // Fallback: count tickets per status from initial data
-    for (const status of COLUMNS.map(c => c.id)) {
-      const count = initialTickets.filter(t => t.status === status).length
-      defaultPagination[status] = {
-        page: 1,
-        totalPages: 1,
-        hasNextPage: false,
-        totalDocs: count,
-        loadedCount: count,
-      }
+    for (const status of COLUMNS) {
+      const count = initialTickets.filter((t) => t.status === status).length
+      state[status] = { page: 1, totalPages: 1, hasNextPage: false, totalDocs: count, loadedCount: count }
     }
   }
-
-  return defaultPagination
+  return state
 }
 
-export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagination }: KanbanBoardProps) {
-  const searchParams = useSearchParams()
+function filtersToSearch(filters: BoardFilters, ticketId: string | null): string {
+  const params = new URLSearchParams()
+  if (filters.projectId) params.set('project', filters.projectId)
+  if (filters.teamId) params.set('team', filters.teamId)
+  if (filters.query) params.set('q', filters.query)
+  if (ticketId) params.set('ticket', ticketId)
+  const qs = params.toString()
+  return qs ? `?${qs}` : BOARD_PATH
+}
+
+export function KanbanBoard({
+  initialTickets,
+  hasProjects,
+  initialColumnPagination,
+}: KanbanBoardProps) {
   const router = useRouter()
-  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { toast } = useToast()
 
   const [tickets, setTickets] = useState<Ticket[]>(initialTickets)
-  // Synchronous mirror of `tickets` for event handlers that need the current
-  // state immediately (dragEnd computes the PATCH synchronously — reading the
-  // result of a setTickets(updater) in the next statement is invalid under
-  // React concurrent rendering: the updater runs deferred/double, so the
-  // patch closure stays null and the mutation silently never fires).
-  const ticketsRef = useRef<Ticket[]>(initialTickets)
-  const setTicketsSync = useCallback((updater: Ticket[] | ((prev: Ticket[]) => Ticket[])) => {
-    setTickets((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      ticketsRef.current = next
-      return next
-    })
-  }, [])
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
+  const [landedTicketId, setLandedTicketId] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState('')
 
-  // Initialize from URL params
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    searchParams.get('project')
-  )
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
-    searchParams.get('team')
-  )
+  const [filters, setFilters] = useState<BoardFilters>({
+    projectId: searchParams.get('project'),
+    teamId: searchParams.get('team'),
+    query: searchParams.get('q') ?? '',
+  })
+  const [openTicketId, setOpenTicketId] = useState<string | null>(searchParams.get('ticket'))
 
-  // Sync URL when filters change
-  const updateUrlParams = useCallback((projectId: string | null, teamId: string | null) => {
-    const params = new URLSearchParams()
-    if (projectId) params.set('project', projectId)
-    if (teamId) params.set('team', teamId)
-    const queryString = params.toString()
-    router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false })
-  }, [router, pathname])
+  const [pendingDelete, setPendingDelete] = useState<Ticket | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  // Update URL when filters change
-  const handleProjectChange = useCallback((projectId: string | null) => {
-    setSelectedProjectId(projectId)
-    updateUrlParams(projectId, selectedTeamId)
-  }, [selectedTeamId, updateUrlParams])
-
-  const handleTeamChange = useCallback((teamId: string | null) => {
-    setSelectedTeamId(teamId)
-    updateUrlParams(selectedProjectId, teamId)
-  }, [selectedProjectId, updateUrlParams])
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null)
-  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null)
-  // REQ-VIS-2 (SPC-007 draft): explicit mutation-error surface. Null = no
-  // error; a string renders as a dismissible banner above the board.
-  const [mutationError, setMutationError] = useState<string | null>(null)
-
-  // Pagination state per column
-  const [columnPagination, setColumnPagination] = useState<ColumnPaginationState>(
-    () => createInitialColumnPagination(initialTickets, initialColumnPagination)
+  const [collapsedColumns, setCollapsedColumns] = useState<TicketStatus[]>([])
+  const [columnPagination, setColumnPagination] = useState<ColumnPaginationState>(() =>
+    createInitialColumnPagination(initialTickets, initialColumnPagination),
   )
   const [loadingColumns, setLoadingColumns] = useState<Record<TicketStatus, boolean>>({
     [TicketStatus.TODO]: false,
     [TicketStatus.IN_PROGRESS]: false,
     [TicketStatus.DONE]: false,
   })
-  const [isRefetching, setIsRefetching] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  // REQ-VIS-2/REQ-005.3: a failed move must not fail silently. The toast
+  // (upstream shell) names the failure transiently; this dismissible banner
+  // keeps it on screen until dismissed or the next successful move.
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
-  // Track if this is the initial mount to avoid refetching on first render
-  const isInitialMount = useRef(true)
-
-  // BUG-1: while a drag is in flight, the filter-refetch effect (triggered by
-  // router.replace on URL sync) must not overwrite the optimistic setTickets
-  // with server state from before the PATCH landed. The drag sets this flag;
-  // the effect skips its fetch while it is set and the drag clears it after
-  // the PATCH settles.
-  const isDraggingRef = useRef(false)
-
-  // Drag fix (2026-09-09): snapshot of {status, sortOrder} at drag start —
-  // the position the SERVER knows. handleDragOver now mutates optimistic
-  // state (incl. sortOrder), so handleDragEnd can no longer detect a real
-  // move by comparing against current state: a drop that only confirms the
-  // live preview re-solves to identical status+sortOrder and would be
-  // misread as a no-op → no PATCH → the next refetch silently reverts the
-  // move (the "In Progress drop does nothing" bug). Comparing against the
-  // drag-start snapshot keeps dragOver (live preview) and dragEnd (commit)
-  // consistent.
+  const fetchedFor = useRef(
+    JSON.stringify({
+      projectId: searchParams.get('project'),
+      teamId: searchParams.get('team'),
+      query: searchParams.get('q') ?? '',
+    }),
+  )
   const dragOriginRef = useRef<{ status: TicketStatus; sortOrder: number } | null>(null)
 
-  // Refetch tickets when filters change
+  const ticketsRef = useRef<Ticket[]>(tickets)
   useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false
+    ticketsRef.current = tickets
+  }, [tickets])
+
+  useEffect(() => {
+    const focused = new URLSearchParams(window.location.search).get('status')
+    if (focused && COLUMNS.includes(focused as TicketStatus)) {
+      setCollapsedColumns(COLUMNS.filter((s) => s !== focused))
       return
     }
+    try {
+      const stored = localStorage.getItem(COLLAPSED_COLUMNS_KEY)
+      if (stored) setCollapsedColumns(JSON.parse(stored) as TicketStatus[])
+    } catch {}
+  }, [])
 
-    // BUG-1: a drag is in flight → skip this round; the drag's PATCH resolves
-    // afterwards and the state it committed is already authoritative. (When
-    // filters change mid-drag, the drag refetches the new filters itself.)
-    if (isDraggingRef.current) return
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      setFilters({
+        projectId: params.get('project'),
+        teamId: params.get('team'),
+        query: params.get('q') ?? '',
+      })
+      setOpenTicketId(params.get('ticket'))
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
 
-    const refetchTickets = async () => {
-      setIsRefetching(true)
+  const syncUrl = useCallback((next: BoardFilters, ticketId: string | null, push: boolean) => {
+    const url = filtersToSearch(next, ticketId)
+    if (push) window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  }, [])
+
+  const updateFilters = useCallback(
+    (patch: Partial<BoardFilters>) => {
+      setFilters((current) => {
+        const next = { ...current, ...patch }
+        const isTyping = 'query' in patch && Object.keys(patch).length === 1
+        syncUrl(next, openTicketId, !isTyping)
+        return next
+      })
+    },
+    [openTicketId, syncUrl],
+  )
+
+  const openTicket = useCallback(
+    (ticket: Ticket | null) => {
+      setOpenTicketId(ticket?.id ?? null)
+      syncUrl(filters, ticket?.id ?? null, true)
+    },
+    [filters, syncUrl],
+  )
+
+  const createTicket = useCallback(
+    (status: TicketStatus) => {
+      const params = new URLSearchParams({ status })
+      if (filters.projectId) params.set('project', filters.projectId)
+      params.set('returnTo', filtersToSearch(filters, null))
+      router.push(`/tickets/new?${params}`)
+    },
+    [filters, router],
+  )
+
+  const editTicket = useCallback(
+    (ticket: Ticket) => {
+      const params = new URLSearchParams({ returnTo: filtersToSearch(filters, ticket.id) })
+      router.push(`/tickets/${ticket.id}/edit?${params}`)
+    },
+    [filters, router],
+  )
+
+  useEffect(() => {
+    const signature = JSON.stringify({
+      projectId: filters.projectId,
+      teamId: filters.teamId,
+      query: filters.query,
+    })
+    if (signature === fetchedFor.current) return
+    fetchedFor.current = signature
+
+    const controller = new AbortController()
+    const run = async () => {
+      setRefreshing(true)
       try {
-        // Fetch all three columns in parallel
         const fetchColumn = async (status: TicketStatus) => {
-          let url = `/api/tickets?page=1&limit=20&depth=2&sort=sortOrder&where[status][equals]=${status}`
-          if (selectedProjectId) {
-            url += `&where[project][equals]=${selectedProjectId}`
-          }
-          if (selectedTeamId) {
-            url += `&where[team][equals]=${selectedTeamId}`
-          }
-          const response = await fetch(url)
+          const params = new URLSearchParams({
+            page: '1',
+            limit: String(PAGE_SIZE),
+            depth: '2',
+            sort: 'sortOrder',
+          })
+          params.set('where[status][equals]', status)
+          if (filters.projectId) params.set('where[project][equals]', filters.projectId)
+          if (filters.teamId) params.set('where[team][equals]', filters.teamId)
+          if (filters.query.trim()) params.set('where[title][like]', filters.query.trim())
+          const response = await fetch(`/api/tickets?${params}`, { signal: controller.signal })
+          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
           return response.json()
         }
 
-        const [todoData, inProgressData, doneData] = await Promise.all([
-          fetchColumn(TicketStatus.TODO),
-          fetchColumn(TicketStatus.IN_PROGRESS),
-          fetchColumn(TicketStatus.DONE),
-        ])
+        const [todo, inProgress, done] = await Promise.all(COLUMNS.map(fetchColumn))
+        const byStatus = { TODO: todo, IN_PROGRESS: inProgress, DONE: done } as Record<
+          TicketStatus,
+          { docs?: Ticket[]; page?: number; totalPages?: number; hasNextPage?: boolean; totalDocs?: number }
+        >
 
-        // Combine all tickets
-        const newTickets = [
-          ...(todoData.docs || []),
-          ...(inProgressData.docs || []),
-          ...(doneData.docs || []),
-        ]
-        setTickets(newTickets)
-
-        // Update pagination state for all columns
-        setColumnPagination({
-          [TicketStatus.TODO]: {
-            page: todoData.page ?? 1,
-            totalPages: todoData.totalPages ?? 1,
-            hasNextPage: todoData.hasNextPage ?? false,
-            totalDocs: todoData.totalDocs ?? 0,
-            loadedCount: todoData.docs?.length ?? 0,
-          },
-          [TicketStatus.IN_PROGRESS]: {
-            page: inProgressData.page ?? 1,
-            totalPages: inProgressData.totalPages ?? 1,
-            hasNextPage: inProgressData.hasNextPage ?? false,
-            totalDocs: inProgressData.totalDocs ?? 0,
-            loadedCount: inProgressData.docs?.length ?? 0,
-          },
-          [TicketStatus.DONE]: {
-            page: doneData.page ?? 1,
-            totalPages: doneData.totalPages ?? 1,
-            hasNextPage: doneData.hasNextPage ?? false,
-            totalDocs: doneData.totalDocs ?? 0,
-            loadedCount: doneData.docs?.length ?? 0,
-          },
-        })
+        setTickets(COLUMNS.flatMap((status) => byStatus[status].docs ?? []))
+        setColumnPagination(
+          COLUMNS.reduce((acc, status) => {
+            const data = byStatus[status]
+            acc[status] = {
+              page: data.page ?? 1,
+              totalPages: data.totalPages ?? 1,
+              hasNextPage: data.hasNextPage ?? false,
+              totalDocs: data.totalDocs ?? 0,
+              loadedCount: data.docs?.length ?? 0,
+            }
+            return acc
+          }, emptyPagination()),
+        )
       } catch (error) {
-        console.error('Failed to refetch tickets:', error)
+        if ((error as Error).name === 'AbortError') return
+        toast({
+          tone: 'error',
+          title: "Couldn't load the board",
+          description: error instanceof Error ? error.message : 'Check your connection and try again.',
+        })
       } finally {
-        setIsRefetching(false)
+        setRefreshing(false)
       }
     }
 
-    refetchTickets()
-  }, [selectedProjectId, selectedTeamId])
+    const timer = setTimeout(run, filters.query ? 300 : 0)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [filters.projectId, filters.teamId, filters.query, toast])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(MousePointerSensor, { activationConstraint: { distance: 8 } }),
+
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  // Load more tickets for a specific column
-  const loadMoreTicketsForColumn = useCallback(async (status: TicketStatus) => {
-    const colPag = columnPagination[status]
-    if (!colPag.hasNextPage || loadingColumns[status]) return
+  const ticketsByStatus = useCallback(
+    (status: TicketStatus) =>
+      tickets
+        .filter((t) => t.status === status)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    [tickets],
+  )
 
-    setLoadingColumns(prev => ({ ...prev, [status]: true }))
+  const openedTicket = useMemo(
+    () => tickets.find((t) => t.id === openTicketId) ?? null,
+    [tickets, openTicketId],
+  )
+
+  const totalLoaded = tickets.length
+  const hasFilters = Boolean(filters.projectId || filters.teamId || filters.query)
+
+  const flash = (ticketId: string) => {
+    setLandedTicketId(ticketId)
+    setTimeout(() => setLandedTicketId((id) => (id === ticketId ? null : id)), 700)
+  }
+
+  const revertTicket = (
+    ticketId: string,
+    origin: { status: TicketStatus; sortOrder: number } | null,
+  ) => {
+    if (!origin) return
+    const reverted = ticketsRef.current.map((ticket) =>
+      ticket.id === ticketId ? { ...ticket, status: origin.status, sortOrder: origin.sortOrder } : ticket,
+    )
+    ticketsRef.current = reverted
+    setTickets(reverted)
+  }
+
+  const persistMove = async (
+    ticketId: string,
+    status: TicketStatus,
+    sortOrder: number,
+    origin: { status: TicketStatus; sortOrder: number } | null,
+  ) => {
     try {
-      const nextPage = colPag.page + 1
-      let url = `/api/tickets?page=${nextPage}&limit=20&depth=2&sort=sortOrder&where[status][equals]=${status}`
-      if (selectedProjectId) {
-        url += `&where[project][equals]=${selectedProjectId}`
-      }
-      if (selectedTeamId) {
-        url += `&where[team][equals]=${selectedTeamId}`
-      }
+      const response = await fetch(`/api/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, sortOrder }),
+      })
 
-      const response = await fetch(url)
-      const data = await response.json()
-
-      if (data.docs && data.docs.length > 0) {
-        // Avoid duplicates by filtering out existing ticket IDs
-        const existingIds = new Set(tickets.map(t => t.id))
-        const newTickets = data.docs.filter((t: Ticket) => !existingIds.has(t.id))
-
-        setTickets((prev) => [...prev, ...newTickets])
-        setColumnPagination(prev => ({
-          ...prev,
-          [status]: {
-            page: data.page,
-            totalPages: data.totalPages,
-            hasNextPage: data.hasNextPage,
-            totalDocs: data.totalDocs,
-            loadedCount: prev[status].loadedCount + newTickets.length,
-          },
-        }))
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`)
       }
+      setMutationError(null)
+      flash(ticketId)
     } catch (error) {
-      console.error(`Failed to load more tickets for ${status}:`, error)
-    } finally {
-      setLoadingColumns(prev => ({ ...prev, [status]: false }))
+      revertTicket(ticketId, origin)
+      const ticket = ticketsRef.current.find((t) => t.id === ticketId)
+      const message = error instanceof Error ? error.message : ''
+      // SPC-007 v2 (REQ-005.4): an auth failure is not a transport error —
+      // pulse the anonymous banner (amber→red) so the standing explanation
+      // ("log in to make changes") draws the eye, alongside the toast.
+      const httpStatus = Number(message.split(' ')[0])
+      if (httpStatus === 401 || httpStatus === 403) {
+        window.dispatchEvent(new CustomEvent(AUTH_NUDGE_EVENT))
+        setMutationError(
+          'Your session is not active — the move was not saved. Log in and try again.',
+        )
+      } else {
+        setMutationError(
+          `The move could not be saved${message ? ` (${message})` : ''}. The card was returned to its column.`,
+        )
+      }
+      toast({
+        tone: 'error',
+        title: "Couldn't move that ticket",
+        description: `${ticket?.ticketId ?? 'The ticket'} is back in ${
+          ticketStatusMeta(origin?.status).label
+        }. ${message}`.trim(),
+      })
     }
-  }, [columnPagination, loadingColumns, selectedProjectId, selectedTeamId, tickets])
-
-  const filteredTickets = useMemo(() => {
-    return tickets.filter((ticket) => {
-      if (selectedProjectId) {
-        const projectId = typeof ticket.project === 'string' ? ticket.project : ticket.project?.id
-        if (projectId !== selectedProjectId) return false
-      }
-      if (selectedTeamId) {
-        const teamId = typeof ticket.team === 'string' ? ticket.team : ticket.team?.id
-        if (teamId !== selectedTeamId) return false
-      }
-      return true
-    })
-  }, [tickets, selectedProjectId, selectedTeamId])
-
-  const getTicketsByStatus = useCallback(
-    (status: TicketStatus) => {
-      return filteredTickets
-        .filter((ticket) => ticket.status === status)
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    },
-    [filteredTickets]
-  )
+  }
 
   const handleDragStart = (event: DragStartEvent) => {
     const ticket = tickets.find((t) => t.id === event.active.id)
-    setActiveTicket(ticket || null)
-    // Drag fix: remember the position the SERVER knows (status + sortOrder)
-    // so dragEnd can tell a real move from "dragOver already landed here".
+    setActiveTicket(ticket ?? null)
+
     dragOriginRef.current = ticket
       ? { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
       : null
@@ -355,345 +393,324 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     const { active, over } = event
     if (!over) return
 
-    const activeId = active.id as string
-    const overId = over.id as string
-
-    // Drag fix (2026-09-09): the over state must be fully applied DURING the
-    // drag, not only at drop time. Previously handleDragOver mutated ONLY the
-    // status and left the mover's sortOrder as junk from the source column:
-    // a drop on the column body then re-solved to the same status+sortOrder
-    // in handleDragEnd, computeDragResult reported a no-op, no PATCH went
-    // out, and the next refetch reverted the optimistic move — "In Progress
-    // drop does nothing". resolveDragTarget + append sortOrder make the
-    // optimistic state the true final state; dragEnd then produces a real
-    // PATCH (or a genuine no-op).
-    setTickets((prev) => {
-      const target = resolveDragTarget(prev, activeId, overId)
-      if (!target) return prev
-
-      const activeTicket = prev.find((t) => t.id === activeId)
-      if (!activeTicket) return prev
-      // Same column → nothing to preview (within-column drops are committed
-      // by dragEnd from the final over position); the sortOrder append is
-      // only for CROSS-column entries, per the drag fix.
-      if (activeTicket.status === target.status) return prev
-
-      // Entering a new column → land at the END of it (max+1 over the
-      // tickets already in that column) so the visual preview matches what
-      // the drop will commit.
-      const maxSort = prev
-        .filter((t) => t.status === target.status && t.id !== activeId)
-        .reduce((max, t) => Math.max(max, t.sortOrder ?? 0), -1)
-
-      return prev.map((ticket) =>
-        ticket.id === activeId
-          ? { ...ticket, status: target.status, sortOrder: maxSort + 1 }
-          : ticket,
-      )
-    })
+    const next = applyDrop(ticketsRef.current, active.id as string, over.id as string).tickets
+    ticketsRef.current = next
+    setTickets(next)
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveTicket(null)
 
-    // TEMP DEBUG (drag-persistence investigation 2026-09-20): surface the
-    // exact active/over pair the collision system resolved. Remove after fix.
-    if (typeof window !== 'undefined') {
-      const w = window as unknown as { __dragDebug?: unknown[] }
-      w.__dragDebug = w.__dragDebug || []
-      w.__dragDebug.push({
-        activeId: active?.id,
-        overId: over?.id ?? null,
-        activeData: active?.data?.current ?? null,
-        overData: over?.data?.current ?? null,
-      })
-    }
-
+    const origin = dragOriginRef.current
+    dragOriginRef.current = null
     if (!over) return
 
     const activeId = active.id as string
     const overId = over.id as string
 
-    if (activeId === overId) return
+    const result: DragResult =
+      overId === activeId
+        ? resultFromPreview(ticketsRef.current, activeId)
+        : applyDrop(ticketsRef.current, activeId, overId)
+    ticketsRef.current = result.tickets
+    setTickets(result.tickets)
 
-    // BUG-1: a drag is in flight from here until the PATCH settles — the
-    // filter-refetch effect must stay suppressed through the whole window
-    // (it re-runs on router.replace URL syncs and would otherwise clobber
-    // the optimistic state with pre-PATCH server data). The flag is set
-    // BEFORE any return, so even a no-op drop (and the empty-window `over`
-    // case above) leaves it consistent for the next effect run.
-    isDraggingRef.current = true
-    try {
-      // Drag fix: recompute the drop from the CURRENT state (dragOver already
-      // landed the mover there) and compare against the DRAG-START origin —
-      // not the current state — to decide whether a PATCH is needed. The
-      // committed tickets are always the normalized applyDrop result; the
-      // PATCH itself is skipped only when the drop changes nothing relative
-      // to what the server already knows.
-      //
-      // CROSS-COLUMN RESOLUTION (2026-09-20, browser-verified): when the
-      // pointer releases over a DIFFERENT column than the drag started in,
-      // the final DragEndEvent.over may still report the ORIGIN column
-      // (dnd-kit's collision state lags the fast pointer by one event; the
-      // origin column's droppable also contains the moved card's translate
-      // shadow). In that case dragOver ALREADY validated the real collision
-      // and optimistically moved the card — applyDrop(overId=origin) would
-      // silently undo it and isRealMove=false returns with no PATCH, no
-      // error, no history row. Resolution: when the optimistic state shows
-      // the card in a DIFFERENT column than its drag origin, commit the
-      // optimistic position instead of the stale over.id.
-      let patch: { status: TicketStatus; sortOrder: number } | null = null
-      const origin = dragOriginRef.current
+    if (!isRealMove(result, origin)) return
 
-      // Compute synchronously from ticketsRef (React concurrent makes
-      // setTickets(updater) deferred — the previous pattern read `patch` from
-      // the updater closure before React ran it → patch stayed null → silent
-      // no-OP return with no PATCH, no error, no history row).
-      const prev = ticketsRef.current
-      const optimistic = prev.find((t) => t.id === activeId)
-      const crossedColumn =
-        origin !== null &&
-        optimistic !== undefined &&
-        optimistic.status !== origin.status
-
-      const result = crossedColumn
-        ? applyDrop(prev, activeId, optimistic.status as TicketStatus)
-        : applyDrop(prev, activeId, overId)
-
-      if (result.status !== null && result.sortOrder !== null) {
-        if (isRealMove(result, origin)) {
-          patch = { status: result.status, sortOrder: result.sortOrder }
-        }
-      }
-
-      setTicketsSync(result.tickets)
-
-      // REQ-VIS-2: a genuine no-op (dropped back on the same slot) is a valid
-      // outcome — but it must not be SILENT when the card actually moved in
-      // the optimistic preview. Revert refetch below covers that case.
-      if (!patch) return
-
-      // Refetch only after the PATCH resolves (fresh column pagination and
-      // authoritative order) — never before it, and never on no-op drops.
-      // REQ-VIS-2 (SPC-007 draft): a failed mutation must NOT fail silently.
-      // The card has already moved optimistically; on error we revert the
-      // move, surface an explicit dismissible error banner, and (for auth
-      // failures) point the user at the login.
-      const response = await fetch(`/api/tickets/${activeId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      })
-
-      if (!response.ok) {
-        // Revert the optimistic move: re-fetch the authoritative state.
-        try {
-          const res = await fetch('/api/tickets?page=1&limit=100&depth=2&sort=sortOrder')
-          const data = await res.json()
-          if (Array.isArray(data.docs)) setTickets(data.docs)
-        } catch {
-          // even the revert refetch failed — leave the optimistic state and
-          // rely on the banner; a manual reload still heals the view.
-        }
-        if (response.status === 401 || response.status === 403) {
-          setMutationError(
-            'Your session is not active — the move was not saved. Log in and try again.',
-          )
-          // SPC-007 v2 nudge (REQ-005.4): the red banner names the specific
-          // failure near the action; the anonymous topbar banner holds the
-          // standing explanation. Draw the eye there without a dialog — the
-          // banner listens for this event and pulses amber→red (CSS only,
-          // no layout shift).
-          window.dispatchEvent(new CustomEvent('localpm:auth-nudge'))
-        } else {
-          setMutationError(
-            `The move could not be saved (server error ${response.status}). The board was restored to its previous state.`,
-          )
-        }
-        return
-      }
-
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('project') || params.get('team')) {
-        const url = `/api/tickets?page=1&limit=20&depth=2&sort=sortOrder` +
-          (params.get('project') ? `&where[project][equals]=${params.get('project')}` : '') +
-          (params.get('team') ? `&where[team][equals]=${params.get('team')}` : '')
-        const response = await fetch(url)
-        const data = await response.json()
-        if (Array.isArray(data.docs)) {
-          setTickets(data.docs)
-        }
-        // No pagination rewrite: a move does not change column doc counts.
-      }
-    } catch (error) {
-      console.error('Failed to update ticket:', error)
-    } finally {
-      isDraggingRef.current = false
-      setActiveTicket(null)
-    }
+    await persistMove(activeId, result.status as TicketStatus, result.sortOrder as number, origin)
   }
 
-  const handleCreateTicket = () => {
-    setEditingTicket(null)
-    setIsModalOpen(true)
-  }
+  const moveToColumn = async (ticket: Ticket, status: TicketStatus) => {
+    const origin = { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
+    const result = applyDrop(ticketsRef.current, ticket.id, status)
+    if (!isRealMove(result, origin)) return
 
-  const handleViewTicket = (ticket: Ticket) => {
-    setViewingTicket(ticket)
-  }
-
-  const handleTicketSaved = (savedTicket: Ticket) => {
-    if (editingTicket) {
-      setTickets((prev) =>
-        prev.map((t) => (t.id === savedTicket.id ? savedTicket : t))
-      )
-    } else {
-      setTickets((prev) => [...prev, savedTicket])
-    }
-    setIsModalOpen(false)
-    setEditingTicket(null)
-  }
-
-  const handleTicketUpdated = (updatedTicket: Ticket) => {
-    setTickets((prev) =>
-      prev.map((t) => (t.id === updatedTicket.id ? updatedTicket : t))
+    ticketsRef.current = result.tickets
+    setTickets(result.tickets)
+    setAnnouncement(
+      `${ticket.ticketId ?? ticket.title} moved to ${ticketStatusMeta(status).label} from ${
+        ticketStatusMeta(origin.status).label
+      }.`,
     )
-    setViewingTicket(updatedTicket)
+    await persistMove(ticket.id, result.status as TicketStatus, result.sortOrder as number, origin)
   }
 
-  // BUG-3 soft delete: the UI Delete action PATCHes `deleted: true` — never a
-  // hard DELETE (the collections' beforeOperation guard 403s that anyway) —
-  // with a confirmation. The read constraint hides the ticket on refresh; we
-  // also drop it from local state for instant feedback. The version trail
-  // survives, so the audit history keeps the ticket.
-  const [pendingDelete, setPendingDelete] = useState<Ticket | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const reorder = async (ticket: Ticket, direction: -1 | 1) => {
+    const column = ticketsByStatus(ticket.status as TicketStatus)
+    const index = column.findIndex((t) => t.id === ticket.id)
+    const neighbour = column[index + direction]
+    if (!neighbour) return
 
-  const handleDeleteTicket = async (ticketId: string) => {
-    const ticket = tickets.find((t) => t.id === ticketId) ?? null
-    setPendingDelete(ticket)
+    const origin = { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
+    const result = applyDrop(ticketsRef.current, ticket.id, neighbour.id)
+    if (!isRealMove(result, origin)) return
+
+    ticketsRef.current = result.tickets
+    setTickets(result.tickets)
+    setAnnouncement(
+      `${ticket.ticketId ?? ticket.title} moved to position ${index + direction + 1} in ${
+        ticketStatusMeta(origin.status).label
+      }.`,
+    )
+    await persistMove(ticket.id, result.status as TicketStatus, result.sortOrder as number, origin)
   }
 
-  const confirmSoftDelete = async () => {
-    if (!pendingDelete) return
-    setIsDeleting(true)
+  const loadMore = async (status: TicketStatus) => {
+    const column = columnPagination[status]
+    if (!column.hasNextPage || loadingColumns[status]) return
+
+    setLoadingColumns((prev) => ({ ...prev, [status]: true }))
     try {
-      const response = await fetch(`/api/tickets/${pendingDelete.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deleted: true }),
+      const params = new URLSearchParams({
+        page: String(column.page + 1),
+        limit: String(PAGE_SIZE),
+        depth: '2',
+        sort: 'sortOrder',
       })
-      if (!response.ok) throw new Error(`Soft delete failed (${response.status})`)
-      setTickets((prev) => prev.filter((t) => t.id !== pendingDelete.id))
-      setViewingTicket((prev) => (prev?.id === pendingDelete.id ? null : prev))
-      setPendingDelete(null)
+      params.set('where[status][equals]', status)
+      if (filters.projectId) params.set('where[project][equals]', filters.projectId)
+      if (filters.teamId) params.set('where[team][equals]', filters.teamId)
+      if (filters.query.trim()) params.set('where[title][like]', filters.query.trim())
+
+      const response = await fetch(`/api/tickets?${params}`)
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      const data = await response.json()
+
+      if (data.docs?.length) {
+        const existing = new Set(ticketsRef.current.map((t) => t.id))
+        const fresh = (data.docs as Ticket[]).filter((t) => !existing.has(t.id))
+        setTickets((prev) => [...prev, ...fresh])
+        setColumnPagination((prev) => ({
+          ...prev,
+          [status]: {
+            page: data.page,
+            totalPages: data.totalPages,
+            hasNextPage: data.hasNextPage,
+            totalDocs: data.totalDocs,
+            loadedCount: prev[status].loadedCount + fresh.length,
+          },
+        }))
+      }
     } catch (error) {
-      console.error('Failed to soft delete ticket:', error)
+      toast({
+        tone: 'error',
+        title: `Couldn't load more ${ticketStatusMeta(status).label} tickets`,
+        description: error instanceof Error ? error.message : undefined,
+      })
     } finally {
-      setIsDeleting(false)
+      setLoadingColumns((prev) => ({ ...prev, [status]: false }))
     }
+  }
+
+  const toggleColumn = (status: TicketStatus) => {
+    setCollapsedColumns((prev) => {
+      const next = prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+      try {
+        localStorage.setItem(COLLAPSED_COLUMNS_KEY, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    setDeleting(true)
+    try {
+      const response = await fetch(`/api/tickets/${pendingDelete.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      setTickets((prev) => prev.filter((t) => t.id !== pendingDelete.id))
+      setColumnPagination((prev) => {
+        const status = pendingDelete.status as TicketStatus
+        return {
+          ...prev,
+          [status]: {
+            ...prev[status],
+            totalDocs: Math.max(0, prev[status].totalDocs - 1),
+            loadedCount: Math.max(0, prev[status].loadedCount - 1),
+          },
+        }
+      })
+      if (openTicketId === pendingDelete.id) openTicket(null)
+      setPendingDelete(null)
+      toast({ title: `${pendingDelete.ticketId ?? 'Ticket'} deleted`, tone: 'info' })
+    } catch (error) {
+      toast({
+        tone: 'error',
+        title: "Couldn't delete that ticket",
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  useShortcut({
+    id: 'board.clearFilters',
+    keys: 'shift+x',
+    description: 'Clear all board filters',
+    group: 'Board',
+    scope: 'board',
+    enabled: hasFilters,
+    run: () => updateFilters({ projectId: null, teamId: null, query: '' }),
+  })
+
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => {
+      const ticket = ticketsRef.current.find((t) => t.id === active.id)
+      if (!ticket) return
+      return `Picked up ${ticket.ticketId ?? ticket.title}, "${ticket.title}", from list ${
+        ticketStatusMeta(ticket.status).label
+      }. Use the arrow keys to move it, Space to drop, Escape to cancel.`
+    },
+    onDragOver: ({ active, over }) => {
+      const ticket = ticketsRef.current.find((t) => t.id === active.id)
+      if (!ticket || !over) return
+      return `${ticket.ticketId ?? ticket.title} is over list ${
+        ticketStatusMeta(ticket.status).label
+      }.`
+    },
+    onDragEnd: ({ active }) => {
+      const ticket = ticketsRef.current.find((t) => t.id === active.id)
+      const origin = dragOriginRef.current
+      if (!ticket) return
+      return `Task "${ticket.title}" moved to list "${ticketStatusMeta(ticket.status).label}"${
+        origin ? ` from "${ticketStatusMeta(origin.status).label}"` : ''
+      }.`
+    },
+    onDragCancel: ({ active }) => {
+      const ticket = ticketsRef.current.find((t) => t.id === active.id)
+      return `Move cancelled. ${ticket?.ticketId ?? 'The ticket'} returned to its original position.`
+    },
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
+      <BoardToolbar
+        filters={filters}
+        onChange={updateFilters}
+        resultCount={totalLoaded}
+        onCreateTicket={() => createTicket(TicketStatus.TODO)}
+      />
+
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+
+      {/* REQ-VIS-2/REQ-005.3: explicit, dismissible failure notice for a
+          rejected move. Auth failures (401/403) also pulse the anonymous
+          banner via `localpm:auth-nudge`. */}
       {mutationError && (
         <div
           role="alert"
           data-testid="mutation-error"
-          className="flex items-start justify-between gap-4 border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200"
+          className="flex items-start gap-2 border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200"
         >
-          <span>{mutationError}</span>
+          <span className="min-w-0 flex-1">{mutationError}</span>
           <button
             type="button"
-            onClick={() => setMutationError(null)}
             aria-label="Dismiss error"
-            className="shrink-0 rounded px-2 text-red-300 hover:bg-red-500/20 hover:text-red-100"
+            onClick={() => setMutationError(null)}
+            className="flex-none text-red-200/70 transition-colors duration-micro hover:text-red-100"
           >
             ✕
           </button>
         </div>
       )}
-      <KanbanHeader
-        projects={projects}
-        teams={teams}
-        selectedProjectId={selectedProjectId}
-        selectedTeamId={selectedTeamId}
-        onProjectChange={handleProjectChange}
-        onTeamChange={handleTeamChange}
-        onCreateTicket={handleCreateTicket}
-      />
 
-      <DndContext
-        sensors={sensors}
-        // Drag UX fix (2026-09-08/09): pointerWithin-first composed collision
-        // detection — dropping anywhere inside a column (incl. empty areas)
-        // now reliably targets that column instead of a card in another one.
-        // Column droppables carry data.type === 'Column' (KanbanColumn) and
-        // resolveDragTarget maps over-ids to columns during over/drop.
-        collisionDetection={prioritizePointerWithin(KANBAN_COLUMNS)}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex-1 flex gap-4 p-6 overflow-x-auto">
-          {COLUMNS.map((column) => (
-            <KanbanColumn
-              key={column.id}
-              id={column.id}
-              title={column.title}
-              tickets={getTicketsByStatus(column.id)}
-              onViewTicket={handleViewTicket}
-              onDeleteTicket={handleDeleteTicket}
-              pagination={{
-                hasNextPage: columnPagination[column.id].hasNextPage,
-                totalDocs: columnPagination[column.id].totalDocs,
-                loadedCount: columnPagination[column.id].loadedCount,
-              }}
-              isLoadingMore={loadingColumns[column.id]}
-              onLoadMore={() => loadMoreTicketsForColumn(column.id)}
-            />
-          ))}
-        </div>
+      <ErrorBoundary region="The board">
+        {!hasProjects ? (
+          <EmptyState
+            kind="no-data"
+            title="No projects yet"
+            description="Tickets belong to a project, so create one first and the board fills up from there."
+            action={{ label: 'Go to Projects', onClick: () => window.location.assign('/projects') }}
+          />
+        ) : totalLoaded === 0 && hasFilters && !refreshing ? (
+          <EmptyState
+            kind="no-match"
+            title="No tickets match these filters"
+            description="Nothing on this board fits the current project, team and search combination."
+            action={{
+              label: 'Clear filters',
+              onClick: () => updateFilters({ projectId: null, teamId: null, query: '' }),
+            }}
+          />
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            accessibility={{ announcements }}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div
+              className={
+                'flex min-h-0 flex-1 snap-x snap-proximity gap-4 overflow-x-auto p-6 ' +
+                'max-md:snap-mandatory max-md:gap-3 max-md:p-4'
+              }
+            >
+              {COLUMNS.map((status) => (
+                <KanbanColumn
+                  key={status}
+                  id={status}
+                  tickets={ticketsByStatus(status)}
+                  collapsed={collapsedColumns.includes(status)}
+                  onToggleCollapsed={() => toggleColumn(status)}
+                  onAddCard={() => createTicket(status)}
+                  onOpenTicket={openTicket}
+                  ticketHref={(ticket) => filtersToSearch(filters, ticket.id)}
+                  onEditTicket={editTicket}
+                  onDeleteTicket={setPendingDelete}
+                  onMoveToColumn={moveToColumn}
+                  onReorder={reorder}
+                  pagination={{
+                    hasNextPage: columnPagination[status].hasNextPage,
+                    totalDocs: columnPagination[status].totalDocs,
+                    loadedCount: columnPagination[status].loadedCount,
+                  }}
+                  isLoadingMore={loadingColumns[status]}
+                  onLoadMore={() => loadMore(status)}
+                  isRefreshing={refreshing}
+                  landedTicketId={landedTicketId}
+                />
+              ))}
+            </div>
 
-        <DragOverlay>
-          {activeTicket ? <KanbanCard ticket={activeTicket} isOverlay /> : null}
-        </DragOverlay>
-      </DndContext>
+            <DragOverlay>
+              {activeTicket ? (
+                <div className="w-72 max-w-[280px]">
+                  <KanbanCard ticket={activeTicket} isOverlay />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
+      </ErrorBoundary>
 
-      <TicketModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        ticket={editingTicket}
-        projects={projects}
-        teams={teams}
-        allTickets={tickets}
-        onSave={handleTicketSaved}
-        defaultProjectId={selectedProjectId}
-      />
-
-      {viewingTicket && (
-        <TicketDetailModal
-          isOpen={!!viewingTicket}
-          onClose={() => setViewingTicket(null)}
-          ticket={viewingTicket}
-          projects={projects}
-          teams={teams}
-          allTickets={tickets}
-          onUpdate={handleTicketUpdated}
-          onDelete={handleDeleteTicket}
+      {openedTicket && (
+        <TicketPanel
+          ticket={openedTicket}
+          onClose={() => openTicket(null)}
+          onUpdate={(next) => setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)))}
+          onDelete={setPendingDelete}
         />
       )}
 
       <ConfirmDialog
-        isOpen={!!pendingDelete}
+        open={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
-        onConfirm={confirmSoftDelete}
+        onConfirm={confirmDelete}
+        loading={deleting}
         title="Delete this ticket?"
-        message={`This soft-deletes "${pendingDelete?.title ?? ''}".\n\nIt disappears from the board, but its full audit history is preserved — deletion never destroys the trail.`}
-        confirmText="Delete"
-        isDestructive
-        isLoading={isDeleting}
+        message={
+          pendingDelete
+            ? `${pendingDelete.ticketId ?? 'This ticket'} — “${pendingDelete.title}”`
+            : ''
+        }
+        consequence="Its subtasks, labels and dependency links go with it. This cannot be undone."
+        confirmLabel="Delete ticket"
       />
     </div>
   )

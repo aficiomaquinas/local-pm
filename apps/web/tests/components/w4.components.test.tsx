@@ -9,52 +9,70 @@ import type { HistoryDoc } from '@/app/api/history/types'
  * Next.js unit-testing setup): presentational components rendered against
  * props only — no server dependencies, no data fetching (their data layer
  * is covered by T2/T3; async server-component pages remain T4 territory).
+ *
+ * ConfirmDialog was rebuilt on the Radix-based Dialog primitive in the
+ * upstream UI rebuild (PR#9-#11 port): the props are now open/loading/
+ * confirmLabel/cancelLabel (formerly isOpen/isLoading/confirmText/
+ * cancelText) and the Radix Dialog renders in a PORTAL, so assertions go
+ * through screen (document scope), not the container.
  */
-describe('W4: ConfirmDialog (pure presentational)', () => {
-  it('renders nothing when closed', () => {
-    const { container } = render(
-      <ConfirmDialog isOpen={false} onClose={() => {}} onConfirm={() => {}} title="T" message="M" />,
-    )
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  it('renders title, message and buttons when open', () => {
+describe('W4: ConfirmDialog (design-system rebuild)', () => {
+  it('renders the dialog content when open', () => {
     render(
       <ConfirmDialog
-        isOpen
+        open
         onClose={() => {}}
         onConfirm={() => {}}
         title="Delete ticket"
         message={'This cannot be undone.\nReally?'}
+        confirmLabel="Confirm"
       />,
     )
-    expect(screen.getByRole('heading', { name: 'Delete ticket' })).toBeInTheDocument()
+    expect(screen.getByText('Delete ticket')).toBeInTheDocument()
     expect(screen.getByText(/This cannot be undone\./)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
   })
 
-  it('shows Processing… and disables actions while loading', () => {
-    render(
+  it('renders nothing while closed (Radix Portal stays empty)', () => {
+    const { container } = render(
       <ConfirmDialog
-        isOpen
-        isLoading
+        open={false}
         onClose={() => {}}
         onConfirm={() => {}}
         title="T"
         message="M"
+        confirmLabel="Confirm"
       />,
     )
-    expect(screen.getByRole('button', { name: 'Processing...' })).toBeDisabled()
+    expect(container).toBeEmptyDOMElement()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('disables actions while loading (spinner replaces the label, aria-busy set)', () => {
+    render(
+      <ConfirmDialog
+        open
+        loading
+        onClose={() => {}}
+        onConfirm={() => {}}
+        title="T"
+        message="M"
+        confirmLabel="Confirm"
+      />,
+    )
+    const confirm = screen.getByRole('button', { name: /Confirm/ })
+    expect(confirm).toBeDisabled()
+    expect(confirm).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
   })
 
   it('supports custom button labels', () => {
     render(
       <ConfirmDialog
-        isOpen
-        confirmText="Borrar"
-        cancelText="Cancelar"
+        open
+        confirmLabel="Borrar"
+        cancelLabel="Cancelar"
         onClose={() => {}}
         onConfirm={() => {}}
         title="T"
@@ -71,6 +89,7 @@ const doc: HistoryDoc = {
   collection: 'tickets',
   parent: 'tick_0001',
   parentLabel: 'PCF-1 · Ship SPC-003',
+  actor: { type: 'user', label: 'master@local.test' },
   autosave: false,
   createdAt: '2026-09-07T05:00:00.000Z',
   updatedAt: '2026-09-07T06:00:00.000Z',

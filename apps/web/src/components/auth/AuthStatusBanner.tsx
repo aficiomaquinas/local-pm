@@ -156,34 +156,34 @@ export function UserMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex w-full min-w-0 flex-col items-start gap-1.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-secondary/50"
+        className="flex w-full min-w-0 flex-col items-start gap-1.5 rounded-sm px-2 py-2 text-left transition-colors duration-micro ease-standard hover:bg-surface-hover"
       >
         <span
           aria-hidden="true"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+          className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg"
         >
           {initial}
         </span>
-        <span className="w-full truncate text-xs text-muted-foreground">
+        <span className="w-full truncate text-xs text-text-muted">
           {state.email}
         </span>
       </button>
       {open && (
         <div
           role="menu"
-          className="auth-menu-pop absolute bottom-full left-3 z-50 mb-1 w-48 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+          className="auth-menu-pop absolute bottom-full left-3 z-50 mb-1 w-48 rounded-sm border border-border-subtle bg-surface py-1 shadow-e2"
         >
           <a
             role="menuitem"
             href="/admin"
-            className="block px-3 py-1.5 text-sm hover:bg-secondary"
+            className="block px-3 py-1.5 text-sm text-text hover:bg-surface-hover"
           >
             Admin
           </a>
           <a
             role="menuitem"
             href="/admin/logout"
-            className="block px-3 py-1.5 text-sm text-red-300 hover:bg-secondary"
+            className="block px-3 py-1.5 text-sm text-text hover:bg-surface-hover"
           >
             Log out
           </a>

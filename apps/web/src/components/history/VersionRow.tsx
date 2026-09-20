@@ -160,14 +160,14 @@ export function VersionRow({ doc, onRestore, mutation }: VersionRowProps) {
       )}
 
       <ConfirmDialog
-        isOpen={confirmOpen}
+        open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleRestore}
         title="Restore this version?"
         message={`This rolls "${doc.parentLabel}" back to the snapshot from ${dateLabel}.\n\nThe restore itself creates a new version, so the action stays visible in the audit trail.`}
-        confirmText="Restore"
-        isDestructive={false}
-        isLoading={restoring}
+        confirmLabel="Restore"
+        destructive={false}
+        loading={restoring}
       />
     </li>
   )

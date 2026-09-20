@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 
 export const dynamic = 'force-dynamic'
+export const metadata = { title: 'Projects · local-pm' }
 
 const PAGE_SIZE = 20
 
@@ -23,6 +24,7 @@ export default async function ProjectsPage() {
         page: projectsResult.page ?? 1,
         totalPages: projectsResult.totalPages,
         hasNextPage: projectsResult.hasNextPage,
+        totalDocs: projectsResult.totalDocs,
       }}
     />
   )
