@@ -4,7 +4,7 @@
 |---|---|
 | **ID** | SPC-007 |
 | **Date** | 2026-09-20 |
-| **Status** | DRAFT — v1 implemented (topbar banner, commit 2a269e4); v2 refinement specified here, pending implementation |
+| **Status** | v2 IMPLEMENTED (feat/auth-ui-v2 e08b9eb, pending merge): sidebar user block + anonymous banner + mutation nudge per §2 — operator decision 2026-09-20. Gate green: pnpm verify 287 (web 204, mcp 83) + live browser check on the e2e stack (banner, user block, popover, nudge pulse on 403, PATCH/revert wire). |
 | **Type** | Spec (how REQ-005 is fulfilled) |
 | **Related** | [REQ-005](../requirements/2026-09-20_REQ-005_auth-session-visibility.md) · SPC-006 (OIDC) · SPC-005 (history) |
 
