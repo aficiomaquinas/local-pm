@@ -40,12 +40,11 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
       where: buildWhere(status),
     })
 
-  const [todoResult, inProgressResult, doneResult, projectsResult, teamsResult] = await Promise.all([
+  const [todoResult, inProgressResult, doneResult, projectsResult] = await Promise.all([
     findColumn(TicketStatus.TODO),
     findColumn(TicketStatus.IN_PROGRESS),
     findColumn(TicketStatus.DONE),
-    payload.find({ collection: 'projects', limit: 100, sort: 'name' }),
-    payload.find({ collection: 'teams', limit: 100, sort: 'name' }),
+    payload.find({ collection: 'projects', limit: 0, depth: 0 }),
   ])
 
   const initialTickets = [...todoResult.docs, ...inProgressResult.docs, ...doneResult.docs]
@@ -65,8 +64,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
   return (
     <KanbanBoard
       initialTickets={initialTickets}
-      projects={projectsResult.docs}
-      teams={teamsResult.docs}
+      hasProjects={projectsResult.totalDocs > 0}
       initialColumnPagination={initialColumnPagination}
     />
   )

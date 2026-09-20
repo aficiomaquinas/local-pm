@@ -17,15 +17,17 @@ const GAP_X = 20
 const GAP_Y = 72
 const PAD = 16
 
-export function DependencyGraph({ ticket, allTickets }: { ticket: Ticket; allTickets: Ticket[] }) {
+export function DependencyGraph({
+  ticket,
+  blockers,
+  blocking,
+}: {
+  ticket: Ticket
+  blockers: Ticket[]
+  blocking: Ticket[]
+}) {
   const { nodes, edges, width, height } = useMemo(() => {
-    const blockerIds = (ticket.blockedBy ?? []).map((b) => (typeof b === 'string' ? b : b.id))
-    const blockers = blockerIds
-      .map((id) => allTickets.find((t) => t.id === id))
-      .filter((t): t is Ticket => Boolean(t))
-    const blocked = allTickets.filter((t) =>
-      (t.blockedBy ?? []).some((b) => (typeof b === 'string' ? b : b.id) === ticket.id),
-    )
+    const blocked = blocking
 
     const rowWidth = (count: number) => Math.max(count, 1) * (NODE_W + GAP_X) - GAP_X
     const span = Math.max(rowWidth(blockers.length), rowWidth(blocked.length), NODE_W)
@@ -68,7 +70,7 @@ export function DependencyGraph({ ticket, allTickets }: { ticket: Ticket; allTic
       width: span + PAD * 2,
       height: (rows.length - 1) * (NODE_H + GAP_Y) + NODE_H + PAD * 2,
     }
-  }, [ticket, allTickets])
+  }, [ticket, blockers, blocking])
 
   if (edges.length === 0) {
     return (

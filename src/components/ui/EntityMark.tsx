@@ -43,9 +43,9 @@ export function projectIcon(name: string | null | undefined): LucideIcon {
 }
 
 const SIZE = {
-  sm: { box: 'size-6 rounded-xs', icon: 'size-4' },
-  md: { box: 'size-8 rounded-sm', icon: 'size-4' },
-  lg: { box: 'size-10 rounded-md', icon: 'size-5' },
+  sm: { box: 'size-6 rounded-sm', icon: 'size-3.5' },
+  md: { box: 'size-8 rounded-md', icon: 'size-4' },
+  lg: { box: 'size-10 rounded-lg', icon: 'size-5' },
 } as const
 
 export function EntityMark({
@@ -94,12 +94,13 @@ export function TicketKey({
   if (!value) return null
   return (
     <span
+      title={value}
       className={cn(
-        'inline-flex h-5 shrink-0 items-center rounded-xs border border-border-subtle',
-        'bg-surface-hover px-1.5 text-2xs font-semibold text-text-muted tabular',
+        'inline-flex h-5 shrink-0 items-center rounded-sm bg-surface-hover px-1.5',
+        'text-2xs font-semibold whitespace-nowrap text-text-muted tabular',
         className,
       )}
-      style={color ? { borderColor: `${color}40`, color } : undefined}
+      style={color ? { backgroundColor: `${color}1f`, color } : undefined}
     >
       {value}
     </span>

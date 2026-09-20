@@ -13,8 +13,10 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { EntityMark } from '@/components/ui/EntityMark'
 import { Menu } from '@/components/ui/Menu'
 import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
-import { DensityControl, Table, Td, Th, Tr, useDensity } from '@/components/ui/Table'
+import { Kbd } from '@/components/ui/Kbd'
+import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/Toast'
+import { formatDate } from '@/lib/format'
 import { TeamFormDialog } from './TeamFormDialog'
 import type { Team } from '@/payload-types'
 
@@ -40,7 +42,6 @@ export function TeamsList({
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [density, setDensity] = useDensity()
 
   const [teams, setTeams] = useState<Team[]>(initialTeams)
   const [pagination, setPagination] = useState<Pagination>(
@@ -219,10 +220,10 @@ export function TeamsList({
   return (
     <div className="flex h-full flex-col">
       <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-text">Teams</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="mr-1 shrink-0 text-xl font-semibold text-text">Teams</h1>
 
-          <label className="relative flex h-8 min-w-48 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-80">
+          <label className="relative flex h-8 min-w-44 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-72">
             <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
             <span className="sr-only">Search teams by name</span>
             <input
@@ -233,14 +234,14 @@ export function TeamsList({
               placeholder="Search teams"
               className="min-w-0 flex-1 bg-transparent text-base text-text outline-none max-sm:text-md"
             />
-            <kbd className="hidden shrink-0 font-sans text-xs text-text-muted can-hover:inline">/</kbd>
+            <Kbd raw="/" className="max-sm:hidden" />
           </label>
 
           <Button
             variant="primary"
             icon={Plus}
-            shortcut="C"
-            className="ml-auto"
+            shortcut="c"
+            className="ml-auto max-sm:w-full"
             onClick={() => {
               setEditing(null)
               setFormOpen(true)
@@ -264,9 +265,6 @@ export function TeamsList({
               </Button>
             </>
           )}
-          <div className="ml-auto">
-            <DensityControl value={density} onChange={setDensity} />
-          </div>
         </div>
       </header>
 
@@ -313,7 +311,7 @@ export function TeamsList({
                     sortable
                     sortDirection={sortDirection('createdAt')}
                     onSort={() => toggleSort('createdAt')}
-                    width="10rem"
+                    width="13rem"
                   >
                     Created
                   </Th>
@@ -324,7 +322,7 @@ export function TeamsList({
               </thead>
               <tbody>
                 {teams.map((team) => (
-                  <Tr key={team.id} density={density} onOpen={() => router.push(`/teams/${team.id}`)}>
+                  <Tr key={team.id} onOpen={() => router.push(`/teams/${team.id}`)}>
                     <Td>
                       <span className="flex min-w-0 items-center gap-2.5">
                         <EntityMark icon={Users} color={team.color} size="sm" />
@@ -339,7 +337,7 @@ export function TeamsList({
                       </span>
                     </Td>
                     <Td className="tabular text-text-muted">
-                      {new Date(team.createdAt).toLocaleDateString()}
+                      <span className="whitespace-nowrap">{formatDate(team.createdAt)}</span>
                     </Td>
                     <Td align="right">
                       <span

@@ -159,34 +159,12 @@ export const Tickets: CollectionConfig = {
   timestamps: true,
 }
 
-/* ------------------------------------------------------------- dependencies -- */
-
-/**
- * A rejected dependency edge is USER error, not server error.
- *
- * Payload treats a bare `Error` thrown from a hook as internal and replaces the
- * message with "Something went wrong." — so the caller is told nothing useful
- * and cannot tell a cycle from an outage. (The upstream fork this guard comes
- * from throws a plain Error and loses the message this way.) `APIError` with
- * `isPublic` keeps the explanation and returns 400 rather than 500.
- */
 class CycleError extends APIError {
   constructor(message: string) {
     super(message, 400, null, true)
   }
 }
 
-/**
- * `blockedBy` is a self-referential graph with nothing stopping A → B → A.
- *
- * Adapted from Ars Nova Singers (@ArsNovaSingers) in ArsNovaSingers/local-pm-Ars,
- * commit d488521.
- *
- * A cycle is not merely untidy data: it makes "what is ready to work on?"
- * unanswerable, and it hangs any layered graph layout that walks the edges —
- * including the DependencyGraph component in this repo. Reject the edge that
- * would close the loop, at the moment it is created.
- */
 async function assertNoDependencyCycle(
   req: PayloadRequest,
   blockedBy: unknown,
@@ -198,7 +176,6 @@ async function assertNoDependencyCycle(
   if (selfId !== null && proposed.includes(String(selfId))) {
     throw new CycleError('A ticket cannot block itself.')
   }
-  // A brand-new ticket has no id yet, so nothing can already depend on it.
   if (selfId === null) return
 
   const target = String(selfId)
@@ -206,7 +183,6 @@ async function assertNoDependencyCycle(
   let frontier = [...proposed]
   let hops = 0
 
-  // Bounded walk: a pathological graph must not spin here.
   while (frontier.length && hops < 64) {
     hops += 1
     const docs = await req.payload.find({
@@ -234,7 +210,6 @@ async function assertNoDependencyCycle(
   }
 }
 
-/** Normalize a relationship value (ids, numbers or populated docs) to string ids. */
 function toIdArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
@@ -249,25 +224,6 @@ function toIdArray(value: unknown): string[] {
     .filter((v): v is string => Boolean(v))
 }
 
-/* ---------------------------------------------------------------- ticket ids -- */
-
-/**
- * Allocate the next ticket number ATOMICALLY.
- *
- * Adapted from Ars Nova Singers (@ArsNovaSingers) in ArsNovaSingers/local-pm-Ars,
- * commit d488521.
- *
- * The original implementation read `project.ticketCounter`, incremented it in
- * JavaScript and wrote it back. Two creates landing together both read 5, both
- * computed 6, and both wrote `PROJ-6` — and since `ticketId` is declared
- * `unique`, the loser fails on a duplicate-key error at best, or two tickets
- * share an ID where the index has not been built. A bulk import, or an MCP
- * agent creating a batch of tickets, IS that scenario.
- *
- * `findOneAndUpdate` with `$inc` performs the read and the increment as one
- * document operation, so concurrent callers are handed distinct numbers by the
- * database itself.
- */
 async function generateTicketId(req: PayloadRequest, projectId: string): Promise<string> {
   const model = getMongooseModel(req, 'projects')
 
@@ -292,7 +248,6 @@ type MinimalModel = {
   ) => Promise<{ prefix: string; ticketCounter: number } | null>
 }
 
-/** Reach the underlying mongoose model, when the configured adapter exposes one. */
 function getMongooseModel(req: PayloadRequest, slug: string): MinimalModel | null {
   const collections = (req.payload.db as unknown as { collections?: Record<string, MinimalModel> })
     .collections
@@ -300,12 +255,6 @@ function getMongooseModel(req: PayloadRequest, slug: string): MinimalModel | nul
   return model && typeof model.findOneAndUpdate === 'function' ? model : null
 }
 
-/**
- * Fallback for a database adapter exposing no atomic primitive. Still not a
- * true compare-and-set, so it verifies the ID is unused before claiming it and
- * retries on collision — failing loudly rather than silently issuing a
- * duplicate.
- */
 async function generateTicketIdWithRetry(req: PayloadRequest, projectId: string): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const project = await req.payload.findByID({ collection: 'projects', id: projectId })

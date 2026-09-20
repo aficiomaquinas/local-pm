@@ -23,15 +23,13 @@ export function applyTheme(pref: ThemePreference) {
   try {
     if (pref === 'system') localStorage.removeItem(THEME_STORAGE_KEY)
     else localStorage.setItem(THEME_STORAGE_KEY, pref)
-  } catch {
-  }
+  } catch {}
 }
 
 export function readTheme(): ThemePreference {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY)
     if (stored === 'light' || stored === 'dark') return stored
-  } catch {
-  }
+  } catch {}
   return 'system'
 }

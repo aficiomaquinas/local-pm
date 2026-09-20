@@ -1,25 +1,31 @@
 import {
-  AlertTriangle,
   Ban,
   Check,
   CheckCircle2,
   Circle,
-  CircleDashed,
   CircleDot,
-  Minus,
   PauseCircle,
   Timer,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
+import {
+  PriorityHigh,
+  PriorityLow,
+  PriorityMedium,
+  PriorityNone,
+  PriorityUrgent,
+} from '@/components/ui/icons/Priority'
 import { ProjectStatus, TicketPriority, TicketStatus } from '@/types/enums'
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'accent'
 
+export type StateIcon = LucideIcon | React.ComponentType<{ className?: string }>
+
 export interface StateMeta {
   value: string
   label: string
-  icon: LucideIcon
+  icon: StateIcon
   tone: Tone
 }
 
@@ -67,8 +73,6 @@ export function ticketStatusMeta(status: string | null | undefined): StateMeta {
 }
 
 export interface PriorityMeta extends StateMeta {
-  glyph: string
-
   rank: number
 }
 
@@ -76,41 +80,36 @@ export const TICKET_PRIORITY_META: Record<TicketPriority, PriorityMeta> = {
   [TicketPriority.URGENT]: {
     value: TicketPriority.URGENT,
     label: 'Urgent',
-    glyph: '▲▲▲',
     rank: 4,
-    icon: AlertTriangle,
+    icon: PriorityUrgent,
     tone: 'danger',
   },
   [TicketPriority.HIGH]: {
     value: TicketPriority.HIGH,
     label: 'High',
-    glyph: '▲▲',
     rank: 3,
-    icon: AlertTriangle,
+    icon: PriorityHigh,
     tone: 'warning',
   },
   [TicketPriority.MEDIUM]: {
     value: TicketPriority.MEDIUM,
     label: 'Medium',
-    glyph: '▲',
     rank: 2,
-    icon: CircleDot,
+    icon: PriorityMedium,
     tone: 'info',
   },
   [TicketPriority.LOW]: {
     value: TicketPriority.LOW,
     label: 'Low',
-    glyph: '–',
     rank: 1,
-    icon: Minus,
+    icon: PriorityLow,
     tone: 'neutral',
   },
   [TicketPriority.NO_PRIORITY]: {
     value: TicketPriority.NO_PRIORITY,
-    label: 'No Priority',
-    glyph: '·',
+    label: 'No priority',
     rank: 0,
-    icon: CircleDashed,
+    icon: PriorityNone,
     tone: 'neutral',
   },
 }
@@ -163,8 +162,7 @@ export const BLOCKED_META: StateMeta = {
 export interface StateSelectOption {
   value: string
   label: string
-  icon?: LucideIcon
-  glyph?: string
+  icon?: StateIcon
   tone?: Tone
 }
 
@@ -183,7 +181,7 @@ export function ticketPriorityOptions(): StateSelectOption[] {
     .map((meta) => ({
       value: meta.value,
       label: meta.label,
-      glyph: meta.glyph,
+      icon: meta.icon,
       tone: meta.tone,
     }))
 }

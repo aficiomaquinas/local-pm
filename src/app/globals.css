@@ -469,6 +469,13 @@
     -webkit-text-size-adjust: 100%;
   }
 
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   body {
     background-color: var(--color-bg);
     color: var(--color-text);
@@ -564,6 +571,15 @@
 
 @custom-variant can-hover (@media (hover: hover) and (pointer: fine));
 
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .rich-text-editor .ql-container.ql-snow {
   border: none;
   font-family: var(--font-sans);
@@ -576,9 +592,12 @@
   padding: 0 0 8px;
   margin-bottom: 8px;
 }
+
 .rich-text-editor .ql-editor {
   padding: 8px 0;
   min-height: 120px;
+  max-height: 420px;
+  overflow-y: auto;
   line-height: 1.5;
 }
 .rich-text-editor .ql-editor.ql-blank::before {

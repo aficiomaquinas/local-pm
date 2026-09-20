@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { formatDateCompact } from '@/lib/format'
 import { BLOCKED_META, ticketStatusMeta } from '@/lib/status'
 import { TicketStatus } from '@/types/enums'
 import { Badge } from '@/components/ui/Badge'
@@ -149,7 +150,7 @@ export function KanbanCard({
       {project?.color && (
         <span
           aria-hidden
-          className="absolute inset-y-2 left-0 w-0.5 rounded-full"
+          className="absolute inset-y-2.5 left-1 w-[3px] rounded-full"
           style={{ backgroundColor: project.color }}
         />
       )}
@@ -215,7 +216,7 @@ export function KanbanCard({
                 )}
               >
                 <CalendarDays className="size-3.5" aria-hidden />
-                {dueDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                {formatDateCompact(dueDate)}
                 {overdue && <span className="sr-only">(overdue)</span>}
               </span>
             )}

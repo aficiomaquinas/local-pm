@@ -1,42 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/cn'
-
-export type Density = 'compact' | 'default' | 'comfortable'
-
-const ROW_HEIGHT: Record<Density, string> = {
-  compact: 'h-8',
-  default: 'h-9',
-  comfortable: 'h-11',
-}
-
-const DENSITY_KEY = 'local-pm:density'
-
-export function useDensity(): [Density, (next: Density) => void] {
-  const [density, setDensity] = useState<Density>('default')
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(DENSITY_KEY)
-      if (stored === 'compact' || stored === 'default' || stored === 'comfortable') {
-        setDensity(stored)
-      }
-    } catch {
-    }
-  }, [])
-
-  const update = (next: Density) => {
-    setDensity(next)
-    try {
-      localStorage.setItem(DENSITY_KEY, next)
-    } catch {
-    }
-  }
-
-  return [density, update]
-}
 
 export function Table({
   caption,
@@ -96,7 +61,7 @@ export function Th({
           type="button"
           onClick={(e) => onSort?.(e.shiftKey)}
           className={cn(
-            'group inline-flex h-9 items-center gap-1 rounded-xs',
+            'group inline-flex h-11 items-center gap-1 rounded-xs',
             align === 'right' && 'flex-row-reverse',
           )}
         >
@@ -116,20 +81,18 @@ export function Th({
           ) : null}
         </button>
       ) : (
-        <span className="inline-flex h-9 items-center">{children}</span>
+        <span className="inline-flex h-11 items-center">{children}</span>
       )}
     </th>
   )
 }
 
 export function Tr({
-  density = 'default',
   selected,
   onOpen,
   children,
   className,
 }: {
-  density?: Density
   selected?: boolean
 
   onOpen?: () => void
@@ -149,7 +112,7 @@ export function Tr({
       }}
       aria-selected={selected}
       className={cn(
-        ROW_HEIGHT[density],
+        'h-11',
         'group border-b border-border-subtle',
         onOpen && 'cursor-pointer',
         'transition-colors duration-micro',
@@ -185,46 +148,5 @@ export function Td({
     >
       {children}
     </td>
-  )
-}
-
-export function DensityControl({
-  value,
-  onChange,
-}: {
-  value: Density
-  onChange: (next: Density) => void
-}) {
-  const options: { value: Density; label: string }[] = [
-    { value: 'compact', label: 'Compact' },
-    { value: 'default', label: 'Default' },
-    { value: 'comfortable', label: 'Comfortable' },
-  ]
-
-  return (
-    <fieldset className="flex items-center gap-1 rounded-sm border border-border p-0.5">
-      <legend className="sr-only">Row density</legend>
-      {options.map((option) => (
-        <label
-          key={option.value}
-          className={cn(
-            'cursor-pointer rounded-xs px-2 py-1 text-xs',
-            value === option.value
-              ? 'bg-accent-subtle font-medium text-accent-text'
-              : 'text-text-muted hover:bg-surface-hover',
-          )}
-        >
-          <input
-            type="radio"
-            name="density"
-            value={option.value}
-            checked={value === option.value}
-            onChange={() => onChange(option.value)}
-            className="sr-only"
-          />
-          {option.label}
-        </label>
-      ))}
-    </fieldset>
   )
 }

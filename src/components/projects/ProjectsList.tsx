@@ -7,7 +7,7 @@ import { ListFilter, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'luc
 import { cn } from '@/lib/cn'
 import { useShortcut } from '@/lib/shortcuts'
 import { PROJECT_STATUS_OPTIONS, ProjectStatus } from '@/types/enums'
-import { Button } from '@/components/ui/Button'
+import { Button, LinkButton } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -17,9 +17,10 @@ import { Menu } from '@/components/ui/Menu'
 import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
 import { ProjectStatusBadge } from '@/components/ui/StateIndicator'
 import { projectStatusOptions } from '@/lib/status'
-import { DensityControl, Table, Td, Th, Tr, useDensity } from '@/components/ui/Table'
+import { formatDate } from '@/lib/format'
+import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/Toast'
-import { ProjectFormDialog } from './ProjectFormDialog'
+import { Kbd } from '@/components/ui/Kbd'
 import type { Project } from '@/payload-types'
 
 const PAGE_SIZE = 20
@@ -44,7 +45,6 @@ export function ProjectsList({
 }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [density, setDensity] = useDensity()
 
   const [projects, setProjects] = useState<Project[]>(initialProjects)
   const [pagination, setPagination] = useState<Pagination>(
@@ -58,8 +58,6 @@ export function ProjectsList({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<Project | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ project: Project; ticketCount: number } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -157,10 +155,7 @@ export function ProjectsList({
     description: 'Create a project',
     group: 'Projects',
     scope: 'list',
-    run: () => {
-      setEditing(null)
-      setFormOpen(true)
-    },
+    run: () => router.push('/projects/new'),
   })
 
   const hasFilters = Boolean(query || status)
@@ -277,10 +272,10 @@ export function ProjectsList({
   return (
     <div className="flex h-full flex-col">
       <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-text">Projects</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="mr-1 shrink-0 text-xl font-semibold text-text">Projects</h1>
 
-          <label className="relative flex h-8 min-w-48 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-80">
+          <label className="relative flex h-8 min-w-44 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-72">
             <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
             <span className="sr-only">Search projects by name</span>
             <input
@@ -291,7 +286,7 @@ export function ProjectsList({
               placeholder="Search projects"
               className="min-w-0 flex-1 bg-transparent text-base text-text outline-none max-sm:text-md"
             />
-            <kbd className="hidden shrink-0 font-sans text-xs text-text-muted can-hover:inline">/</kbd>
+            <Kbd raw="/" className="max-sm:hidden" />
           </label>
 
           <Select
@@ -299,25 +294,22 @@ export function ProjectsList({
             aria-label="Filter by status"
             value={status}
             onValueChange={(next) => setFilters({ status: next as ProjectStatus | '' })}
-            className="w-40"
+            className="w-44 max-sm:w-full"
             options={[
               { value: '', label: 'All statuses', icon: ListFilter },
               ...projectStatusOptions(),
             ]}
           />
 
-          <Button
+          <LinkButton
             variant="primary"
             icon={Plus}
-            shortcut="C"
-            className="ml-auto"
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
+            href="/projects/new"
+            className="ml-auto max-sm:w-full"
           >
             New project
-          </Button>
+            <Kbd keys="c" tone="inverse" className="ml-1.5" />
+          </LinkButton>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -342,9 +334,6 @@ export function ProjectsList({
             </Button>
           )}
 
-          <div className="ml-auto">
-            <DensityControl value={density} onChange={setDensity} />
-          </div>
         </div>
       </header>
 
@@ -371,13 +360,7 @@ export function ProjectsList({
             kind="no-data"
             title="No projects yet"
             description="A project groups tickets and gives them their key, like ABC-12. Create the first one to get started."
-            action={{
-              label: 'Create project',
-              onClick: () => {
-                setEditing(null)
-                setFormOpen(true)
-              },
-            }}
+            action={{ label: 'Create project', onClick: () => router.push('/projects/new') }}
           />
         ) : (
           <>
@@ -407,7 +390,7 @@ export function ProjectsList({
                     sortable
                     sortDirection={sortDirection('createdAt')}
                     onSort={() => toggleSort('createdAt')}
-                    width="10rem"
+                    width="13rem"
                   >
                     Created
                   </Th>
@@ -420,7 +403,6 @@ export function ProjectsList({
                 {projects.map((project) => (
                   <Tr
                     key={project.id}
-                    density={density}
                     onOpen={() => router.push(`/projects/${project.id}`)}
                   >
                     <Td>
@@ -444,7 +426,7 @@ export function ProjectsList({
                       {project.ticketCounter ?? 0}
                     </Td>
                     <Td className="tabular text-text-muted">
-                      {new Date(project.createdAt).toLocaleDateString()}
+                      <span className="whitespace-nowrap">{formatDate(project.createdAt)}</span>
                     </Td>
                     <Td align="right">
                       <span
@@ -463,10 +445,7 @@ export function ProjectsList({
                               id: 'edit',
                               label: 'Edit project',
                               icon: Pencil,
-                              onSelect: () => {
-                                setEditing(project)
-                                setFormOpen(true)
-                              },
+                              onSelect: () => router.push(`/projects/${project.id}/edit`),
                             },
                             {
                               id: 'delete',
@@ -504,30 +483,6 @@ export function ProjectsList({
           </>
         )}
       </div>
-
-      <ProjectFormDialog
-        open={formOpen}
-        onClose={() => {
-          setFormOpen(false)
-          setEditing(null)
-        }}
-        project={editing}
-        onSaved={(saved, created) => {
-          setProjects((prev) =>
-            created ? [saved, ...prev] : prev.map((p) => (p.id === saved.id ? saved : p)),
-          )
-          if (created) setPagination((p) => ({ ...p, totalDocs: p.totalDocs + 1 }))
-          setFormOpen(false)
-          setEditing(null)
-          toast({
-            title: created ? `${saved.name} created` : 'Changes saved',
-            tone: 'success',
-            action: created
-              ? { label: 'Open', onClick: () => router.push(`/projects/${saved.id}`) }
-              : undefined,
-          })
-        }}
-      />
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}
