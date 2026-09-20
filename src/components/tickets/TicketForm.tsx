@@ -13,12 +13,12 @@ import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ErrorSummary, Field, Input } from '@/components/ui/Field'
-import { ProjectSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import { MemberSelect, ProjectSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
 import { Select } from '@/components/ui/Select'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
-import type { Project, Team, Ticket } from '@/payload-types'
+import type { Member, Project, Team, Ticket } from '@/payload-types'
 
 interface BlockerRef {
   id: string
@@ -33,6 +33,7 @@ interface FormState {
   priority: TicketPriority
   projectId: string
   teamId: string
+  assigneeId: string
   dueDate: string
   labels: { name: string }[]
   subtasks: { title: string; completed: boolean }[]
@@ -54,6 +55,7 @@ function emptyForm(projectId: string, status: TicketStatus): FormState {
     priority: TicketPriority.NO_PRIORITY,
     projectId,
     teamId: '',
+    assigneeId: '',
     dueDate: '',
     labels: [],
     subtasks: [],
@@ -69,6 +71,8 @@ function fromTicket(ticket: Ticket): FormState {
     priority: (ticket.priority as TicketPriority) ?? TicketPriority.NO_PRIORITY,
     projectId: typeof ticket.project === 'string' ? ticket.project : (ticket.project?.id ?? ''),
     teamId: typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? ''),
+    assigneeId:
+      typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
     dueDate: ticket.dueDate ? ticket.dueDate.slice(0, 10) : '',
     labels: (ticket.labels ?? []).map((l) => ({ name: l.name })),
     subtasks: (ticket.subtasks ?? []).map((s) => ({
@@ -91,6 +95,7 @@ export function TicketForm({
   ticket,
   project,
   team,
+  assignee,
   defaultProjectId,
   defaultStatus = TicketStatus.TODO,
   returnTo,
@@ -98,6 +103,7 @@ export function TicketForm({
   ticket: Ticket | null
   project?: Project | null
   team?: Team | null
+  assignee?: Member | null
   defaultProjectId?: string | null
   defaultStatus?: TicketStatus
   returnTo?: string
@@ -121,6 +127,7 @@ export function TicketForm({
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(project ?? null)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(team ?? null)
+  const [selectedAssignee, setSelectedAssignee] = useState<Member | null>(assignee ?? null)
 
   const summaryRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
@@ -168,6 +175,7 @@ export function TicketForm({
         priority: form.priority,
         project: form.projectId,
         team: form.teamId || null,
+        assignee: form.assigneeId || null,
         labels: form.labels,
         subtasks: form.subtasks,
         blockedBy: form.blockers.map((b) => b.id),
@@ -332,6 +340,21 @@ export function TicketForm({
                   onChange={(next, doc) => {
                     set('teamId', next)
                     setSelectedTeam(doc)
+                  }}
+                />
+              )}
+            </Field>
+
+            <Field label="Assignee" optional>
+              {({ id }) => (
+                <MemberSelect
+                  id={id}
+                  value={form.assigneeId}
+                  selected={selectedAssignee}
+                  aria-label="Assignee"
+                  onChange={(next, doc) => {
+                    set('assigneeId', next)
+                    setSelectedAssignee(doc)
                   }}
                 />
               )}

@@ -70,6 +70,7 @@ export interface Config {
     users: User;
     projects: Project;
     teams: Team;
+    members: Member;
     tickets: Ticket;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -81,6 +82,7 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
     teams: TeamsSelect<false> | TeamsSelect<true>;
+    members: MembersSelect<false> | MembersSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -282,6 +284,37 @@ export interface Team {
   createdAt: string;
 }
 /**
+ * People that tickets can be assigned to.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: string;
+  /**
+   * Display name — what shows on cards and in pickers
+   */
+  name: string;
+  /**
+   * Optional. Used to tell two people with the same name apart.
+   */
+  email?: string | null;
+  /**
+   * The team this person belongs to
+   */
+  team?: (string | null) | Team;
+  /**
+   * Inactive people keep their existing assignments but drop out of the assignee pickers.
+   */
+  active?: boolean | null;
+  /**
+   * The login account this person signs in with. Set it and "My tickets" works for them.
+   */
+  user?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Individual work items within projects
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -331,6 +364,10 @@ export interface Ticket {
    * The team responsible for this ticket
    */
   team?: (string | null) | Team;
+  /**
+   * The person responsible for this ticket
+   */
+  assignee?: (string | null) | Member;
   /**
    * Tickets that must be completed before this ticket can be worked on
    */
@@ -401,6 +438,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'teams';
         value: string | Team;
+      } | null)
+    | ({
+        relationTo: 'members';
+        value: string | Member;
       } | null)
     | ({
         relationTo: 'tickets';
@@ -503,6 +544,19 @@ export interface TeamsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members_select".
+ */
+export interface MembersSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
+  team?: T;
+  active?: T;
+  user?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "tickets_select".
  */
 export interface TicketsSelect<T extends boolean = true> {
@@ -513,6 +567,7 @@ export interface TicketsSelect<T extends boolean = true> {
   priority?: T;
   project?: T;
   team?: T;
+  assignee?: T;
   blockedBy?: T;
   labels?:
     | T

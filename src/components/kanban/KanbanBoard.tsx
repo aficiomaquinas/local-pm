@@ -96,6 +96,7 @@ function filtersToSearch(filters: BoardFilters, ticketId: string | null): string
   const params = new URLSearchParams()
   if (filters.projectId) params.set('project', filters.projectId)
   if (filters.teamId) params.set('team', filters.teamId)
+  if (filters.assigneeId) params.set('assignee', filters.assigneeId)
   if (filters.query) params.set('q', filters.query)
   if (ticketId) params.set('ticket', ticketId)
   const qs = params.toString()
@@ -119,6 +120,7 @@ export function KanbanBoard({
   const [filters, setFilters] = useState<BoardFilters>({
     projectId: searchParams.get('project'),
     teamId: searchParams.get('team'),
+    assigneeId: searchParams.get('assignee'),
     query: searchParams.get('q') ?? '',
   })
   const [openTicketId, setOpenTicketId] = useState<string | null>(searchParams.get('ticket'))
@@ -141,6 +143,7 @@ export function KanbanBoard({
     JSON.stringify({
       projectId: searchParams.get('project'),
       teamId: searchParams.get('team'),
+      assigneeId: searchParams.get('assignee'),
       query: searchParams.get('q') ?? '',
     }),
   )
@@ -169,6 +172,7 @@ export function KanbanBoard({
       setFilters({
         projectId: params.get('project'),
         teamId: params.get('team'),
+        assigneeId: params.get('assignee'),
         query: params.get('q') ?? '',
       })
       setOpenTicketId(params.get('ticket'))
@@ -225,6 +229,7 @@ export function KanbanBoard({
     const signature = JSON.stringify({
       projectId: filters.projectId,
       teamId: filters.teamId,
+      assigneeId: filters.assigneeId,
       query: filters.query,
     })
     if (signature === fetchedFor.current) return
@@ -244,6 +249,9 @@ export function KanbanBoard({
           params.set('where[status][equals]', status)
           if (filters.projectId) params.set('where[project][equals]', filters.projectId)
           if (filters.teamId) params.set('where[team][equals]', filters.teamId)
+          if (filters.assigneeId) {
+            params.set('where[assignee][equals]', filters.assigneeId)
+          }
           if (filters.query.trim()) params.set('where[title][like]', filters.query.trim())
           const response = await fetch(`/api/tickets?${params}`, { signal: controller.signal })
           if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
@@ -287,7 +295,7 @@ export function KanbanBoard({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [filters.projectId, filters.teamId, filters.query, toast])
+  }, [filters.projectId, filters.teamId, filters.assigneeId, filters.query, toast])
 
   const sensors = useSensors(
     useSensor(MousePointerSensor, { activationConstraint: { distance: 8 } }),
@@ -310,7 +318,9 @@ export function KanbanBoard({
   )
 
   const totalLoaded = tickets.length
-  const hasFilters = Boolean(filters.projectId || filters.teamId || filters.query)
+  const hasFilters = Boolean(
+    filters.projectId || filters.teamId || filters.assigneeId || filters.query,
+  )
 
   const flash = (ticketId: string) => {
     setLandedTicketId(ticketId)
@@ -450,6 +460,7 @@ export function KanbanBoard({
       params.set('where[status][equals]', status)
       if (filters.projectId) params.set('where[project][equals]', filters.projectId)
       if (filters.teamId) params.set('where[team][equals]', filters.teamId)
+      if (filters.assigneeId) params.set('where[assignee][equals]', filters.assigneeId)
       if (filters.query.trim()) params.set('where[title][like]', filters.query.trim())
 
       const response = await fetch(`/api/tickets?${params}`)
@@ -531,7 +542,7 @@ export function KanbanBoard({
     group: 'Board',
     scope: 'board',
     enabled: hasFilters,
-    run: () => updateFilters({ projectId: null, teamId: null, query: '' }),
+    run: () => updateFilters({ projectId: null, teamId: null, assigneeId: null, query: '' }),
   })
 
   const announcements: Announcements = {
@@ -588,10 +599,11 @@ export function KanbanBoard({
           <EmptyState
             kind="no-match"
             title="No tickets match these filters"
-            description="Nothing on this board fits the current project, team and search combination."
+            description="Nothing on this board fits the current project, team, assignee and search combination."
             action={{
               label: 'Clear filters',
-              onClick: () => updateFilters({ projectId: null, teamId: null, query: '' }),
+              onClick: () =>
+                updateFilters({ projectId: null, teamId: null, assigneeId: null, query: '' }),
             }}
           />
         ) : (

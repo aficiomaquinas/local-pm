@@ -16,6 +16,7 @@ import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
 import { BLOCKED_META, ticketStatusMeta } from '@/lib/status'
 import { TicketStatus } from '@/types/enums'
+import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
@@ -75,6 +76,7 @@ export function KanbanCard({
   delete pointerListeners.onKeyDown
 
   const project = typeof ticket.project === 'object' ? ticket.project : null
+  const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
   const labels = ticket.labels ?? []
   const subtasks = ticket.subtasks ?? []
   const doneSubtasks = subtasks.filter((s) => s.completed).length
@@ -183,46 +185,51 @@ export function KanbanCard({
           {ticket.title}
         </span>
 
-        {(labels.length > 0 || dueDate || blockedCount > 0 || subtasks.length > 0) && (
-          <span className="flex flex-wrap items-center gap-2">
-            {blockedCount > 0 && (
-              <Badge tone={BLOCKED_META.tone} icon={BLOCKED_META.icon}>
-                Blocked · {blockedCount}
-              </Badge>
-            )}
+        <span className="flex flex-wrap items-center gap-2">
+          {blockedCount > 0 && (
+            <Badge tone={BLOCKED_META.tone} icon={BLOCKED_META.icon}>
+              Blocked · {blockedCount}
+            </Badge>
+          )}
 
-            {labels.slice(0, 3).map((label, i) => (
-              <Badge key={label.id ?? i} tone="neutral" maxWidth="8rem" title={label.name}>
-                {label.name}
-              </Badge>
-            ))}
-            {labels.length > 3 && (
-              <span className="text-xs text-text-muted tabular">+{labels.length - 3}</span>
-            )}
+          {labels.slice(0, 3).map((label, i) => (
+            <Badge key={label.id ?? i} tone="neutral" maxWidth="8rem" title={label.name}>
+              {label.name}
+            </Badge>
+          ))}
+          {labels.length > 3 && (
+            <span className="text-xs text-text-muted tabular">+{labels.length - 3}</span>
+          )}
 
-            {subtasks.length > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs text-text-muted tabular">
-                <CheckSquare className="size-3.5" aria-hidden />
-                {doneSubtasks}/{subtasks.length}
-                <span className="sr-only">subtasks complete</span>
-              </span>
-            )}
+          {subtasks.length > 0 && (
+            <span className="inline-flex items-center gap-1 text-xs text-text-muted tabular">
+              <CheckSquare className="size-3.5" aria-hidden />
+              {doneSubtasks}/{subtasks.length}
+              <span className="sr-only">subtasks complete</span>
+            </span>
+          )}
 
-            {dueDate && (
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1 text-xs tabular',
-                  overdue ? 'font-medium text-danger-text' : 'text-text-muted',
-                )}
-              >
-                <CalendarDays className="size-3.5" aria-hidden />
-                {formatDateCompact(dueDate)}
-                {overdue && <span className="sr-only">(overdue)</span>}
-              </span>
-            )}
-          </span>
-        )}
-      </a>
+          {dueDate && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 text-xs tabular',
+                overdue ? 'font-medium text-danger-text' : 'text-text-muted',
+              )}
+            >
+              <CalendarDays className="size-3.5" aria-hidden />
+              {formatDateCompact(dueDate)}
+              {overdue && <span className="sr-only">(overdue)</span>}
+            </span>
+          )}
+
+          <Avatar
+            name={assignee?.name}
+            seed={assignee?.id}
+            size="sm"
+            className="ml-auto"
+          />
+        </span>
+    </a>
 
       {!isOverlay && (
         <div

@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CornerDownLeft, FolderKanban, LayoutDashboard, Search, Ticket, Users } from 'lucide-react'
+import {
+  CornerDownLeft,
+  FolderKanban,
+  LayoutDashboard,
+  Search,
+  Ticket,
+  UserRound,
+  Users,
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useShortcut, useShortcutRegistry } from '@/lib/shortcuts'
 import { Dialog } from '@/components/ui/Dialog'
@@ -85,6 +93,14 @@ export function CommandPalette({
         shortcut: 'g v',
         group: 'Navigate',
         run: () => router.push('/board'),
+      },
+      {
+        id: 'nav.myTickets',
+        label: 'Go to My tickets',
+        icon: UserRound,
+        shortcut: 'g m',
+        group: 'Navigate',
+        run: () => router.push('/my-tickets'),
       },
       {
         id: 'nav.projects',
