@@ -65,3 +65,16 @@ suggestions.** Load the relevant file before building or changing UI.
 - Tailwind v4 is CSS-first: tokens live in `@theme` in `src/app/globals.css`. There is no `tailwind.config.js`.
 - Components never write `dark:` for color — the light/dark swap happens in the primitive token layer.
 - New shortcuts go in the central registry so `?` stays truthful.
+
+---
+
+## Roadmap
+
+[`roadmap.json`](roadmap.json) is the single source of truth for what is planned,
+in flight, and done. Read `agentInstructions` in that file before starting work,
+and update the task you touched in the same commit.
+
+Tasks are grouped into tiers 0–6, lowest tier first. `agentInstructions.queries`
+defines what "next" means. Contributors: picking anything in tier 0 or 1 is
+always welcome, and an issue referencing the task `id` is the fastest way to
+agree on scope before writing code.
