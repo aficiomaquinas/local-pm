@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
     // (.claude/rules/10-assets-icons.md §10.2).
     optimizePackageImports: ['lucide-react'],
   },
+  // isomorphic-dompurify (XSS sanitizer on RichTextDisplay, upstream d7747b6
+  // port) instantiates a jsdom window when imported on the server. jsdom must
+  // NOT be bundled into the server chunks: it reads browser/default-stylesheet.css
+  // relative to its own module directory at runtime, and a bundled copy
+  // resolves __dirname to the app root → ENOENT on every SSR pass that pulls
+  // the editor module. Keep them as runtime requires from node_modules.
+  serverExternalPackages: ['isomorphic-dompurify', 'dompurify', 'jsdom'],
 }
 
 export default withPayload(nextConfig)
