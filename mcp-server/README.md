@@ -48,6 +48,9 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `update_comment` - Edit a comment body, or resolve/reopen a thread
 - `delete_comment` - Delete a comment (and its replies, if it opened the thread)
 
+### Activity
+- `list_activity` - Read a ticket's change history, oldest first
+
 ## Installation
 
 ### Prerequisites
@@ -359,6 +362,18 @@ Adds a new subtask to a ticket.
 **Parameters:**
 - `ticketId` (string, required): Parent ticket ID
 - `title` (string, required): Subtask title
+
+### list_activity
+Reads the change history of a ticket, oldest first. Each entry records one field
+that changed, the values before and after as they read at the time, and who made
+the change. The history is written automatically and cannot be edited or deleted;
+board reordering is not recorded.
+
+**Parameters:**
+- `ticketId` (string, required): The ticket whose history to read
+- `field` (string, optional): Only changes to this field, e.g. `status`
+- `limit` (number, optional): Maximum entries to return (default: 50)
+- `page` (number, optional): Page number, 1-indexed (default: 1)
 
 ### list_comments
 Lists the comments on a ticket, oldest first. Threads are one level deep: a comment

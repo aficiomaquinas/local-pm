@@ -194,8 +194,11 @@ test.describe('comments in the UI', () => {
     const ticketId = await newTicket(request, 'UI comment target')
     await page.goto(`/tickets/${ticketId}`)
 
-    await expect(page.getByRole('heading', { name: 'Comments' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
+
+    await page.getByRole('tab', { name: /Comments/ }).click()
     await expect(page.getByText('No comments yet.')).toBeVisible()
+    await page.getByRole('tab', { name: 'All' }).click()
 
     await page.getByRole('textbox', { name: 'Write a comment' }).fill('Ship **it** today')
     await page.getByRole('button', { name: 'Comment', exact: true }).click()
@@ -328,6 +331,8 @@ test.describe('comments in the UI', () => {
     await expect(page.getByText('Its 1 reply goes with it. This cannot be undone.')).toBeVisible()
     await page.getByRole('button', { name: 'Delete comment' }).click()
 
+    await expect(page.getByText('Delete me')).toHaveCount(0)
+    await page.getByRole('tab', { name: /Comments/ }).click()
     await expect(page.getByText('No comments yet.')).toBeVisible()
   })
 
