@@ -43,3 +43,4 @@ logs/
 
 # TypeScript build artifact
 tsconfig.tsbuildinfo
+/.playwright-mcp/

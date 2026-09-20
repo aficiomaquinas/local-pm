@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ExternalLink, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { PROJECT_STATUS_OPTIONS, ProjectStatus, TicketStatus } from '@/types/enums'
+import { ProjectStatus, TicketStatus } from '@/types/enums'
+import { projectStatusOptions } from '@/lib/status'
 import { useOptimisticPatch, saveStateLabel } from '@/hooks/useOptimisticPatch'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Field, Select } from '@/components/ui/Field'
+import { Field } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
 import { EntityMark, TicketKey, projectIcon } from '@/components/ui/EntityMark'
 import { InlineEdit } from '@/components/ui/InlineEdit'
 import { PriorityIndicator, TicketStatusBadge } from '@/components/ui/StateIndicator'
@@ -289,14 +291,9 @@ export function ProjectDetail({
               <Select
                 id={id}
                 value={project.status}
-                onChange={(e) => patch({ status: e.target.value as ProjectStatus }, 'the status')}
-              >
-                {PROJECT_STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
+                options={projectStatusOptions()}
+                onValueChange={(next) => patch({ status: next as ProjectStatus }, 'the status')}
+              />
             )}
           </Field>
 

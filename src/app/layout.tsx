@@ -3,7 +3,24 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { THEME_INIT_SCRIPT } from '@/lib/theme'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+  axes: ['opsz'],
+  preload: true,
+  adjustFontFallback: true,
+  fallback: [
+    'ui-sans-serif',
+    'system-ui',
+    '-apple-system',
+    'Segoe UI',
+    'Roboto',
+    'Helvetica Neue',
+    'Arial',
+    'sans-serif',
+  ],
+})
 
 export const metadata: Metadata = {
   title: 'local-pm',
@@ -19,12 +36,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
-
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className={`${inter.variable} font-sans`}>{children}</body>
+      <body className="font-sans">{children}</body>
     </html>
   )
 }

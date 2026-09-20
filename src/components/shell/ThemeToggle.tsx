@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { Menu } from '@/components/ui/Menu'
 import { Button } from '@/components/ui/Button'
-import { Tooltip } from '@/components/ui/Tooltip'
 import { applyTheme, readTheme, type ThemePreference } from '@/lib/theme'
 
 const ICON = { light: Sun, dark: Moon, system: Monitor } as const
@@ -29,21 +28,18 @@ export function ThemeToggle() {
         id: value,
         label: LABEL[value],
         icon: ICON[value],
+        checked: pref === value,
         onSelect: () => choose(value),
       }))}
-    >
-      {(trigger) => (
-        <Tooltip content={`Theme: ${LABEL[pref]}`}>
-          <Button
-            {...trigger}
-            variant="ghost"
-            size="md"
-            iconOnly
-            icon={Icon}
-            aria-label={`Theme: ${LABEL[pref]}. Change theme`}
-          />
-        </Tooltip>
-      )}
-    </Menu>
+      trigger={
+        <Button
+          variant="ghost"
+          size="md"
+          iconOnly
+          icon={Icon}
+          aria-label={`Theme: ${LABEL[pref]}. Change theme`}
+        />
+      }
+    />
   )
 }

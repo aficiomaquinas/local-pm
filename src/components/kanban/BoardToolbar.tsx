@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { Plus, Search, X } from 'lucide-react'
+import { FolderKanban, Plus, Search, Users, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useShortcut } from '@/lib/shortcuts'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
-import { Select } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
+import { projectIcon } from '@/components/ui/EntityMark'
 import type { Project, Team } from '@/payload-types'
 
 export interface BoardFilters {
@@ -86,39 +87,39 @@ export function BoardToolbar({
         </label>
 
         <div className="flex items-center gap-2 max-sm:w-full">
-          <label className="sr-only" htmlFor="board-project-filter">
-            Filter by project
-          </label>
           <Select
             id="board-project-filter"
+            aria-label="Filter by project"
             value={filters.projectId ?? ''}
-            onChange={(e) => onChange({ projectId: e.target.value || null })}
+            onValueChange={(next) => onChange({ projectId: next || null })}
             className="w-40 max-sm:w-auto max-sm:flex-1"
-          >
-            <option value="">All projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: '', label: 'All projects', icon: FolderKanban },
+              ...projects.map((project) => ({
+                value: project.id,
+                label: project.name,
+                icon: projectIcon(project.icon),
+                swatch: project.color,
+              })),
+            ]}
+          />
 
-          <label className="sr-only" htmlFor="board-team-filter">
-            Filter by team
-          </label>
           <Select
             id="board-team-filter"
+            aria-label="Filter by team"
             value={filters.teamId ?? ''}
-            onChange={(e) => onChange({ teamId: e.target.value || null })}
+            onValueChange={(next) => onChange({ teamId: next || null })}
             className="w-36 max-sm:w-auto max-sm:flex-1"
-          >
-            <option value="">All teams</option>
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: '', label: 'All teams', icon: Users },
+              ...teams.map((team) => ({
+                value: team.id,
+                label: team.name,
+                icon: Users,
+                swatch: team.color,
+              })),
+            ]}
+          />
         </div>
 
         <Button variant="primary" icon={Plus} onClick={onCreateTicket} className="ml-auto" shortcut="C">

@@ -60,6 +60,7 @@ interface KanbanBoardProps {
 const COLUMNS: TicketStatus[] = [TicketStatus.TODO, TicketStatus.IN_PROGRESS, TicketStatus.DONE]
 const PAGE_SIZE = 20
 const COLLAPSED_COLUMNS_KEY = 'local-pm:board-collapsed'
+const BOARD_PATH = '/board'
 
 function emptyPagination(): ColumnPaginationState {
   return {
@@ -100,7 +101,7 @@ function filtersToSearch(filters: BoardFilters, ticketId: string | null): string
   if (filters.query) params.set('q', filters.query)
   if (ticketId) params.set('ticket', ticketId)
   const qs = params.toString()
-  return qs ? `?${qs}` : window.location.pathname
+  return qs ? `?${qs}` : BOARD_PATH
 }
 
 export function KanbanBoard({
@@ -617,6 +618,7 @@ export function KanbanBoard({
                     setFormOpen(true)
                   }}
                   onOpenTicket={openTicket}
+                  ticketHref={(ticket) => filtersToSearch(filters, ticket.id)}
                   onEditTicket={(ticket) => {
                     setEditingTicket(ticket)
                     setFormOpen(true)

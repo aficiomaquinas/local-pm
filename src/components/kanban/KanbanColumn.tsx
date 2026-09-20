@@ -26,6 +26,7 @@ export interface KanbanColumnProps {
   onToggleCollapsed: () => void
   onAddCard: () => void
   onOpenTicket: (ticket: Ticket) => void
+  ticketHref: (ticket: Ticket) => string
   onEditTicket: (ticket: Ticket) => void
   onDeleteTicket: (ticket: Ticket) => void
   onMoveToColumn: (ticket: Ticket, status: TicketStatus) => void
@@ -45,6 +46,7 @@ export function KanbanColumn({
   onToggleCollapsed,
   onAddCard,
   onOpenTicket,
+  ticketHref,
   onEditTicket,
   onDeleteTicket,
   onMoveToColumn,
@@ -133,6 +135,7 @@ export function KanbanColumn({
               key={ticket.id}
               ticket={ticket}
               justLanded={landedTicketId === ticket.id}
+              href={ticketHref(ticket)}
               onOpen={() => onOpenTicket(ticket)}
               onEdit={() => onEditTicket(ticket)}
               onDelete={() => onDeleteTicket(ticket)}

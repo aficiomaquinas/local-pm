@@ -21,6 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -133,7 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="md:hidden"
             />
 
-            <PaletteTrigger />
+            <PaletteTrigger onClick={() => setPaletteOpen(true)} />
 
             <div className="ml-auto flex items-center gap-1">
               <ThemeToggle />
@@ -148,23 +149,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <MobileNav />
 
-      <CommandPalette />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ShortcutHelp />
     </div>
   )
 }
 
-function PaletteTrigger() {
-  const dispatch = () => {
-    window.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'k', metaKey: true, ctrlKey: true, bubbles: true }),
-    )
-  }
-
+function PaletteTrigger({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
-      onClick={dispatch}
+      onClick={onClick}
       className={cn(
         'flex h-8 w-full max-w-72 items-center gap-2 rounded-sm border border-border bg-surface px-2.5',
         'text-base text-text-muted transition-colors duration-micro hover:border-border-strong',

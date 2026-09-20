@@ -42,10 +42,15 @@ function Highlight({ text, query }: { text: string; query: string }) {
   )
 }
 
-export function CommandPalette() {
+export function CommandPalette({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const router = useRouter()
   const { shortcuts } = useShortcutRegistry()
-  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Row[]>([])
   const [searching, setSearching] = useState(false)
@@ -59,7 +64,7 @@ export function CommandPalette() {
     group: 'Global',
     scope: 'global',
     allowInInput: true,
-    run: () => setOpen((o) => !o),
+    run: () => onOpenChange(!open),
   })
 
   useEffect(() => {
@@ -204,7 +209,7 @@ export function CommandPalette() {
 
   const choose = (row: Row | undefined) => {
     if (!row) return
-    setOpen(false)
+    onOpenChange(false)
     row.run()
   }
 
@@ -226,7 +231,7 @@ export function CommandPalette() {
   return (
     <Dialog
       open={open}
-      onClose={() => setOpen(false)}
+      onClose={() => onOpenChange(false)}
       title="Command palette"
       size="lg"
       initialFocus="first-field"

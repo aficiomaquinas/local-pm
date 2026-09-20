@@ -34,6 +34,7 @@ export interface KanbanCardProps {
 
   isOverlay?: boolean
   onOpen?: () => void
+  href?: string
   onEdit?: () => void
   onDelete?: () => void
   onMoveToColumn?: (status: TicketStatus) => void
@@ -46,6 +47,7 @@ export function KanbanCard({
   ticket,
   isOverlay,
   onOpen,
+  href,
   onEdit,
   onDelete,
   onMoveToColumn,
@@ -152,10 +154,15 @@ export function KanbanCard({
         />
       )}
 
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={!onOpen}
+      <a
+        href={href ?? '#'}
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+          e.preventDefault()
+          onOpen?.()
+        }}
         className={cn(
           'flex w-full cursor-grab flex-col gap-3 rounded-md p-3 text-left',
           'active:cursor-grabbing',
@@ -214,7 +221,7 @@ export function KanbanCard({
             )}
           </span>
         )}
-      </button>
+      </a>
 
       {!isOverlay && (
         <div
@@ -240,18 +247,19 @@ export function KanbanCard({
           </Tooltip>
 
           {menuItems.length > 0 && (
-            <Menu label={`Actions for ${ticket.title}`} items={menuItems}>
-              {(trigger) => (
+            <Menu
+              label={`Actions for ${ticket.title}`}
+              items={menuItems}
+              trigger={
                 <Button
-                  {...trigger}
                   variant="ghost"
                   size="xs"
                   iconOnly
                   icon={MoreHorizontal}
                   aria-label={`Actions for ${ticket.title}`}
                 />
-              )}
-            </Menu>
+              }
+            />
           )}
         </div>
       )}

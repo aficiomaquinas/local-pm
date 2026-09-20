@@ -9,13 +9,17 @@ import {
   Plus,
   Square,
   Trash2,
+  Users,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { BLOCKED_META, ticketStatusMeta } from '@/lib/status'
 import {
-  TICKET_PRIORITY_OPTIONS,
-  TICKET_STATUS_OPTIONS,
+  BLOCKED_META,
+  ticketPriorityOptions,
+  ticketStatusMeta,
+  ticketStatusOptions,
+} from '@/lib/status'
+import {
   TicketPriority,
   TicketStatus,
 } from '@/types/enums'
@@ -24,7 +28,9 @@ import { Badge, Chip } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { SidePanel } from '@/components/ui/Dialog'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { Field, Input } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
+import { DatePicker } from '@/components/ui/DatePicker'
 import { InlineEdit } from '@/components/ui/InlineEdit'
 import { PriorityIndicator, TicketStatusBadge } from '@/components/ui/StateIndicator'
 import { TicketKey } from '@/components/ui/EntityMark'
@@ -227,16 +233,11 @@ export function TicketPanel({
                   <Select
                     id={id}
                     value={ticket.status}
-                    onChange={(e) =>
-                      patch({ status: e.target.value as TicketStatus } as Partial<Ticket>, 'the status')
+                    options={ticketStatusOptions()}
+                    onValueChange={(next) =>
+                      patch({ status: next as TicketStatus } as Partial<Ticket>, 'the status')
                     }
-                  >
-                    {TICKET_STATUS_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                 )}
               </Field>
 
@@ -245,16 +246,11 @@ export function TicketPanel({
                   <Select
                     id={id}
                     value={ticket.priority ?? TicketPriority.NO_PRIORITY}
-                    onChange={(e) =>
-                      patch({ priority: e.target.value as TicketPriority } as Partial<Ticket>, 'the priority')
+                    options={ticketPriorityOptions()}
+                    onValueChange={(next) =>
+                      patch({ priority: next as TicketPriority } as Partial<Ticket>, 'the priority')
                     }
-                  >
-                    {TICKET_PRIORITY_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </Select>
+                  />
                 )}
               </Field>
 
@@ -263,29 +259,31 @@ export function TicketPanel({
                   <Select
                     id={id}
                     value={teamId}
-                    onChange={(e) =>
-                      patch({ team: e.target.value || null } as Partial<Ticket>, 'the team')
+                    placeholder="No team"
+                    onValueChange={(next) =>
+                      patch({ team: next || null } as Partial<Ticket>, 'the team')
                     }
-                  >
-                    <option value="">No team</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </Select>
+                    options={[
+                      { value: '', label: 'No team', icon: Users },
+                      ...teams.map((t) => ({
+                        value: t.id,
+                        label: t.name,
+                        icon: Users,
+                        swatch: t.color,
+                      })),
+                    ]}
+                  />
                 )}
               </Field>
 
-              <Field label="Due date" optional hint="YYYY-MM-DD">
+              <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
                 {({ id, describedBy }) => (
-                  <Input
+                  <DatePicker
                     id={id}
                     aria-describedby={describedBy}
-                    type="date"
                     value={ticket.dueDate ? ticket.dueDate.slice(0, 10) : ''}
-                    onChange={(e) =>
-                      patch({ dueDate: e.target.value || null } as Partial<Ticket>, 'the due date')
+                    onChange={(next) =>
+                      patch({ dueDate: next || null } as Partial<Ticket>, 'the due date')
                     }
                   />
                 )}
@@ -485,21 +483,22 @@ export function TicketPanel({
                   <Select
                     id={id}
                     value=""
-                    onChange={(e) => {
-                      if (!e.target.value) return
+                    placeholder="Select a ticket…"
+                    onValueChange={(next) => {
+                      if (!next) return
                       patch(
-                        { blockedBy: [...blockedByIds, e.target.value] } as Partial<Ticket>,
+                        { blockedBy: [...blockedByIds, next] } as Partial<Ticket>,
                         'the blockers',
                       )
                     }}
-                  >
-                    <option value="">Select a ticket…</option>
-                    {available.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.ticketId} — {t.title}
-                      </option>
-                    ))}
-                  </Select>
+                    options={available.map((t) => ({
+                      value: t.id,
+                      label: t.title,
+                      hint: t.ticketId ?? undefined,
+                      icon: ticketStatusMeta(t.status).icon,
+                      tone: ticketStatusMeta(t.status).tone,
+                    }))}
+                  />
                 )}
               </Field>
             )}
