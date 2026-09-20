@@ -52,7 +52,7 @@ export function TicketDetail({ ticket: initial }: { ticket: Ticket }) {
 
   return (
     <div className="h-full overflow-y-auto">
-      <header className="sticky top-0 z-20 border-b border-border-subtle bg-bg">
+      <header data-sticky-header className="sticky top-0 z-20 border-b border-border-subtle bg-bg">
         <div className="mx-auto flex max-w-[1140px] flex-col gap-3 px-6 py-4 max-md:px-4">
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-xs">
             <Link

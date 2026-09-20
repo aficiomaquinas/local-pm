@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import path from 'path'
-import { test, expect, type APIRequestContext } from '@playwright/test'
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
 import { createTicket, seedProject, type SeedRefs } from './helpers'
 
 let refs: SeedRefs
@@ -439,6 +439,21 @@ test.describe('the comment editor', () => {
   })
 })
 
+async function clearOfStickyHeader(page: Page, commentId: string) {
+  return page.evaluate((id: string) => {
+    const el = document.getElementById(`comment-${id}`)
+    const header = document.querySelector('[data-sticky-header]')
+    if (!el || !header) return null
+    const comment = el.getBoundingClientRect()
+    const bar = header.getBoundingClientRect()
+    return {
+      visible: comment.top < window.innerHeight && comment.bottom > 0,
+      belowHeader: Math.round(comment.top) >= Math.round(bar.bottom),
+      gap: Math.round(comment.top - bar.bottom),
+    }
+  }, commentId)
+}
+
 test.describe('linking to a comment', () => {
   test('a shared link scrolls to the comment and highlights it', async ({ page, request }) => {
     const ticketId = await newTicket(request, 'UI permalink')
@@ -454,6 +469,11 @@ test.describe('linking to a comment', () => {
     const target = page.locator(`#comment-${targetId}`)
     await expect(target).toHaveClass(/comment-highlight/)
     await expect(target).toBeInViewport()
+
+    await expect
+      .poll(() => clearOfStickyHeader(page, targetId), { timeout: 15_000 })
+      .toMatchObject({ visible: true, belowHeader: true })
+
     await expect(page.getByText('Jumped to the comment this link points at.')).toBeVisible()
 
     await page.getByRole('button', { name: 'Clear highlight' }).click()
@@ -476,6 +496,9 @@ test.describe('linking to a comment', () => {
     await link.click()
 
     await expect(page.locator(`#comment-${commentId}`)).toHaveClass(/comment-highlight/)
+    await expect
+      .poll(() => clearOfStickyHeader(page, commentId), { timeout: 15_000 })
+      .toMatchObject({ visible: true, belowHeader: true })
   })
 
   test('a link into a resolved thread opens it', async ({ page, request }) => {
@@ -494,5 +517,8 @@ test.describe('linking to a comment', () => {
 
     await expect(page.getByText('Buried answer')).toBeVisible()
     await expect(page.locator(`#comment-${replyId}`)).toHaveClass(/comment-highlight/)
+    await expect
+      .poll(() => clearOfStickyHeader(page, replyId), { timeout: 15_000 })
+      .toMatchObject({ visible: true, belowHeader: true })
   })
 })
