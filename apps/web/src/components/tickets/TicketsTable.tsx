@@ -9,6 +9,7 @@ import { formatDateCompact } from '@/lib/format'
 import { ticketStatusOptions } from '@/lib/status'
 import { TicketStatus } from '@/types/enums'
 import { useEntityQuery } from '@/hooks/useEntityQuery'
+import { AvatarLabel } from '@/components/ui/Avatar'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -18,7 +19,7 @@ import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
 import { PriorityIndicator, TicketStatusBadge } from '@/components/ui/StateIndicator'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
-import type { Project, Team, Ticket } from '@/payload-types'
+import type { Member, Project, Team, Ticket } from '@/payload-types'
 
 type SortKey = 'sortOrder' | 'title' | '-title' | '-createdAt' | 'createdAt' | 'dueDate'
 
@@ -200,6 +201,7 @@ export function TicketsTable({
                   <Th>Title</Th>
                   <Th width="9rem">Status</Th>
                   <Th width="12rem">{relationColumn === 'team' ? 'Team' : 'Project'}</Th>
+                  <Th width="11rem">Assignee</Th>
                   <Th width="8rem">Due</Th>
                 </tr>
               </thead>
@@ -213,6 +215,8 @@ export function TicketsTable({
                       : typeof ticket.project === 'object'
                         ? (ticket.project as Project)
                         : null
+                  const assignee =
+                    typeof ticket.assignee === 'object' ? (ticket.assignee as Member) : null
                   const overdue =
                     ticket.dueDate &&
                     ticket.status !== TicketStatus.DONE &&
@@ -248,6 +252,13 @@ export function TicketsTable({
                         <TicketStatusBadge status={ticket.status} />
                       </Td>
                       <Td className="truncate text-text-muted">{relation?.name ?? '—'}</Td>
+                      <Td className="text-text">
+                        <AvatarLabel
+                          name={assignee?.name}
+                          seed={assignee?.id}
+                          fallback="Unassigned"
+                        />
+                      </Td>
                       <Td
                         className={cn(
                           'whitespace-nowrap tabular',

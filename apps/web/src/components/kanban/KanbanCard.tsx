@@ -16,6 +16,7 @@ import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
 import { BLOCKED_META, ticketStatusMeta } from '@/lib/status'
 import { TicketStatus } from '@/types/enums'
+import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
@@ -75,6 +76,7 @@ export function KanbanCard({
   delete pointerListeners.onKeyDown
 
   const project = typeof ticket.project === 'object' ? ticket.project : null
+  const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
   const labels = ticket.labels ?? []
   const subtasks = ticket.subtasks ?? []
   const doneSubtasks = subtasks.filter((s) => s.completed).length
@@ -183,7 +185,7 @@ export function KanbanCard({
           {ticket.title}
         </span>
 
-        {(labels.length > 0 || dueDate || blockedCount > 0 || subtasks.length > 0) && (
+        {(labels.length > 0 || dueDate || blockedCount > 0 || subtasks.length > 0 || assignee) && (
           <span className="flex flex-wrap items-center gap-2">
             {blockedCount > 0 && (
               <Badge tone={BLOCKED_META.tone} icon={BLOCKED_META.icon}>
@@ -220,6 +222,13 @@ export function KanbanCard({
                 {overdue && <span className="sr-only">(overdue)</span>}
               </span>
             )}
+
+            <Avatar
+              name={assignee?.name}
+              seed={assignee?.id}
+              size="sm"
+              className="ml-auto"
+            />
           </span>
         )}
       </a>

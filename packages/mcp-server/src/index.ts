@@ -121,6 +121,24 @@ function slimTeam(team: unknown): SlimTeam | string | null {
   return null;
 }
 
+interface SlimMember {
+  id: string;
+  name: string;
+}
+
+function slimMember(member: unknown): SlimMember | string | null {
+  if (!member) return null;
+  if (typeof member === 'string') return member; // Already just an ID
+  if (typeof member === 'object' && member !== null) {
+    const m = member as Record<string, unknown>;
+    return {
+      id: m.id as string,
+      name: m.name as string,
+    };
+  }
+  return null;
+}
+
 // Extract just IDs from blockedBy array (which may contain full ticket objects)
 function slimBlockedBy(blockedBy: unknown): string[] | null {
   if (!blockedBy) return null;
@@ -148,6 +166,8 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
       filtered[field] = slimProject(value);
     } else if (field === 'team') {
       filtered[field] = slimTeam(value);
+    } else if (field === 'assignee') {
+      filtered[field] = slimMember(value);
     } else if (field === 'blockedBy') {
       filtered[field] = slimBlockedBy(value);
     } else {
@@ -466,10 +486,133 @@ const tools: Tool[] = [
     },
   },
 
+  // ============== MEMBERS ==============
+  {
+    name: 'list_members',
+    description: 'List the people tickets can be assigned to. By default returns only basic fields (id, name, active). Use "include" to request email, team or timestamps. Members are distinct from login accounts: a member is a person work is assigned to.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        teamId: {
+          type: 'string',
+          description: 'Filter by team ID',
+        },
+        activeOnly: {
+          type: 'boolean',
+          description: 'Only return people who are still active (default: true)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of members to return (default: 20)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1). Use with limit to paginate through results.',
+        },
+        include: {
+          type: 'array',
+          description: 'Additional fields to include in the response. By default only id, name, active are returned.',
+          items: {
+            type: 'string',
+            enum: ['email', 'team', 'user', 'createdAt', 'updatedAt'],
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'get_member',
+    description: 'Get detailed information about a specific member by ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The member ID',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'create_member',
+    description: 'Create a person that tickets can be assigned to',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Display name',
+        },
+        email: {
+          type: 'string',
+          description: 'Email address (optional)',
+        },
+        team: {
+          type: 'string',
+          description: 'Team ID this person belongs to (optional)',
+        },
+        user: {
+          type: 'string',
+          description: 'Login account ID to link this person to (optional). One account maps to at most one member.',
+        },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'update_member',
+    description: 'Update an existing member',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The member ID to update',
+        },
+        name: {
+          type: 'string',
+          description: 'New display name',
+        },
+        email: {
+          type: 'string',
+          description: 'New email address',
+        },
+        team: {
+          type: 'string',
+          description: 'New team ID (use null to remove from the team)',
+        },
+        active: {
+          type: 'boolean',
+          description: 'Set false when someone leaves. They keep existing assignments but drop out of the pickers.',
+        },
+        user: {
+          type: 'string',
+          description: 'Login account ID to link (use null to unlink)',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_member',
+    description: 'Delete a member (tickets assigned to this person become unassigned). Prefer setting active to false, which preserves history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The member ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
+
   // ============== TICKETS ==============
   {
     name: 'list_tickets',
-    description: 'List tickets in Local PM with optional filters. By default returns only basic fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team returns {id, name}, blockedBy returns array of ticket IDs.',
+    description: 'List tickets in Local PM with optional filters. By default returns only basic fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team and assignee return {id, name}, blockedBy returns array of ticket IDs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -480,6 +623,10 @@ const tools: Tool[] = [
         teamId: {
           type: 'string',
           description: 'Filter by team ID',
+        },
+        assigneeId: {
+          type: 'string',
+          description: 'Filter by assignee (member) ID',
         },
         status: {
           type: 'string',
@@ -504,7 +651,7 @@ const tools: Tool[] = [
           description: 'Additional fields to include in the response. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -545,6 +692,10 @@ const tools: Tool[] = [
         team: {
           type: 'string',
           description: 'Team ID (optional)',
+        },
+        assignee: {
+          type: 'string',
+          description: 'Assignee member ID (optional). Use list_members to find one.',
         },
         status: {
           type: 'string',
@@ -618,6 +769,10 @@ const tools: Tool[] = [
         team: {
           type: 'string',
           description: 'New team ID (use null to unassign)',
+        },
+        assignee: {
+          type: 'string',
+          description: 'New assignee member ID (use null to unassign)',
         },
         status: {
           type: 'string',
@@ -705,7 +860,7 @@ const tools: Tool[] = [
   // ============== BOARD ==============
   {
     name: 'get_board',
-    description: 'Get the full Kanban board with tickets grouped by status. Optionally filter by project or team. By default returns only basic ticket fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team returns {id, name}, blockedBy returns array of ticket IDs.',
+    description: 'Get the full Kanban board with tickets grouped by status. Optionally filter by project or team. By default returns only basic ticket fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team and assignee return {id, name}, blockedBy returns array of ticket IDs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -717,12 +872,16 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Filter by team ID',
         },
+        assigneeId: {
+          type: 'string',
+          description: 'Filter by assignee (member) ID',
+        },
         include: {
           type: 'array',
           description: 'Additional ticket fields to include. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -917,6 +1076,76 @@ async function handleToolCall(
       return apiRequest(`/teams/${args.id}`, 'DELETE');
     }
 
+    // Members
+    case 'list_members': {
+      const limit = (args.limit as number) || 20;
+      const page = (args.page as number) || 1;
+      const includeFields = (args.include as string[]) || [];
+      const activeOnly = args.activeOnly === undefined ? true : Boolean(args.activeOnly);
+
+      let query = `?limit=${limit}&page=${page}&depth=1&sort=name`;
+      if (args.teamId) {
+        query += `&where[team][equals]=${args.teamId}`;
+      }
+      if (activeOnly) {
+        query += '&where[active][equals]=true';
+      }
+
+      const response = await apiRequest(`/members${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const defaultFields = ['id', 'name', 'active'];
+      const optionalFields = ['email', 'team', 'user', 'createdAt', 'updatedAt'];
+      const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
+
+      const filteredDocs = response.docs.map(member => {
+        const filtered: Record<string, unknown> = {};
+        for (const field of fieldsToInclude) {
+          if (!(field in member)) continue;
+          filtered[field] = field === 'team' ? slimTeam(member[field]) : member[field];
+        }
+        return filtered;
+      });
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: filteredDocs,
+      });
+    }
+    case 'get_member': {
+      return apiRequest(`/members/${args.id}?depth=1`);
+    }
+    case 'create_member': {
+      return apiRequest('/members', 'POST', {
+        name: args.name,
+        email: args.email || null,
+        team: args.team || null,
+        user: args.user || null,
+      });
+    }
+    case 'update_member': {
+      const id = args.id;
+      const updates: Record<string, unknown> = {};
+      if (args.name) updates.name = args.name;
+      if (args.email !== undefined) updates.email = args.email;
+      if (args.team !== undefined) updates.team = args.team;
+      if (args.active !== undefined) updates.active = args.active;
+      if (args.user !== undefined) updates.user = args.user;
+      return apiRequest(`/members/${id}`, 'PATCH', updates);
+    }
+    case 'delete_member': {
+      return apiRequest(`/members/${args.id}`, 'DELETE');
+    }
+
     // Tickets
     case 'list_tickets': {
       const limit = (args.limit as number) || 20;
@@ -929,6 +1158,9 @@ async function handleToolCall(
       }
       if (args.teamId) {
         query += `&where[team][equals]=${args.teamId}`;
+      }
+      if (args.assigneeId) {
+        query += `&where[assignee][equals]=${args.assigneeId}`;
       }
       if (args.status) {
         query += `&where[status][equals]=${toPayloadValue(args.status as string)}`;
@@ -951,7 +1183,7 @@ async function handleToolCall(
       // Default fields always included (slim versions of relationships)
       const defaultFields = ['id', 'title', 'status', 'project'];
       // All optional fields that can be included
-      const optionalFields = ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
 
       // Build the set of fields to include
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
@@ -973,6 +1205,7 @@ async function handleToolCall(
         description: args.description || null,
         project: args.project,
         team: args.team || null,
+        assignee: args.assignee || null,
         status: toPayloadValue(args.status as string) || 'TODO',
         priority: toPayloadValue(args.priority as string) || 'NO_PRIORITY',
         dueDate: args.dueDate || null,
@@ -987,6 +1220,7 @@ async function handleToolCall(
       if (args.title) updates.title = args.title;
       if (args.description !== undefined) updates.description = args.description;
       if (args.team !== undefined) updates.team = args.team;
+      if (args.assignee !== undefined) updates.assignee = args.assignee;
       if (args.status) updates.status = toPayloadValue(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
@@ -1015,13 +1249,16 @@ async function handleToolCall(
       if (args.teamId) {
         query += `&where[team][equals]=${args.teamId}`;
       }
+      if (args.assigneeId) {
+        query += `&where[assignee][equals]=${args.assigneeId}`;
+      }
       const response = await apiRequest(`/tickets${query}`) as { docs: Array<Record<string, unknown>> };
       const tickets = response.docs || [];
 
       // Default fields always included (slim versions of relationships)
       const defaultFields = ['id', 'title', 'status', 'project'];
       // All optional fields that can be included
-      const optionalFields = ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
 
       // Build the set of fields to include
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);

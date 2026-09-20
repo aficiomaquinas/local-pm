@@ -27,6 +27,12 @@ interface SeedTicket {
   blockedByTitles?: string[]
 }
 
+interface SeedMember {
+  name: string
+  email: string
+  teamName: string
+}
+
 const SEED_PROJECTS: SeedProject[] = [
   {
     name: 'Website Redesign',
@@ -113,6 +119,19 @@ const SEED_TEAMS: SeedTeam[] = [
     description: 'Support and user happiness',
     color: '#14b8a6',
   },
+]
+
+const SEED_MEMBERS: SeedMember[] = [
+  { name: 'Ada Okonkwo', email: 'ada@example.com', teamName: 'Frontend Engineering' },
+  { name: 'Bruno Costa', email: 'bruno@example.com', teamName: 'Frontend Engineering' },
+  { name: 'Chen Wei', email: 'chen@example.com', teamName: 'Backend Engineering' },
+  { name: 'Dara Singh', email: 'dara@example.com', teamName: 'Backend Engineering' },
+  { name: 'Elif Demir', email: 'elif@example.com', teamName: 'QA & Testing' },
+  { name: 'Farid Haddad', email: 'farid@example.com', teamName: 'Design' },
+  { name: 'Greta Lindqvist', email: 'greta@example.com', teamName: 'Product Management' },
+  { name: 'Hassan Ali', email: 'hassan@example.com', teamName: 'Marketing' },
+  { name: 'Ingrid Moreau', email: 'ingrid@example.com', teamName: 'DevOps' },
+  { name: 'Jonas Bakker', email: 'jonas@example.com', teamName: 'Customer Success' },
 ]
 
 const SEED_TICKETS: SeedTicket[] = [
@@ -253,6 +272,7 @@ async function seed() {
   // Clear existing data
   console.log('Clearing existing data...')
   await payload.delete({ collection: 'tickets', where: {} })
+  await payload.delete({ collection: 'members', where: {} })
   await payload.delete({ collection: 'projects', where: {} })
   await payload.delete({ collection: 'teams', where: {} })
 
@@ -278,10 +298,26 @@ async function seed() {
     projectMap.set(project.prefix, created.id)
   }
 
+  console.log('Creating members...')
+  const membersByTeam = new Map<string, string[]>()
+  const memberIdsByName = new Map<string, string>()
+  for (const member of SEED_MEMBERS) {
+    const teamId = teamMap.get(member.teamName)
+    const created = await payload.create({
+      collection: 'members',
+      data: { name: member.name, email: member.email, team: teamId ?? null } as any,
+    })
+    memberIdsByName.set(member.name, created.id)
+    const roster = membersByTeam.get(member.teamName) ?? []
+    roster.push(created.id)
+    membersByTeam.set(member.teamName, roster)
+  }
+
   // Create tickets (first pass)
   console.log('Creating tickets (first pass)...')
   const ticketMap = new Map<string, string>()
 
+  let ticketIndex = 0
   for (const ticket of SEED_TICKETS) {
     const projectId = projectMap.get(ticket.projectPrefix)
     const teamId = ticket.teamName ? teamMap.get(ticket.teamName) : null
@@ -291,6 +327,13 @@ async function seed() {
       continue
     }
 
+    const roster = ticket.teamName ? (membersByTeam.get(ticket.teamName) ?? []) : []
+    const assigneeId =
+      roster.length > 0 && ticketIndex % 4 !== 3
+        ? roster[ticketIndex % roster.length]
+        : null
+    ticketIndex += 1
+
     const created = await payload.create({
       collection: 'tickets',
       data: {
@@ -299,6 +342,7 @@ async function seed() {
         priority: ticket.priority,
         project: projectId,
         team: teamId,
+        assignee: assigneeId,
         labels: ticket.labels,
       },
     })

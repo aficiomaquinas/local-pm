@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     projects: Project;
     teams: Team;
+    members: Member;
     tickets: Ticket;
     users: User;
     exports: Export;
@@ -83,6 +84,7 @@ export interface Config {
   collectionsSelect: {
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
     teams: TeamsSelect<false> | TeamsSelect<true>;
+    members: MembersSelect<false> | MembersSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     exports: ExportsSelect<false> | ExportsSelect<true>;
@@ -352,6 +354,49 @@ export interface Team {
   createdAt: string;
 }
 /**
+ * People that tickets can be assigned to.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: string;
+  /**
+   * Display name — what shows on cards and in pickers
+   */
+  name: string;
+  /**
+   * Optional. Used to tell two people with the same name apart.
+   */
+  email?: string | null;
+  /**
+   * The team this person belongs to
+   */
+  team?: (string | null) | Team;
+  /**
+   * Inactive people keep their existing assignments but drop out of the assignee pickers.
+   */
+  active?: boolean | null;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Individual work items within projects
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -401,6 +446,10 @@ export interface Ticket {
    * The team responsible for this ticket
    */
   team?: (string | null) | Team;
+  /**
+   * The person responsible for this ticket
+   */
+  assignee?: (string | null) | Member;
   /**
    * Tickets that must be completed before this ticket can be worked on
    */
@@ -651,6 +700,10 @@ export interface PayloadLockedDocument {
         value: string | Team;
       } | null)
     | ({
+        relationTo: 'members';
+        value: string | Member;
+      } | null)
+    | ({
         relationTo: 'tickets';
         value: string | Ticket;
       } | null)
@@ -736,6 +789,22 @@ export interface TeamsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members_select".
+ */
+export interface MembersSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
+  team?: T;
+  active?: T;
+  deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "tickets_select".
  */
 export interface TicketsSelect<T extends boolean = true> {
@@ -746,6 +815,7 @@ export interface TicketsSelect<T extends boolean = true> {
   priority?: T;
   project?: T;
   team?: T;
+  assignee?: T;
   blockedBy?: T;
   labels?:
     | T
@@ -950,7 +1020,7 @@ export interface TaskCreateCollectionExport {
     id: string;
     name: string;
     batchSize?: number | null;
-    collectionSlug: 'projects' | 'teams' | 'tickets' | 'users' | 'exports' | 'imports';
+    collectionSlug: 'projects' | 'teams' | 'members' | 'tickets' | 'users' | 'exports' | 'imports';
     drafts?: ('yes' | 'no') | null;
     exportCollection: string;
     fields?: string[] | null;

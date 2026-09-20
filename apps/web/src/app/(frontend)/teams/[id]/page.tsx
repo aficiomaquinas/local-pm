@@ -37,11 +37,20 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
         where: { team: { equals: id }, ...(status ? { status: { equals: status } } : {}) },
       })
 
-    const [total, todo, inProgress, done] = await Promise.all([
+    const [total, todo, inProgress, done, members] = await Promise.all([
       countFor(),
       countFor(TicketStatus.TODO),
       countFor(TicketStatus.IN_PROGRESS),
       countFor(TicketStatus.DONE),
+      payload.find({
+        collection: 'members',
+        where: { team: { equals: id } },
+        sort: 'name',
+        limit: 100,
+        depth: 0,
+        // Ghost-card invariant: the members ACL hides soft-deleted docs.
+        overrideAccess: false,
+      }),
     ])
 
     return (
@@ -53,6 +62,7 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
           inProgress: inProgress.totalDocs,
           done: done.totalDocs,
         }}
+        members={members.docs}
         initialTab={tab === 'tickets' ? 'tickets' : 'overview'}
       />
     )

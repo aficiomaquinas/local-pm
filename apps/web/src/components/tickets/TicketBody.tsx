@@ -14,7 +14,7 @@ import { DatePicker } from '@/components/ui/DatePicker'
 import { Expandable } from '@/components/ui/Expandable'
 import { Field, Input } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
-import { TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import { MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { DependencyGraph } from '@/components/kanban/DependencyGraph'
@@ -70,6 +70,9 @@ export function TicketBody({
   const project: Project | null = typeof ticket.project === 'object' ? ticket.project : null
   const team = typeof ticket.team === 'object' ? ticket.team : null
   const teamId = typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? '')
+  const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
+  const assigneeId =
+    typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? '')
   const description = (ticket.description as unknown as string) || ''
   const subtasks = ticket.subtasks ?? []
   const labels = ticket.labels ?? []
@@ -174,6 +177,20 @@ export function TicketBody({
                 options={ticketPriorityOptions()}
                 onValueChange={(next) =>
                   patch({ priority: next as TicketPriority } as Partial<Ticket>, 'the priority')
+                }
+              />
+            )}
+          </Field>
+
+          <Field label="Assignee" optional>
+            {({ id }) => (
+              <MemberSelect
+                id={id}
+                value={assigneeId}
+                selected={assigneeId ? (assignee ?? undefined) : null}
+                aria-label="Assignee"
+                onChange={(next) =>
+                  patch({ assignee: next || null } as Partial<Ticket>, 'the assignee')
                 }
               />
             )}

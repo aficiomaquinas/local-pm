@@ -10,7 +10,7 @@ export const Tickets: CollectionConfig = {
   slug: 'tickets',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['ticketId', 'title', 'status', 'priority', 'project', 'team'],
+    defaultColumns: ['ticketId', 'title', 'status', 'priority', 'project', 'assignee'],
     description: 'Individual work items within projects',
   },
   access: {
@@ -137,6 +137,14 @@ export const Tickets: CollectionConfig = {
       relationTo: 'teams',
       admin: {
         description: 'The team responsible for this ticket',
+      },
+    },
+    {
+      name: 'assignee',
+      type: 'relationship',
+      relationTo: 'members',
+      admin: {
+        description: 'The person responsible for this ticket',
       },
     },
     {

@@ -11,13 +11,14 @@ const TICKETS_PER_COLUMN = 20
 const MIN_SEARCH = 3
 
 interface BoardPageProps {
-  searchParams: Promise<{ project?: string; team?: string; q?: string }>
+  searchParams: Promise<{ project?: string; team?: string; assignee?: string; q?: string }>
 }
 
 export default async function BoardPage({ searchParams }: BoardPageProps) {
   const params = await searchParams
   const projectFilter = params.project || null
   const teamFilter = params.team || null
+  const assigneeFilter = params.assignee || null
   const query = (params.q || '').trim()
 
   const payload = await getPayload({ config })
@@ -26,6 +27,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
     const conditions: Where = { status: { equals: status } }
     if (projectFilter) conditions.project = { equals: projectFilter }
     if (teamFilter) conditions.team = { equals: teamFilter }
+    if (assigneeFilter) conditions.assignee = { equals: assigneeFilter }
     if (query.length >= MIN_SEARCH) conditions.title = { like: query }
     return conditions
   }
