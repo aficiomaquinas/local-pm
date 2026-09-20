@@ -21,8 +21,8 @@ afterAll(async () => {
 
 // The M1 (status mapping) and M2 (URL builders) T1 subjects live in
 // tests/m1-m2.mapping-urls.test.ts.
-describe('M13: ListTools protocol round-trip (28 tools, well-formed schemas)', () => {
-  it('returns exactly the 34 documented tool names (upstream #14/#19 parity)', async () => {
+describe('M13: ListTools protocol round-trip (29 tools, well-formed schemas)', () => {
+  it('returns exactly the documented tool names (upstream #14/#19/#23 parity)', async () => {
     const tools = await harness.listTools()
     expect(tools.map((t) => t.name).sort()).toEqual(
       [
@@ -42,6 +42,7 @@ describe('M13: ListTools protocol round-trip (28 tools, well-formed schemas)', (
         'get_project',
         'get_team',
         'get_ticket',
+        'list_activity',
         'list_comments',
         'list_members',
         'list_projects',
@@ -56,7 +57,7 @@ describe('M13: ListTools protocol round-trip (28 tools, well-formed schemas)', (
         'update_ticket',
       ].sort(),
     )
-    expect(tools).toHaveLength(28)
+    expect(tools).toHaveLength(29)
   })
 
   it('every tool has a non-empty description and an object inputSchema', async () => {
