@@ -40,21 +40,7 @@ test('the users collection accepts a first-user registration over REST', async (
   expect(body.doc.role).toBe('admin')
 })
 
-// KNOWN PRE-EXISTING FAILURE — not introduced by the fork-porting work.
-//
-// Every Payload admin page (/admin/login and /admin/create-first-user alike)
-// returns 500 with:
-//   TypeError: Cannot destructure property 'config' of 'ue(...)' as it is undefined
-//     at CodeEditor.tsx (@payloadcms/ui)
-//
-// Verified to reproduce identically on the unmodified main branch, so adding
-// the `users` collection did not cause it. Package versions are all aligned
-// (payload / @payloadcms/* 3.68.4, react 19.2.1, next 15.4.10, one copy of
-// @payloadcms/ui), so it is not the usual duplicate-package cause.
-//
-// Consequence: the first account must be created over REST (the test above),
-// not through the admin UI. Remove this fixme once the admin renders.
-test.fixme('admin panel renders its login screen', async ({ page }) => {
+test('admin panel renders its login screen', async ({ page }) => {
   const res = await page.goto('/admin')
   expect(res!.status()).toBeLessThan(500)
 })
