@@ -3,16 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import {
-  PROJECT_COLORS,
-  PROJECT_ICONS,
-  PROJECT_STATUS_OPTIONS,
-  ProjectStatus,
-} from '@/types/enums'
+import { PROJECT_COLORS, PROJECT_ICONS, ProjectStatus } from '@/types/enums'
+import { projectStatusOptions } from '@/lib/status'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Dialog } from '@/components/ui/Dialog'
-import { ErrorSummary, Field, Input, Select } from '@/components/ui/Field'
+import { ErrorSummary, Field, Input } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
 import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import type { Project } from '@/payload-types'
@@ -190,7 +187,7 @@ export function ProjectFormDialog({
                   id="project-form-name"
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
-                  onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                  onBlur={(e) => e.target.value.trim() && setTouched((t) => ({ ...t, name: true }))}
                   aria-invalid={invalid || undefined}
                   aria-describedby={describedBy}
                   aria-required
@@ -212,7 +209,7 @@ export function ProjectFormDialog({
                   onChange={(e) =>
                     set('prefix', e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6))
                   }
-                  onBlur={() => setTouched((t) => ({ ...t, prefix: true }))}
+                  onBlur={(e) => e.target.value.trim() && setTouched((t) => ({ ...t, prefix: true }))}
                   aria-invalid={invalid || undefined}
                   aria-describedby={describedBy}
                   aria-required
@@ -227,15 +224,10 @@ export function ProjectFormDialog({
               <Select
                 id={id}
                 value={form.status}
-                onChange={(e) => set('status', e.target.value as ProjectStatus)}
+                options={projectStatusOptions()}
+                onValueChange={(next) => set('status', next as ProjectStatus)}
                 className="w-48"
-              >
-                {PROJECT_STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
+              />
             )}
           </Field>
 

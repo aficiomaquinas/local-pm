@@ -127,40 +127,6 @@ export const Textarea = forwardRef<
   )
 })
 
-export const Select = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
-  function Select({ className, children, ...props }, ref) {
-    return (
-      <div className="relative">
-        <select
-          ref={ref}
-          className={cn(
-            CONTROL_BASE,
-            CONTROL_SIZE,
-            'cursor-pointer appearance-none pr-8',
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </select>
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          focusable="false"
-          aria-hidden
-          className="pointer-events-none absolute right-2 top-1/2 size-4 -translate-y-1/2 text-text-muted"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </div>
-    )
-  },
-)
-
 export interface ErrorSummaryProps {
   errors: { field: string; message: string; targetId?: string }[]
   className?: string

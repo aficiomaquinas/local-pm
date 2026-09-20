@@ -159,3 +159,40 @@ export const BLOCKED_META: StateMeta = {
   icon: Ban,
   tone: 'warning',
 }
+
+export interface StateSelectOption {
+  value: string
+  label: string
+  icon?: LucideIcon
+  glyph?: string
+  tone?: Tone
+}
+
+export function ticketStatusOptions(): StateSelectOption[] {
+  return Object.values(TICKET_STATUS_META).map((meta) => ({
+    value: meta.value,
+    label: meta.label,
+    icon: meta.icon,
+    tone: meta.tone,
+  }))
+}
+
+export function ticketPriorityOptions(): StateSelectOption[] {
+  return Object.values(TICKET_PRIORITY_META)
+    .sort((a, b) => b.rank - a.rank)
+    .map((meta) => ({
+      value: meta.value,
+      label: meta.label,
+      glyph: meta.glyph,
+      tone: meta.tone,
+    }))
+}
+
+export function projectStatusOptions(): StateSelectOption[] {
+  return Object.values(PROJECT_STATUS_META).map((meta) => ({
+    value: meta.value,
+    label: meta.label,
+    icon: meta.icon,
+    tone: meta.tone,
+  }))
+}

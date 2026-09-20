@@ -1,20 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Users, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import {
-  TICKET_PRIORITY_OPTIONS,
-  TICKET_STATUS_OPTIONS,
-  TicketPriority,
-  TicketStatus,
-} from '@/types/enums'
+import { TicketPriority, TicketStatus } from '@/types/enums'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Dialog } from '@/components/ui/Dialog'
-import { ErrorSummary, Field, Input, Select } from '@/components/ui/Field'
+import { ErrorSummary, Field, Input } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
+import { DatePicker } from '@/components/ui/DatePicker'
+import { projectIcon } from '@/components/ui/EntityMark'
+import { ticketPriorityOptions, ticketStatusMeta, ticketStatusOptions } from '@/lib/status'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import type { Project, Team, Ticket } from '@/payload-types'
 
@@ -243,7 +242,7 @@ export function TicketFormDialog({
                 id="ticket-form-title"
                 value={form.title}
                 onChange={(e) => set('title', e.target.value)}
-                onBlur={() => setTouched((t) => ({ ...t, title: true }))}
+                onBlur={(e) => e.target.value.trim() && setTouched((t) => ({ ...t, title: true }))}
                 aria-invalid={invalid || undefined}
                 aria-describedby={describedBy}
                 aria-required
@@ -276,32 +275,42 @@ export function TicketFormDialog({
                 <Select
                   id="ticket-form-project"
                   value={form.projectId}
-                  onChange={(e) => set('projectId', e.target.value)}
-                  onBlur={() => setTouched((t) => ({ ...t, projectId: true }))}
-                  aria-invalid={invalid || undefined}
+                  placeholder="Select a project"
+                  onValueChange={(next) => {
+                    set('projectId', next)
+                    setTouched((t) => ({ ...t, projectId: true }))
+                  }}
+                  invalid={invalid}
                   aria-describedby={describedBy}
-                  aria-required
-                >
-                  <option value="">Select a project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </Select>
+                  required
+                  options={projects.map((p) => ({
+                    value: p.id,
+                    label: p.name,
+                    icon: projectIcon(p.icon),
+                    swatch: p.color,
+                    hint: p.prefix,
+                  }))}
+                />
               )}
             </Field>
 
             <Field label="Team" optional>
               {({ id }) => (
-                <Select id={id} value={form.teamId} onChange={(e) => set('teamId', e.target.value)}>
-                  <option value="">No team</option>
-                  {teams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
+                <Select
+                  id={id}
+                  value={form.teamId}
+                  placeholder="No team"
+                  onValueChange={(next) => set('teamId', next)}
+                  options={[
+                    { value: '', label: 'No team', icon: Users },
+                    ...teams.map((t) => ({
+                      value: t.id,
+                      label: t.name,
+                      icon: Users,
+                      swatch: t.color,
+                    })),
+                  ]}
+                />
               )}
             </Field>
 
@@ -310,14 +319,9 @@ export function TicketFormDialog({
                 <Select
                   id={id}
                   value={form.status}
-                  onChange={(e) => set('status', e.target.value as TicketStatus)}
-                >
-                  {TICKET_STATUS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
+                  options={ticketStatusOptions()}
+                  onValueChange={(next) => set('status', next as TicketStatus)}
+                />
               )}
             </Field>
 
@@ -326,14 +330,9 @@ export function TicketFormDialog({
                 <Select
                   id={id}
                   value={form.priority}
-                  onChange={(e) => set('priority', e.target.value as TicketPriority)}
-                >
-                  {TICKET_PRIORITY_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
+                  options={ticketPriorityOptions()}
+                  onValueChange={(next) => set('priority', next as TicketPriority)}
+                />
               )}
             </Field>
           </div>
@@ -352,15 +351,14 @@ export function TicketFormDialog({
 
           {showMore && (
             <div className="flex flex-col gap-5">
-              <Field label="Due date" optional hint="YYYY-MM-DD, or use the picker.">
+              <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
                 {({ id, describedBy }) => (
-                  <Input
+                  <DatePicker
                     id={id}
-                    type="date"
                     aria-describedby={describedBy}
                     value={form.dueDate}
-                    onChange={(e) => set('dueDate', e.target.value)}
-                    className="w-48"
+                    onChange={(next) => set('dueDate', next)}
+                    className="w-56"
                   />
                 )}
               </Field>
@@ -489,18 +487,19 @@ export function TicketFormDialog({
                       <Select
                         id={id}
                         value=""
-                        onChange={(e) => {
-                          if (!e.target.value) return
-                          set('blockedByIds', [...form.blockedByIds, e.target.value])
+                        placeholder="Add a blocking ticket…"
+                        onValueChange={(next) => {
+                          if (!next) return
+                          set('blockedByIds', [...form.blockedByIds, next])
                         }}
-                      >
-                        <option value="">Add a blocking ticket…</option>
-                        {available.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.ticketId} — {t.title}
-                          </option>
-                        ))}
-                      </Select>
+                        options={available.map((t) => ({
+                          value: t.id,
+                          label: t.title,
+                          hint: t.ticketId ?? undefined,
+                          icon: ticketStatusMeta(t.status).icon,
+                          tone: ticketStatusMeta(t.status).tone,
+                        }))}
+                      />
                     )}
                   </Field>
                 )}

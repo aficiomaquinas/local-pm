@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { ListFilter, MoreHorizontal, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useShortcut } from '@/lib/shortcuts'
 import { PROJECT_STATUS_OPTIONS, ProjectStatus } from '@/types/enums'
@@ -11,11 +11,12 @@ import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Select } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
 import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
 import { Menu } from '@/components/ui/Menu'
 import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
 import { ProjectStatusBadge } from '@/components/ui/StateIndicator'
+import { projectStatusOptions } from '@/lib/status'
 import { DensityControl, Table, Td, Th, Tr, useDensity } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/Toast'
 import { ProjectFormDialog } from './ProjectFormDialog'
@@ -293,22 +294,17 @@ export function ProjectsList({
             <kbd className="hidden shrink-0 font-sans text-xs text-text-muted can-hover:inline">/</kbd>
           </label>
 
-          <label className="sr-only" htmlFor="projects-status-filter">
-            Filter by status
-          </label>
           <Select
             id="projects-status-filter"
+            aria-label="Filter by status"
             value={status}
-            onChange={(e) => setFilters({ status: e.target.value as ProjectStatus | '' })}
+            onValueChange={(next) => setFilters({ status: next as ProjectStatus | '' })}
             className="w-40"
-          >
-            <option value="">All statuses</option>
-            {PROJECT_STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: '', label: 'All statuses', icon: ListFilter },
+              ...projectStatusOptions(),
+            ]}
+          />
 
           <Button
             variant="primary"
@@ -481,18 +477,16 @@ export function ProjectsList({
                               onSelect: () => startDelete(project),
                             },
                           ]}
-                        >
-                          {(trigger) => (
+                          trigger={
                             <Button
-                              {...trigger}
                               variant="ghost"
                               size="sm"
                               iconOnly
                               icon={MoreHorizontal}
                               aria-label={`Actions for ${project.name}`}
                             />
-                          )}
-                        </Menu>
+                          }
+                        />
                       </span>
                     </Td>
                   </Tr>

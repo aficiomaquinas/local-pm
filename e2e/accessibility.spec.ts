@@ -120,3 +120,54 @@ test('skip to main content is the first tabbable element', async ({ page }) => {
   await page.keyboard.press('Tab')
   await expect(page.locator(':focus')).toHaveText('Skip to main content')
 })
+
+test('the project filter listbox is keyboard-operable and writes to the URL', async ({ page }) => {
+  await page.goto('/board')
+
+  const trigger = page.locator('#board-project-filter')
+  await expect(trigger).toHaveAttribute('aria-label', 'Filter by project')
+
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+
+  const listbox = page.getByRole('listbox')
+  await expect(listbox).toBeVisible()
+
+  const option = page.getByRole('option', { name: `E2E a11y ${refs.prefix}` })
+  await option.click()
+
+  await expect(page).toHaveURL(new RegExp(`project=${refs.projectId}`))
+  await expect(trigger).toContainText(`E2E a11y ${refs.prefix}`)
+
+  await trigger.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('listbox')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('listbox')).toBeHidden()
+  await expect(trigger).toBeFocused()
+})
+
+test('the due date accepts both typing and a calendar pick', async ({ page }) => {
+  await page.goto('/board')
+  await page.getByRole('button', { name: /New ticket/ }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'New ticket' })
+  await dialog.getByRole('button', { name: /Due date, labels/ }).click()
+
+  const input = dialog.getByRole('textbox', { name: 'Due date' })
+  await input.fill('2030-04-17')
+  await input.blur()
+  await expect(input).toHaveValue('2030-04-17')
+
+  await dialog.getByRole('button', { name: 'Choose a date from the calendar' }).click()
+  const today = page.getByRole('button', { name: 'Today' })
+  await expect(today).toBeVisible()
+  await today.click()
+
+  const expected = new Date()
+  const iso = `${expected.getFullYear()}-${`${expected.getMonth() + 1}`.padStart(2, '0')}-${`${expected.getDate()}`.padStart(2, '0')}`
+  await expect(input).toHaveValue(iso)
+
+  await dialog.getByRole('button', { name: 'Clear the date' }).click()
+  await expect(input).toHaveValue('')
+})

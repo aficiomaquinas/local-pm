@@ -371,18 +371,16 @@ export function TeamsList({
                               onSelect: () => startDelete(team),
                             },
                           ]}
-                        >
-                          {(trigger) => (
+                          trigger={
                             <Button
-                              {...trigger}
                               variant="ghost"
                               size="sm"
                               iconOnly
                               icon={MoreHorizontal}
                               aria-label={`Actions for ${team.name}`}
                             />
-                          )}
-                        </Menu>
+                          }
+                        />
                       </span>
                     </Td>
                   </Tr>

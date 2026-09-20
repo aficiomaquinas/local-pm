@@ -145,7 +145,7 @@ export function TeamFormDialog({
                 id="team-form-name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                onBlur={() => setTouched(true)}
+                onBlur={(e) => e.target.value.trim() !== '' && setTouched(true)}
                 aria-invalid={invalid || undefined}
                 aria-describedby={describedBy}
                 aria-required
