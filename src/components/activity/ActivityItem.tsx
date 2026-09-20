@@ -2,20 +2,26 @@
 
 import {
   CalendarDays,
+  CheckCircle2,
   CircleDot,
+  CornerDownRight,
   FileText,
   FolderClosed,
   ListChecks,
+  MessageSquare,
+  Pencil,
   Plus,
+  RotateCcw,
   SignalHigh,
   Tag,
+  Trash2,
   Type,
   Unlink,
   UserRound,
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { describeEvent, type TrackedField } from '@/lib/activity'
+import { describeEvent, isCommentAction, type TrackedField } from '@/lib/activity'
 import { formatDateTime, formatDateTimeRelative } from '@/lib/format'
 import { Avatar } from '@/components/ui/Avatar'
 import type { Activity, Member } from '@/payload-types'
@@ -36,14 +42,31 @@ const FIELD_ICONS: Record<TrackedField, IconType> = {
   subtasks: ListChecks,
 }
 
+const ACTION_ICONS: Record<string, IconType> = {
+  created: Plus,
+  commented: MessageSquare,
+  replied: CornerDownRight,
+  edited: Pencil,
+  resolved: CheckCircle2,
+  reopened: RotateCcw,
+  deleted: Trash2,
+}
+
 function iconFor(entry: Activity): IconType {
-  if (entry.action === 'created') return Plus
+  const byAction = ACTION_ICONS[entry.action]
+  if (byAction) return byAction
   return FIELD_ICONS[entry.field as TrackedField] ?? CircleDot
 }
 
 export function actorOf(entry: Activity): Member | null {
   const actor = entry.actor
   return actor && typeof actor === 'object' ? (actor as Member) : null
+}
+
+function quoteFor(entry: Activity): string | null {
+  if (!isCommentAction(entry.action)) return null
+  const text = entry.action === 'deleted' ? entry.from : entry.to
+  return typeof text === 'string' && text.trim() ? text : null
 }
 
 export function ActivityGroup({ entries }: { entries: Activity[] }) {
@@ -75,7 +98,15 @@ export function ActivityGroup({ entries }: { entries: Activity[] }) {
                 className="flex min-w-0 items-start gap-2 text-sm text-text-muted"
               >
                 <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span className="min-w-0">{describeEvent(entry)}</span>
+                <span className="min-w-0">
+                  {describeEvent(entry)}
+                  {quoteFor(entry) && (
+                    <span className="text-text-muted/80">
+                      {': '}
+                      <q className="italic">{quoteFor(entry)}</q>
+                    </span>
+                  )}
+                </span>
               </li>
             )
           })}

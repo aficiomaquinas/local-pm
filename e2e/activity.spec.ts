@@ -21,6 +21,15 @@ async function activityFor(request: import('@playwright/test').APIRequestContext
   }[]
 }
 
+async function newComment(
+  request: import('@playwright/test').APIRequestContext,
+  data: Record<string, unknown>,
+) {
+  const res = await request.post('/api/comments', { data })
+  expect(res.ok()).toBeTruthy()
+  return (await res.json()).doc
+}
+
 test.describe('the activity collection', () => {
   test('records the creation of a ticket', async ({ request }) => {
     const ticket = (
@@ -165,5 +174,120 @@ test.describe('the activity feed in the ticket page', () => {
 
     await page.goto(`/board?project=${refs.projectId}&ticket=${ticket.id}`)
     await expect(page.getByText('changed priority from No Priority to High')).toBeVisible()
+  })
+})
+
+test.describe('the comment thread in the history', () => {
+  test('records a comment, and keeps its text', async ({ request }) => {
+    const ticket = (
+      await (await createTicket(request, refs, { title: 'Talk about me' })).json()
+    ).doc
+    await newComment(request, { ticket: ticket.id, body: 'First thoughts' })
+
+    const entry = (await activityFor(request, ticket.id)).find((e) => e.action === 'commented')
+    expect(entry).toBeTruthy()
+    expect(entry?.to).toContain('First thoughts')
+  })
+
+  test('tells a reply apart from a comment that opens a thread', async ({ request }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Threaded' })).json()).doc
+    const root = await newComment(request, { ticket: ticket.id, body: 'Opening' })
+    await newComment(request, { ticket: ticket.id, body: 'Answering', parent: root.id })
+
+    const actions = (await activityFor(request, ticket.id)).map((e) => e.action)
+    expect(actions).toContain('commented')
+    expect(actions).toContain('replied')
+  })
+
+  test('records an edit with the text on both sides', async ({ request }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Edited' })).json()).doc
+    const comment = await newComment(request, { ticket: ticket.id, body: 'Before the edit' })
+
+    await request.patch(`/api/comments/${comment.id}`, { data: { body: 'After the edit' } })
+
+    const entry = (await activityFor(request, ticket.id)).find((e) => e.action === 'edited')
+    expect(entry?.from).toContain('Before the edit')
+    expect(entry?.to).toContain('After the edit')
+  })
+
+  test('records resolving and reopening a thread', async ({ request }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Resolvable' })).json()).doc
+    const comment = await newComment(request, { ticket: ticket.id, body: 'Settle this' })
+
+    await request.patch(`/api/comments/${comment.id}`, { data: { resolved: true } })
+    await request.patch(`/api/comments/${comment.id}`, { data: { resolved: false } })
+
+    const actions = (await activityFor(request, ticket.id)).map((e) => e.action)
+    expect(actions).toContain('resolved')
+    expect(actions).toContain('reopened')
+  })
+
+  test('does not record an edit when the body did not change', async ({ request }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Untouched' })).json()).doc
+    const comment = await newComment(request, { ticket: ticket.id, body: 'Same text' })
+
+    await request.patch(`/api/comments/${comment.id}`, { data: { body: 'Same text' } })
+
+    const edits = (await activityFor(request, ticket.id)).filter((e) => e.action === 'edited')
+    expect(edits).toHaveLength(0)
+  })
+
+  test('keeps the text of a deleted comment, which is the point of an audit trail', async ({
+    request,
+  }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Deleted' })).json()).doc
+    const comment = await newComment(request, { ticket: ticket.id, body: 'Regrettable remark' })
+
+    await request.delete(`/api/comments/${comment.id}`)
+
+    const entry = (await activityFor(request, ticket.id)).find((e) => e.action === 'deleted')
+    expect(entry?.from).toContain('Regrettable remark')
+  })
+
+  test('records a deletion for the reply that went with the thread', async ({ request }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Cascade' })).json()).doc
+    const root = await newComment(request, { ticket: ticket.id, body: 'Thread root' })
+    await newComment(request, { ticket: ticket.id, body: 'Doomed reply', parent: root.id })
+
+    await request.delete(`/api/comments/${root.id}`)
+
+    const deleted = (await activityFor(request, ticket.id)).filter((e) => e.action === 'deleted')
+    expect(deleted).toHaveLength(2)
+    expect(deleted.map((e) => e.from).join(' ')).toContain('Doomed reply')
+  })
+})
+
+test.describe('comment history in the feed', () => {
+  test('History shows the comment events, All does not repeat the comment itself', async ({
+    page,
+    request,
+  }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Feed split' })).json()).doc
+    const comment = await newComment(request, { ticket: ticket.id, body: 'Original wording' })
+    await request.patch(`/api/comments/${comment.id}`, { data: { body: 'Revised wording' } })
+
+    await page.goto(`/tickets/${ticket.id}`)
+    const feed = page.getByTestId('ticket-feed')
+
+    await expect(feed.getByText('Revised wording').first()).toBeVisible()
+    await expect(feed.locator('[data-activity-field="edited"]')).toBeVisible()
+    await expect(feed.locator('[data-activity-field="commented"]')).toHaveCount(0)
+
+    await page.getByRole('tab', { name: /History/ }).click()
+    await expect(feed.locator('[data-activity-field="commented"]')).toBeVisible()
+    await expect(feed.locator('[data-activity-field="edited"]')).toBeVisible()
+  })
+
+  test('a deleted comment leaves a trace in the history', async ({ page, request }) => {
+    const ticket = (await (await createTicket(request, refs, { title: 'Gone' })).json()).doc
+    const comment = await newComment(request, { ticket: ticket.id, body: 'Say it and delete it' })
+    await request.delete(`/api/comments/${comment.id}`)
+
+    await page.goto(`/tickets/${ticket.id}?feed=history`)
+
+    const deleted = page.locator('[data-activity-field="deleted"]')
+    await expect(deleted).toBeVisible()
+    await expect(deleted).toContainText('deleted a comment')
+    await expect(deleted).toContainText('Say it and delete it')
   })
 })

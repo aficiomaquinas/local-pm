@@ -483,17 +483,21 @@ export interface Activity {
    * The ticket this entry belongs to
    */
   ticket: string | Ticket;
-  action: 'created' | 'changed';
+  action: 'created' | 'changed' | 'commented' | 'replied' | 'edited' | 'resolved' | 'reopened' | 'deleted';
+  /**
+   * The comment this entry is about. Empty once that comment is deleted.
+   */
+  comment?: (string | null) | Comment;
   /**
    * Which field changed. Empty when the ticket was created.
    */
   field?: string | null;
   /**
-   * The value as it read before the change
+   * The value, or comment text, as it read before the change
    */
   from?: string | null;
   /**
-   * The value as it read after the change
+   * The value, or comment text, as it read after the change
    */
   to?: string | null;
   /**
@@ -742,6 +746,7 @@ export interface AttachmentsSelect<T extends boolean = true> {
 export interface ActivitySelect<T extends boolean = true> {
   ticket?: T;
   action?: T;
+  comment?: T;
   field?: T;
   from?: T;
   to?: T;

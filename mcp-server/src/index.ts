@@ -898,7 +898,7 @@ const tools: Tool[] = [
   // ============== ACTIVITY ==============
   {
     name: 'list_activity',
-    description: 'Read the change history of a ticket, oldest first. Each entry records one field that changed, the value before and after as they read at the time, and who made the change. The history is written automatically and cannot be edited or deleted. Board reordering is not recorded.',
+    description: 'Read the change history of a ticket, oldest first. Entries cover field changes (action "changed", with the field and the values before and after as they read at the time) and the comment thread (actions "commented", "replied", "edited", "resolved", "reopened", "deleted", carrying the comment text). The text of a deleted comment is kept here after the comment itself is gone. The history is written automatically and cannot be edited or deleted. Board reordering is not recorded.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -909,6 +909,10 @@ const tools: Tool[] = [
         field: {
           type: 'string',
           description: 'Only return changes to this field, e.g. "status", "assignee", "priority", "title", "dueDate", "labels", "blockedBy", "subtasks", "project", "team", "description"',
+        },
+        action: {
+          type: 'string',
+          description: 'Only return entries with this action: "created", "changed", "commented", "replied", "edited", "resolved", "reopened" or "deleted"',
         },
         limit: {
           type: 'number',
@@ -1403,6 +1407,9 @@ async function handleToolCall(
       if (args.field) {
         query += `&where[field][equals]=${args.field}`;
       }
+      if (args.action) {
+        query += `&where[action][equals]=${args.action}`;
+      }
 
       const response = await apiRequest(`/activity${query}`) as {
         docs: Array<Record<string, unknown>>;
@@ -1420,6 +1427,7 @@ async function handleToolCall(
         id: entry.id,
         action: entry.action,
         field: entry.field ?? null,
+        comment: slimComment(entry.comment),
         from: entry.from ?? null,
         to: entry.to ?? null,
         actor: slimMember(entry.actor),

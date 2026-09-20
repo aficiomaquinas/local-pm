@@ -15,7 +15,7 @@ A lightweight, self-hosted project management tool with a built-in MCP (Model Co
   - Ticket dependencies (blocked by)
   - Rich text descriptions
 - **Comments** - Threaded discussion on every ticket, with markdown, `@` mentions and resolvable threads
-- **Activity trail** - Every field change recorded with who changed it, shown beside the comments
+- **Activity trail** - Every field change and comment event recorded with who did it, shown beside the comments
 - **Attachments** - Drop, paste or pick files into a comment; images render inline, everything else becomes a link
 - **MCP Server** - AI-native project management via Model Context Protocol
 - **Self-Hosted** - Your data stays on your machine
@@ -170,7 +170,7 @@ The MCP server exposes 30 tools for complete project management:
 ### Activity Tools
 | Tool | Description |
 |------|-------------|
-| `list_activity` | Read a ticket's change history, oldest first |
+| `list_activity` | Read a ticket's change history, including the comment thread |
 
 ## How MCP Enhances AI Development
 

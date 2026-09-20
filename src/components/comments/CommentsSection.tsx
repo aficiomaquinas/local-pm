@@ -9,7 +9,7 @@ import { useComments, type CommentThread } from '@/hooks/useComments'
 import { useCurrentMember } from '@/hooks/useCurrentMember'
 import { useCommentPermalink } from '@/hooks/useCommentPermalink'
 import { useActivity } from '@/hooks/useActivity'
-import { groupActivity } from '@/lib/activity'
+import { groupActivity, hiddenAlongsideComments } from '@/lib/activity'
 import { ActivityGroup } from '@/components/activity/ActivityItem'
 import { TabList, type TabItem } from '@/components/ui/Tabs'
 import { Avatar } from '@/components/ui/Avatar'
@@ -77,18 +77,21 @@ export function CommentsSection({ ticketId }: { ticketId: string }) {
   const count = threads.reduce((sum, thread) => sum + 1 + thread.replies.length, 0)
   const resolvedCount = threads.filter((thread) => Boolean(thread.comment.resolved)).length
 
-  const activityGroups = useMemo(
-    () =>
-      groupActivity(
-        activity.entries.map((entry) => ({
-          id: String(entry.id),
-          actorId: actorIdOf(entry),
-          createdAt: entry.createdAt,
-          entry,
-        })),
-      ).map((group) => group.map((item) => item.entry)),
-    [activity.entries],
-  )
+  const activityGroups = useMemo(() => {
+    const visible =
+      mode === 'history'
+        ? activity.entries
+        : activity.entries.filter((entry) => !hiddenAlongsideComments(entry.action))
+
+    return groupActivity(
+      visible.map((entry) => ({
+        id: String(entry.id),
+        actorId: actorIdOf(entry),
+        createdAt: entry.createdAt,
+        entry,
+      })),
+    ).map((group) => group.map((item) => item.entry))
+  }, [activity.entries, mode])
 
   const timeline = useMemo(() => {
     const items: { key: string; at: number; thread?: CommentThread; group?: Activity[] }[] = []
