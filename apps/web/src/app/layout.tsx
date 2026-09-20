@@ -34,6 +34,14 @@ export const viewport: Viewport = {
   ],
 }
 
+/**
+ * Shared document shell for BOTH route groups (upstream #17 split theirs —
+ * one root per group — but this fork keeps the root layout serving the html
+ * document; adding a second <html> per group duplicated the tree in dev).
+ * The (payload)/layout.tsx mounts the admin under this document exactly as
+ * Payload's blank template generates it; (frontend)/layout.tsx layers the
+ * app shell.
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
