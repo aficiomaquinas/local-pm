@@ -14,6 +14,7 @@ A lightweight, self-hosted project management tool with a built-in MCP (Model Co
   - Subtasks with completion tracking
   - Ticket dependencies (blocked by)
   - Rich text descriptions
+- **Comments** - Threaded discussion on every ticket, with markdown, `@` mentions and resolvable threads
 - **MCP Server** - AI-native project management via Model Context Protocol
 - **Self-Hosted** - Your data stays on your machine
 - **Docker Ready** - One command deployment
@@ -119,7 +120,7 @@ Add to your Claude Desktop config (`~/.claude/claude_desktop_config.json`):
 
 ## MCP Tools Reference
 
-The MCP server exposes 18 tools for complete project management:
+The MCP server exposes 29 tools for complete project management:
 
 ### Project Tools
 | Tool | Description |
@@ -155,6 +156,14 @@ The MCP server exposes 18 tools for complete project management:
 | `get_board` | Get full Kanban board grouped by status |
 | `toggle_subtask` | Toggle subtask completion status |
 | `add_subtask` | Add a subtask to a ticket |
+
+### Comment Tools
+| Tool | Description |
+|------|-------------|
+| `list_comments` | List a ticket's comments, oldest first |
+| `add_comment` | Post a comment, or a reply in an existing thread |
+| `update_comment` | Edit a comment, or resolve/reopen a thread |
+| `delete_comment` | Delete a comment and any replies under it |
 
 ## How MCP Enhances AI Development
 

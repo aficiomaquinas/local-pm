@@ -147,7 +147,7 @@
       "slug": "comments-and-mentions",
       "title": "Comments and @mentions",
       "tier": 0,
-      "status": "in_progress",
+      "status": "done",
       "effort": "M",
       "summary": "Threaded comments on tickets with @mentions of people and agents.",
       "rationale": "Linear, Jira, Asana and Monday all have it. Also the natural surface for agent-to-human dialogue, which is this product's reason to exist.",
@@ -164,8 +164,8 @@
         "src/components/kanban/TicketDetailModal.tsx"
       ],
       "startedAt": "2026-09-20",
-      "completedAt": null,
-      "notes": ""
+      "completedAt": "2026-09-20",
+      "notes": "Shipped: new `comments` collection (ticket, parent, body, author, mentions, resolved/resolvedAt/resolvedBy, editedAt). Threading is one level, matching Linear: a reply points at the comment that opened the thread, and a beforeChange hook rejects a reply-to-a-reply and a reply on a different ticket. Only the thread root can be resolved; a resolved thread collapses to a \"Resolved / Show N comments\" strip. Composer: researched Linear, Jira, Asana and GitHub first. All four converge on markdown typed by the user, so the composer is a real textarea storing markdown (GitHub shape) with Write/Preview tabs reusing the TabList/TabPanel primitive, mod+B / mod+I / mod+K wrapping the selection, and mod+Enter posting. Quill was rejected: a mention blot plus caret measurement inside its contenteditable is far more surface for the same result, and a plain-text body is what the MCP tools and a future notifications inbox want to read. Mentions are stored in the body as @[Name](member:ID) and re-derived into a `mentions` relationship array on every save, filtered to people who still exist. That array is what task 27 (notifications) and task 45 (agent attribution) can query. The picker is caret-anchored per 03-forms-and-editing.md 3.6, with a mirror-div caret measurement (src/lib/caret.ts), arrow keys, Enter/Tab to insert and Escape to dismiss without inserting. Markdown rendering is a small in-repo subset (src/lib/markdown.ts): bold, italic, strike, inline and fenced code, lists, blockquote, h1-h3, links with a safe-href allowlist, autolinks, and mention chips. Output still goes through DOMPurify; the sanitize config moved out of RichTextEditor into src/lib/sanitize.ts so both surfaces share it. No new dependency. UI lands in TicketBody, so it appears on both the full ticket page and the board peek panel. Four states covered: delayed skeleton, empty, error-with-retry, populated. Posting is optimistic. Deleting is rung 2 on the friction ladder (a confirm naming the reply count), not undo: a deleted comment cannot be restored with its thread links intact, so a fake undo would have been dishonest. Submit is never disabled for invalidity (03-forms-and-editing.md 3.12): an empty post shows \"Write something before posting.\" inline instead. Cascades: deleting a ticket deletes its comments; deleting a thread root deletes its replies; deleting a person leaves their comments but clears author and re-derives mentions. Fixed while here: hook `payload.*` calls in Comments/Members now pass `req` so they join the delete transaction. Without it the member afterDelete still saw the member it had just deleted and mentions were never cleared. Tickets.ts keeps req only on the new comment cascade; its pre-existing call sites were left alone deliberately. MCP parity: list_comments, add_comment, update_comment, delete_comment, plus slimComment in the response slimming. Both READMEs updated; the root README tool count corrected from 18 to 29. Counts toward task 48. Seed: four threads (7 comments, one resolved, three with mentions) across the existing seed tickets. Verified by running the seeder against the e2e database, never the dev one. Migration: additive only. The comments collection starts empty; existing tickets need no backfill. Left out deliberately: a comment count on the board card (the card metadata budget in 05-board-and-dnd.md 5.2 is already at 4), emoji reactions, attachments, and inline comments on a description selection. Agent authorship beyond \"a member linked to an agent account\" belongs to task 45; notifying the people mentioned belongs to task 27. npm run verify: typecheck clean, 69 unit tests, 56 e2e passed / 1 skipped (the pre-existing admin-panel fixme). Note: this suite is flaky against the remote Atlas cluster, dropping one random test per full run; verified as pre-existing by stashing the change and reproducing the same behaviour on a clean tree, and every affected test passes in isolation."
     },
     {
       "id": 3,
@@ -1133,7 +1133,7 @@
       ],
       "startedAt": null,
       "completedAt": null,
-      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done."
+      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done. 2026-09-20: comments exposed through MCP as list_comments, add_comment, update_comment and delete_comment, with slimComment in the response slimming and both READMEs updated. Mention tokens are documented on add_comment so an agent can address a person by id."
     },
     {
       "id": 49,

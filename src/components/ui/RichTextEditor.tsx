@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
-import DOMPurify from 'isomorphic-dompurify'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { cn } from '@/lib/cn'
 import 'react-quill-new/dist/quill.snow.css'
 
@@ -67,15 +67,6 @@ export function RichTextEditor({
   )
 }
 
-const SANITIZE_CONFIG = {
-  ALLOWED_TAGS: [
-    'p', 'br', 'span', 'strong', 'b', 'em', 'i', 'u', 's',
-    'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'blockquote', 'pre', 'code',
-  ],
-  ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
-  ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|#|\/)/i,
-}
-
 export function RichTextDisplay({
   content,
   wide = false,
@@ -84,7 +75,7 @@ export function RichTextDisplay({
   wide?: boolean
 }) {
   const sanitized = useMemo(
-    () => (content ? DOMPurify.sanitize(content, SANITIZE_CONFIG) : ''),
+    () => sanitizeHtml(content),
     [content],
   )
 

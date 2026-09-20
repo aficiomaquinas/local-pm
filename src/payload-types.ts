@@ -72,6 +72,7 @@ export interface Config {
     teams: Team;
     members: Member;
     tickets: Ticket;
+    comments: Comment;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -84,6 +85,7 @@ export interface Config {
     teams: TeamsSelect<false> | TeamsSelect<true>;
     members: MembersSelect<false> | MembersSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
+    comments: CommentsSelect<false> | CommentsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -404,6 +406,44 @@ export interface Ticket {
   createdAt: string;
 }
 /**
+ * Discussion on tickets. A reply points at the comment that opened the thread.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "comments".
+ */
+export interface Comment {
+  id: string;
+  /**
+   * The ticket this comment belongs to
+   */
+  ticket: string | Ticket;
+  /**
+   * The comment that opened this thread. Empty for a top-level comment. Threads are one level deep.
+   */
+  parent?: (string | null) | Comment;
+  /**
+   * Markdown. Mentions are stored as @[Name](member:ID) and render as a chip.
+   */
+  body: string;
+  /**
+   * Who wrote this. Filled from the signed-in account when the caller does not set it.
+   */
+  author?: (string | null) | Member;
+  /**
+   * Derived from the body on every save. Do not edit by hand.
+   */
+  mentions?: (string | Member)[] | null;
+  /**
+   * A resolved thread collapses. Only the first comment in a thread carries it.
+   */
+  resolved?: boolean | null;
+  resolvedAt?: string | null;
+  resolvedBy?: (string | null) | Member;
+  editedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -446,6 +486,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'tickets';
         value: string | Ticket;
+      } | null)
+    | ({
+        relationTo: 'comments';
+        value: string | Comment;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -585,6 +629,23 @@ export interface TicketsSelect<T extends boolean = true> {
         id?: T;
       };
   sortOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "comments_select".
+ */
+export interface CommentsSelect<T extends boolean = true> {
+  ticket?: T;
+  parent?: T;
+  body?: T;
+  author?: T;
+  mentions?: T;
+  resolved?: T;
+  resolvedAt?: T;
+  resolvedBy?: T;
+  editedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

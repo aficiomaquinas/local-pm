@@ -26,6 +26,11 @@ export const Tickets: CollectionConfig = {
         return data
       },
     ],
+    afterDelete: [
+      async ({ req, id }) => {
+        await deleteCommentsFor(req, id)
+      },
+    ],
   },
   fields: [
     {
@@ -165,6 +170,15 @@ export const Tickets: CollectionConfig = {
     },
   ],
   timestamps: true,
+}
+
+async function deleteCommentsFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.delete({
+    req,
+    collection: 'comments',
+    where: { ticket: { equals: id } },
+    depth: 0,
+  })
 }
 
 class CycleError extends APIError {

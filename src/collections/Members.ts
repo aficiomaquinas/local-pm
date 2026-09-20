@@ -22,6 +22,7 @@ export const Members: CollectionConfig = {
     afterDelete: [
       async ({ req, id }) => {
         await clearAssignmentsFor(req, id)
+        await clearCommentTracesFor(req, id)
       },
     ],
   },
@@ -73,8 +74,36 @@ export const Members: CollectionConfig = {
   timestamps: true,
 }
 
+async function clearCommentTracesFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.update({
+    req,
+    collection: 'comments',
+    where: { author: { equals: id } },
+    data: { author: null },
+    depth: 0,
+  })
+  const mentioning = await req.payload.find({
+    req,
+    collection: 'comments',
+    where: { mentions: { equals: id } },
+    limit: 1000,
+    depth: 0,
+  })
+
+  for (const doc of mentioning.docs) {
+    await req.payload.update({
+      req,
+      collection: 'comments',
+      id: doc.id,
+      data: { body: doc.body },
+      depth: 0,
+    })
+  }
+}
+
 async function clearAssignmentsFor(req: PayloadRequest, id: string | number): Promise<void> {
   await req.payload.update({
+    req,
     collection: 'tickets',
     where: { assignee: { equals: id } },
     data: { assignee: null },
@@ -91,6 +120,7 @@ async function assertUserNotAlreadyLinked(
   if (!userId) return
 
   const existing = await req.payload.find({
+    req,
     collection: 'members',
     where: { user: { equals: userId } },
     limit: 1,
