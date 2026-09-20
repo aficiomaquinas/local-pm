@@ -38,14 +38,19 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
       sort: 'sortOrder',
       depth: 2,
       where: buildWhere(status),
+      // Local API defaults to overrideAccess:true, so collection read access
+      // would never run for these server-rendered queries. Soft-deleted
+      // tickets would render as draggable ghost cards whose move PATCH then
+      // 404s silently.
+      overrideAccess: false,
     })
 
   const [todoResult, inProgressResult, doneResult, projectsResult, teamsResult] = await Promise.all([
     findColumn(TicketStatus.TODO),
     findColumn(TicketStatus.IN_PROGRESS),
     findColumn(TicketStatus.DONE),
-    payload.find({ collection: 'projects', limit: 100, sort: 'name' }),
-    payload.find({ collection: 'teams', limit: 100, sort: 'name' }),
+    payload.find({ collection: 'projects', limit: 100, sort: 'name', overrideAccess: false }),
+    payload.find({ collection: 'teams', limit: 100, sort: 'name', overrideAccess: false }),
   ])
 
   const initialTickets = [...todoResult.docs, ...inProgressResult.docs, ...doneResult.docs]
