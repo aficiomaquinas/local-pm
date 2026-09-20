@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, FolderKanban, Users, History } from 'lucide-react'
+import { UserMenu } from '@/components/auth/AuthStatusBanner'
 
 const navItems = [
   { href: '/board', label: 'Board', icon: LayoutDashboard },
@@ -52,6 +53,12 @@ export function Sidebar() {
           })}
         </ul>
       </nav>
+
+      {/* SPC-007 v2: authenticated session indicator — avatar + email,
+          popover menu with Admin / Log out. Renders nothing for anonymous
+          or loading states (the session check lives in the shared
+          useAuthSession hook). */}
+      <UserMenu />
     </aside>
   )
 }

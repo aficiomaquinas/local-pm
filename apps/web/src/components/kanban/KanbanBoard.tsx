@@ -500,6 +500,12 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
           setMutationError(
             'Your session is not active — the move was not saved. Log in and try again.',
           )
+          // SPC-007 v2 nudge (REQ-005.4): the red banner names the specific
+          // failure near the action; the anonymous topbar banner holds the
+          // standing explanation. Draw the eye there without a dialog — the
+          // banner listens for this event and pulses amber→red (CSS only,
+          // no layout shift).
+          window.dispatchEvent(new CustomEvent('localpm:auth-nudge'))
         } else {
           setMutationError(
             `The move could not be saved (server error ${response.status}). The board was restored to its previous state.`,
