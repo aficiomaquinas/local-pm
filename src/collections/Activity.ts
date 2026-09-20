@@ -31,7 +31,21 @@ export const Activity: CollectionConfig = {
       options: [
         { label: 'Created', value: 'created' },
         { label: 'Changed', value: 'changed' },
+        { label: 'Commented', value: 'commented' },
+        { label: 'Replied', value: 'replied' },
+        { label: 'Edited a comment', value: 'edited' },
+        { label: 'Resolved a thread', value: 'resolved' },
+        { label: 'Reopened a thread', value: 'reopened' },
+        { label: 'Deleted a comment', value: 'deleted' },
       ],
+    },
+    {
+      name: 'comment',
+      type: 'relationship',
+      relationTo: 'comments',
+      admin: {
+        description: 'The comment this entry is about. Empty once that comment is deleted.',
+      },
     },
     {
       name: 'field',
@@ -41,12 +55,16 @@ export const Activity: CollectionConfig = {
     {
       name: 'from',
       type: 'text',
-      admin: { description: 'The value as it read before the change' },
+      admin: {
+        description: 'The value, or comment text, as it read before the change',
+      },
     },
     {
       name: 'to',
       type: 'text',
-      admin: { description: 'The value as it read after the change' },
+      admin: {
+        description: 'The value, or comment text, as it read after the change',
+      },
     },
     {
       name: 'actor',

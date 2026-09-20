@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { diffTicket, describeEvent, displayValue, groupActivity } from '@/lib/activity'
+import {
+  diffTicket,
+  describeEvent,
+  displayValue,
+  groupActivity,
+  isCommentAction,
+  hiddenAlongsideComments,
+} from '@/lib/activity'
 
 const base = {
   id: 't1',
@@ -191,5 +198,44 @@ describe('groupActivity', () => {
 
   it('returns nothing for an empty feed', () => {
     expect(groupActivity([])).toEqual([])
+  })
+})
+
+describe('comment events', () => {
+  it('phrases every comment action', () => {
+    expect(describeEvent({ action: 'commented' })).toBe('commented')
+    expect(describeEvent({ action: 'replied' })).toBe('replied in a thread')
+    expect(describeEvent({ action: 'edited' })).toBe('edited a comment')
+    expect(describeEvent({ action: 'resolved' })).toBe('resolved a thread')
+    expect(describeEvent({ action: 'reopened' })).toBe('reopened a thread')
+    expect(describeEvent({ action: 'deleted' })).toBe('deleted a comment')
+  })
+
+  it('knows which actions belong to the comment thread', () => {
+    for (const action of ['commented', 'replied', 'edited', 'resolved', 'reopened', 'deleted']) {
+      expect(isCommentAction(action)).toBe(true)
+    }
+    expect(isCommentAction('created')).toBe(false)
+    expect(isCommentAction('changed')).toBe(false)
+  })
+
+  it('hides only the events the comment itself already shows', () => {
+    expect(hiddenAlongsideComments('commented')).toBe(true)
+    expect(hiddenAlongsideComments('replied')).toBe(true)
+
+    expect(hiddenAlongsideComments('edited')).toBe(false)
+    expect(hiddenAlongsideComments('resolved')).toBe(false)
+    expect(hiddenAlongsideComments('reopened')).toBe(false)
+    expect(hiddenAlongsideComments('deleted')).toBe(false)
+    expect(hiddenAlongsideComments('changed')).toBe(false)
+  })
+
+  it('groups a comment event with a field change by the same person', () => {
+    const at = (m: number) => new Date(Date.UTC(2026, 8, 20, 12, m)).toISOString()
+    const groups = groupActivity([
+      { id: '1', actorId: 'm1', createdAt: at(0) },
+      { id: '2', actorId: 'm1', createdAt: at(1) },
+    ])
+    expect(groups).toHaveLength(1)
   })
 })

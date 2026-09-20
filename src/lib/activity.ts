@@ -1,6 +1,33 @@
 import { TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 
-export type ActivityAction = 'created' | 'changed'
+export type ActivityAction =
+  | 'created'
+  | 'changed'
+  | 'commented'
+  | 'replied'
+  | 'edited'
+  | 'resolved'
+  | 'reopened'
+  | 'deleted'
+
+export const COMMENT_ACTIONS: ActivityAction[] = [
+  'commented',
+  'replied',
+  'edited',
+  'resolved',
+  'reopened',
+  'deleted',
+]
+
+const SELF_EVIDENT_ACTIONS = new Set<string>(['commented', 'replied'])
+
+export function isCommentAction(action: string): boolean {
+  return (COMMENT_ACTIONS as string[]).includes(action)
+}
+
+export function hiddenAlongsideComments(action: string): boolean {
+  return SELF_EVIDENT_ACTIONS.has(action)
+}
 
 export interface ActivityEvent {
   action: ActivityAction
@@ -213,6 +240,12 @@ export function describeEvent(event: {
   to?: string | null
 }): string {
   if (event.action === 'created') return 'created this ticket'
+  if (event.action === 'commented') return 'commented'
+  if (event.action === 'replied') return 'replied in a thread'
+  if (event.action === 'edited') return 'edited a comment'
+  if (event.action === 'resolved') return 'resolved a thread'
+  if (event.action === 'reopened') return 'reopened a thread'
+  if (event.action === 'deleted') return 'deleted a comment'
 
   const label = FIELD_LABELS[event.field as TrackedField] ?? event.field ?? 'a field'
 
