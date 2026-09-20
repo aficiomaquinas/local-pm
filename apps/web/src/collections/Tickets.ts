@@ -62,6 +62,15 @@ export const Tickets: CollectionConfig = {
         return data
       },
     ],
+    // Upstream #19 port: deleting a ticket takes its comments with it.
+    // (This fork's request-path delete is soft — blockHardDelete below — so
+    // this cascade only ever runs for the operator's terminal purge script
+    // or a future explicit policy change; kept for parity.)
+    afterDelete: [
+      async ({ req, id }) => {
+        await deleteCommentsFor(req, id)
+      },
+    ],
     // SPC-001 §6: native restore (POST /api/tickets/versions/:id) runs the
     // collection `update` access check. The policy hook below hard-denies
     // restore by the agent identity and by unauthenticated callers.
@@ -233,6 +242,15 @@ export const Tickets: CollectionConfig = {
  * an outage. `APIError` with `isPublic` keeps the explanation and returns 400
  * rather than 500.
  */
+async function deleteCommentsFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.delete({
+    req,
+    collection: 'comments',
+    where: { ticket: { equals: id } },
+    depth: 0,
+  })
+}
+
 class CycleError extends APIError {
   constructor(message: string) {
     super(message, 400, null, true)

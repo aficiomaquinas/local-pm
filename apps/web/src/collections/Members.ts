@@ -36,11 +36,22 @@ export const Members: CollectionConfig = {
     maxPerDoc: 1000,
   },
   hooks: {
-    beforeChange: [attributeActor],
+    beforeChange: [
+      attributeActor,
+      async ({ data, req, originalDoc }) => {
+        if (data?.user !== undefined) {
+          await assertUserNotAlreadyLinked(req, data.user, originalDoc?.id ?? null)
+        }
+        return data
+      },
+    ],
     beforeOperation: [blockHardDelete],
     afterDelete: [
       async ({ req, id }) => {
         await clearAssignmentsFor(req, id)
+        // Upstream #19: a deleted person keeps their comments but loses
+        // authorship and mention chips (bodies are re-derived on update).
+        await clearCommentTracesFor(req, id)
       },
     ],
   },
@@ -78,6 +89,20 @@ export const Members: CollectionConfig = {
           'Inactive people keep their existing assignments but drop out of the assignee pickers.',
       },
     },
+    // Upstream #19: the login account this person signs in with. Set it and
+    // "My tickets" works for them; comment authorship and mention identity
+    // resolve through this link. Uniqueness of the link is enforced by
+    // upstream's assertUserNotAlreadyLinked, which arrives with the field.
+    {
+      name: 'user',
+      type: 'relationship',
+      relationTo: 'users',
+      admin: {
+        position: 'sidebar',
+        description:
+          'The login account this person signs in with. Set it and "My tickets" works for them.',
+      },
+    },
     // Soft delete parity with tickets/projects/teams (SPC-004 D2).
     DELETED_FIELD,
     // SPC-005 D-1: actor attribution on every version snapshot.
@@ -94,4 +119,67 @@ async function clearAssignmentsFor(req: PayloadRequest, id: string | number): Pr
     data: { assignee: null },
     depth: 0,
   })
+}
+
+async function clearCommentTracesFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.update({
+    req,
+    collection: 'comments',
+    where: { author: { equals: id } },
+    data: { author: null },
+    depth: 0,
+  })
+  const mentioning = await req.payload.find({
+    req,
+    collection: 'comments',
+    where: { mentions: { equals: id } },
+    limit: 1000,
+    depth: 0,
+  })
+
+  for (const doc of mentioning.docs) {
+    await req.payload.update({
+      req,
+      collection: 'comments',
+      id: doc.id,
+      data: { body: doc.body },
+      depth: 0,
+    })
+  }
+}
+
+async function assertUserNotAlreadyLinked(
+  req: PayloadRequest,
+  user: unknown,
+  selfId: string | number | null,
+): Promise<void> {
+  const userId = toId(user)
+  if (!userId) return
+
+  const existing = await req.payload.find({
+    req,
+    collection: 'members',
+    where: { user: { equals: userId } },
+    limit: 1,
+    depth: 0,
+  })
+
+  const clash = existing.docs.find((doc) => String(doc.id) !== String(selfId ?? ''))
+  if (clash) {
+    throw new APIError(
+      `That account is already linked to ${clash.name}. Unlink it there first.`,
+      400,
+      null,
+      true,
+    )
+  }
+}
+
+function toId(value: unknown): string | null {
+  if (typeof value === 'string') return value || null
+  if (typeof value === 'number') return String(value)
+  if (value && typeof value === 'object' && 'id' in value) {
+    return String((value as { id: unknown }).id)
+  }
+  return null
 }

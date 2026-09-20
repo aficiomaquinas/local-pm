@@ -121,6 +121,14 @@ const SEED_TEAMS: SeedTeam[] = [
   },
 ]
 
+interface SeedComment {
+  ticketTitle: string
+  authorName: string
+  body: string
+  replies?: { authorName: string; body: string }[]
+  resolved?: boolean
+}
+
 const SEED_MEMBERS: SeedMember[] = [
   { name: 'Ada Okonkwo', email: 'ada@example.com', teamName: 'Frontend Engineering' },
   { name: 'Bruno Costa', email: 'bruno@example.com', teamName: 'Frontend Engineering' },
@@ -132,6 +140,43 @@ const SEED_MEMBERS: SeedMember[] = [
   { name: 'Hassan Ali', email: 'hassan@example.com', teamName: 'Marketing' },
   { name: 'Ingrid Moreau', email: 'ingrid@example.com', teamName: 'DevOps' },
   { name: 'Jonas Bakker', email: 'jonas@example.com', teamName: 'Customer Success' },
+]
+
+const SEED_COMMENTS: SeedComment[] = [
+  {
+    ticketTitle: 'Implement responsive navigation',
+    authorName: 'Ada Okonkwo',
+    body: 'Do we collapse to a drawer or to a bottom bar below md? {{Farid Haddad}} the wireframes show both.',
+    replies: [
+      {
+        authorName: 'Farid Haddad',
+        body: 'Bottom bar for the primary sections, drawer for the overflow. Hidden nav measurably reduces use, so the four destinations people actually need stay visible.',
+      },
+      { authorName: 'Ada Okonkwo', body: 'Clear. Building it that way.' },
+    ],
+    resolved: true,
+  },
+  {
+    ticketTitle: 'Implement responsive navigation',
+    authorName: 'Elif Demir',
+    body: 'Two things I will be checking when this lands:\n\n- every target is **44px** with 8px between neighbours\n- the whole thing reflows to one column at 320px\n\nShout before you call it done and I will run it early.',
+  },
+  {
+    ticketTitle: 'Implement OAuth logic',
+    authorName: 'Chen Wei',
+    body: 'The refresh call has no timeout set, so a slow identity provider parks the request until the proxy gives up at 60s.',
+    replies: [
+      {
+        authorName: 'Dara Singh',
+        body: '{{Chen Wei}} set it to 10s and retry once? Past that the user has already reloaded.',
+      },
+    ],
+  },
+  {
+    ticketTitle: 'Hero section implementation',
+    authorName: 'Greta Lindqvist',
+    body: 'Parked until the wireframes are signed off. See the blocker. {{Bruno Costa}} I will move this the moment they land.',
+  },
 ]
 
 const SEED_TICKETS: SeedTicket[] = [
@@ -271,6 +316,7 @@ async function seed() {
 
   // Clear existing data
   console.log('Clearing existing data...')
+  await payload.delete({ collection: 'comments', where: {} })
   await payload.delete({ collection: 'tickets', where: {} })
   await payload.delete({ collection: 'members', where: {} })
   await payload.delete({ collection: 'projects', where: {} })
@@ -372,6 +418,51 @@ async function seed() {
           },
         })
       }
+    }
+  }
+
+  console.log('Creating comments...')
+  const mentionToken = (name: string): string => {
+    const id = memberIdsByName.get(name)
+    return id ? `@[${name}](member:${id})` : name
+  }
+  const withMentions = (body: string): string =>
+    body.replace(/\{\{([^}]+)\}\}/g, (_match, name: string) => mentionToken(name.trim()))
+
+  for (const comment of SEED_COMMENTS) {
+    const ticketId = ticketMap.get(comment.ticketTitle)
+    if (!ticketId) {
+      console.error(`Ticket not found for comment: ${comment.ticketTitle}`)
+      continue
+    }
+
+    const root = await payload.create({
+      collection: 'comments',
+      data: {
+        ticket: ticketId,
+        body: withMentions(comment.body),
+        author: memberIdsByName.get(comment.authorName) ?? null,
+      } as any,
+    })
+
+    for (const reply of comment.replies ?? []) {
+      await payload.create({
+        collection: 'comments',
+        data: {
+          ticket: ticketId,
+          parent: root.id,
+          body: withMentions(reply.body),
+          author: memberIdsByName.get(reply.authorName) ?? null,
+        } as any,
+      })
+    }
+
+    if (comment.resolved) {
+      await payload.update({
+        collection: 'comments',
+        id: root.id,
+        data: { resolved: true } as any,
+      })
     }
   }
 

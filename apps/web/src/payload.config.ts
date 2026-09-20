@@ -7,6 +7,7 @@ import type { CollectionConfig, PayloadRequest } from 'payload'
 import { fileURLToPath } from 'url'
 
 import { dataManagementAccess, enforceDataManagementEndpointPolicy } from './access/dataManagementPolicy'
+import { Comments } from './collections/Comments'
 import { Members } from './collections/Members'
 import { Projects } from './collections/Projects'
 import { Teams } from './collections/Teams'
@@ -52,7 +53,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Projects, Teams, Members, Tickets, Users],
+  collections: [Projects, Teams, Members, Tickets, Users, Comments],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

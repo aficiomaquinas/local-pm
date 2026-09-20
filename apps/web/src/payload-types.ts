@@ -72,6 +72,7 @@ export interface Config {
     members: Member;
     tickets: Ticket;
     users: User;
+    comments: Comment;
     exports: Export;
     imports: Import;
     'payload-kv': PayloadKv;
@@ -87,6 +88,7 @@ export interface Config {
     members: MembersSelect<false> | MembersSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    comments: CommentsSelect<false> | CommentsSelect<true>;
     exports: ExportsSelect<false> | ExportsSelect<true>;
     imports: ImportsSelect<false> | ImportsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
@@ -378,6 +380,10 @@ export interface Member {
    */
   active?: boolean | null;
   /**
+   * The login account this person signs in with. Set it and "My tickets" works for them.
+   */
+  user?: (string | null) | User;
+  /**
    * Soft delete — hidden from the board, trail preserved
    */
   deleted?: boolean | null;
@@ -482,6 +488,60 @@ export interface Ticket {
    * Order within the column
    */
   sortOrder?: number | null;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Discussion on tickets. A reply points at the comment that opened the thread.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "comments".
+ */
+export interface Comment {
+  id: string;
+  /**
+   * The ticket this comment belongs to
+   */
+  ticket: string | Ticket;
+  /**
+   * The comment that opened this thread. Empty for a top-level comment. Threads are one level deep.
+   */
+  parent?: (string | null) | Comment;
+  /**
+   * Markdown. Mentions are stored as @[Name](member:ID) and render as a chip.
+   */
+  body: string;
+  /**
+   * Who wrote this. Filled from the signed-in account when the caller does not set it.
+   */
+  author?: (string | null) | Member;
+  /**
+   * Derived from the body on every save. Do not edit by hand.
+   */
+  mentions?: (string | Member)[] | null;
+  /**
+   * A resolved thread collapses. Only the first comment in a thread carries it.
+   */
+  resolved?: boolean | null;
+  resolvedAt?: string | null;
+  resolvedBy?: (string | null) | Member;
+  editedAt?: string | null;
   /**
    * Soft delete — hidden from the board, trail preserved
    */
@@ -710,6 +770,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'users';
         value: string | User;
+      } | null)
+    | ({
+        relationTo: 'comments';
+        value: string | Comment;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -796,6 +860,7 @@ export interface MembersSelect<T extends boolean = true> {
   email?: T;
   team?: T;
   active?: T;
+  user?: T;
   deleted?: T;
   actorType?: T;
   actorId?: T;
@@ -871,6 +936,27 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "comments_select".
+ */
+export interface CommentsSelect<T extends boolean = true> {
+  ticket?: T;
+  parent?: T;
+  body?: T;
+  author?: T;
+  mentions?: T;
+  resolved?: T;
+  resolvedAt?: T;
+  resolvedBy?: T;
+  editedAt?: T;
+  deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1020,7 +1106,7 @@ export interface TaskCreateCollectionExport {
     id: string;
     name: string;
     batchSize?: number | null;
-    collectionSlug: 'projects' | 'teams' | 'members' | 'tickets' | 'users' | 'exports' | 'imports';
+    collectionSlug: 'projects' | 'teams' | 'members' | 'tickets' | 'users' | 'comments' | 'exports' | 'imports';
     drafts?: ('yes' | 'no') | null;
     exportCollection: string;
     fields?: string[] | null;

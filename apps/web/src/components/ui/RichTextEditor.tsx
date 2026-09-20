@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
-import DOMPurify from 'isomorphic-dompurify'
+import { sanitizeHtml } from '@/lib/sanitize'
 import { cn } from '@/lib/cn'
 import 'react-quill-new/dist/quill.snow.css'
 
@@ -67,14 +67,10 @@ export function RichTextEditor({
   )
 }
 
-const SANITIZE_CONFIG = {
-  ALLOWED_TAGS: [
-    'p', 'br', 'span', 'strong', 'b', 'em', 'i', 'u', 's',
-    'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'blockquote', 'pre', 'code',
-  ],
-  ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
-  ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel|#|\/)/i,
-}
+// Sanitize config moved to @/lib/sanitize (upstream #19 port): the markdown
+// comment renderer and RichTextDisplay share one allowlist. The
+// serverExternalPackages pin for isomorphic-dompurify/jsdom in next.config.ts
+// keeps covering this module (same import chain, still server-bundled).
 
 export function RichTextDisplay({
   content,
@@ -83,10 +79,7 @@ export function RichTextDisplay({
   content: string
   wide?: boolean
 }) {
-  const sanitized = useMemo(
-    () => (content ? DOMPurify.sanitize(content, SANITIZE_CONFIG) : ''),
-    [content],
-  )
+  const sanitized = useMemo(() => sanitizeHtml(content), [content])
 
   if (!content || content === '<p><br></p>' || !sanitized.trim()) {
     return <p className="text-base text-text-muted">No description yet.</p>

@@ -42,6 +42,12 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `toggle_subtask` - Toggle a subtask's completion status
 - `add_subtask` - Add a new subtask to a ticket
 
+### Comments
+- `list_comments` - List the comments on a ticket, oldest first
+- `add_comment` - Post a comment, or a reply in an existing thread
+- `update_comment` - Edit a comment body, or resolve/reopen a thread
+- `delete_comment` - Delete a comment (and its replies, if it opened the thread)
+
 ## Installation
 
 ### Prerequisites
@@ -353,6 +359,45 @@ Adds a new subtask to a ticket.
 **Parameters:**
 - `ticketId` (string, required): Parent ticket ID
 - `title` (string, required): Subtask title
+
+### list_comments
+Lists the comments on a ticket, oldest first. Threads are one level deep: a comment
+carrying a `parent` is a reply to the comment that opened that thread.
+
+**Parameters:**
+- `ticketId` (string, required): The ticket whose comments to list
+- `parentId` (string, optional): Only the replies in this thread
+- `includeResolved` (boolean, optional): Include resolved threads (default: true)
+- `limit` (number, optional): Maximum comments to return (default: 50)
+- `page` (number, optional): Page number, 1-indexed (default: 1)
+
+### add_comment
+Posts a comment on a ticket, or a reply in an existing thread.
+
+**Parameters:**
+- `ticketId` (string, required): The ticket to comment on
+- `body` (string, required): Markdown body
+- `parentId` (string, optional): The comment that opened the thread, to reply to it
+- `authorId` (string, optional): Member ID to attribute the comment to
+
+**Mentions:** write `@[Their Name](member:THEIR_ID)` inside the body; `list_members`
+gives the IDs. Mentioned people are resolved into the comment's `mentions` array on
+every save, so they stay queryable even if the body is edited later.
+
+### update_comment
+Edits a comment body, or resolves/reopens a thread. Only the comment that opened a
+thread can carry `resolved`.
+
+**Parameters:**
+- `id` (string, required): The comment ID
+- `body` (string, optional): New markdown body
+- `resolved` (boolean, optional): Resolve (true) or reopen (false) the thread
+
+### delete_comment
+Deletes a comment. Deleting the comment that opened a thread deletes its replies too.
+
+**Parameters:**
+- `id` (string, required): The comment ID to delete
 
 ## Development
 

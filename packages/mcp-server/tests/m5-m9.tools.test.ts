@@ -343,6 +343,9 @@ describe('M9: ticket CRUD tools', () => {
       description: null,
       project: 'proj_1',
       team: null,
+      // Upstream #14: create_ticket always carries the assignee field
+      // (null = unassigned) so "who owns this" is explicit on every create.
+      assignee: null,
       status: 'TODO',
       priority: 'NO_PRIORITY',
       dueDate: null,
@@ -370,6 +373,7 @@ describe('M9: ticket CRUD tools', () => {
       description: null,
       project: 'proj_1',
       team: 'team_2',
+      assignee: null,
       status: 'IN_PROGRESS',
       priority: 'URGENT',
       dueDate: '2026-10-01',
