@@ -102,8 +102,8 @@ pnpm dev
 
 ## MCP Server
 
-The MCP server exposes 18 tools for complete project management (projects, teams,
-tickets, board, subtasks — full table in the
+The MCP server exposes 28 tools for complete project management (projects, teams,
+members, tickets, comments with @mentions, board, subtasks — full table in the
 [upstream README](https://github.com/anaskasmi/local-pm#mcp-tools-reference)). With the
 fork's OIDC machine leg, agent mutations land in the audit history as first-class
 `agent` actors.
