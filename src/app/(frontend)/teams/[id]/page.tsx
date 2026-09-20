@@ -2,7 +2,8 @@ import { TeamDetail } from '@/components/teams/TeamDetail'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { notFound } from 'next/navigation'
-import { TicketStatus } from '@/types/enums'
+import { StatusType } from '@/types/enums'
+import { resolveWorkflow } from '@/lib/workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,17 +32,21 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
     const team = await payload.findByID({ collection: 'teams', id, depth: 0 })
     if (!team) notFound()
 
-    const countFor = (status?: TicketStatus) =>
+    const workflow = await resolveWorkflow(payload, null)
+    const idsOfType = (...types: StatusType[]) =>
+      workflow.filter((entry) => types.includes(entry.type as StatusType)).map((entry) => entry.id)
+
+    const countFor = (statusIds?: string[]) =>
       payload.count({
         collection: 'tickets',
-        where: { team: { equals: id }, ...(status ? { status: { equals: status } } : {}) },
+        where: { team: { equals: id }, ...(statusIds ? { status: { in: statusIds } } : {}) },
       })
 
     const [total, todo, inProgress, done, members] = await Promise.all([
       countFor(),
-      countFor(TicketStatus.TODO),
-      countFor(TicketStatus.IN_PROGRESS),
-      countFor(TicketStatus.DONE),
+      countFor(idsOfType(StatusType.BACKLOG, StatusType.UNSTARTED)),
+      countFor(idsOfType(StatusType.STARTED)),
+      countFor(idsOfType(StatusType.COMPLETED, StatusType.CANCELLED)),
       payload.find({
         collection: 'members',
         where: { team: { equals: id } },

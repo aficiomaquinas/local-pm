@@ -6,6 +6,11 @@ import { AppShell } from '@/components/shell/AppShell'
 import { ShortcutProvider } from '@/lib/shortcuts'
 import { ToastProvider } from '@/components/ui/Toast'
 import { TooltipProvider } from '@/components/ui/Tooltip'
+import { WorkflowProvider } from '@/components/shell/WorkflowProvider'
+import { getPayload } from 'payload'
+import config from '@payload-config'
+import { sortStatuses } from '@/lib/workflow'
+import type { Status } from '@/payload-types'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -38,7 +43,11 @@ export const viewport: Viewport = {
   ],
 }
 
-export default function FrontendLayout({ children }: { children: React.ReactNode }) {
+export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
+  const payload = await getPayload({ config })
+  const statusResult = await payload.find({ collection: 'statuses', limit: 200, depth: 0 })
+  const statuses = sortStatuses(statusResult.docs as Status[])
+
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <head>
@@ -48,7 +57,9 @@ export default function FrontendLayout({ children }: { children: React.ReactNode
         <ShortcutProvider>
           <ToastProvider>
             <TooltipProvider>
-              <AppShell>{children}</AppShell>
+              <WorkflowProvider statuses={statuses}>
+                <AppShell>{children}</AppShell>
+              </WorkflowProvider>
             </TooltipProvider>
           </ToastProvider>
         </ShortcutProvider>

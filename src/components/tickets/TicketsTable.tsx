@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ListFilter, Loader2, Plus, Search, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
-import { ticketStatusOptions } from '@/lib/status'
+import { statusOptions, isClosedStatus } from '@/lib/status'
 import { TicketStatus } from '@/types/enums'
 import { useEntityQuery } from '@/hooks/useEntityQuery'
 import { AvatarLabel } from '@/components/ui/Avatar'
@@ -20,6 +20,7 @@ import { PriorityIndicator, TicketStatusBadge } from '@/components/ui/StateIndic
 import { TicketKey } from '@/components/ui/EntityMark'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import type { Member, Project, Team, Ticket } from '@/payload-types'
+import { useWorkflow } from '@/components/shell/WorkflowProvider'
 
 type SortKey = 'sortOrder' | 'title' | '-title' | '-createdAt' | 'createdAt' | 'dueDate'
 
@@ -51,11 +52,12 @@ export function TicketsTable({
   emptyDescription,
   relationColumn,
 }: TicketsTableProps) {
+  const { statuses } = useWorkflow()
   const router = useRouter()
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState<TicketStatus | ''>('')
+  const [status, setStatus] = useState<string>('')
   const [sort, setSort] = useState<SortKey>('sortOrder')
 
   const { docs, totalDocs, hasNextPage, loading, loadingMore, error, loadMore, retry } =
@@ -111,9 +113,9 @@ export function TicketsTable({
         <Select
           aria-label="Filter by status"
           value={status}
-          onValueChange={(next) => setStatus(next as TicketStatus | '')}
+          onValueChange={(next) => setStatus(next)}
           className="w-40 max-sm:w-full"
-          options={[{ value: '', label: 'All statuses', icon: ListFilter }, ...ticketStatusOptions()]}
+          options={[{ value: '', label: 'All statuses', icon: ListFilter }, ...statusOptions(statuses)]}
         />
 
         <Select
@@ -144,7 +146,7 @@ export function TicketsTable({
 
         {status && (
           <Chip tone="accent" onRemove={() => setStatus('')} removeLabel="Remove status filter">
-            Status: {ticketStatusOptions().find((o) => o.value === status)?.label}
+            Status: {statusOptions(statuses).find((o) => o.value === status)?.label}
           </Chip>
         )}
         {query && (
@@ -219,7 +221,7 @@ export function TicketsTable({
                     typeof ticket.assignee === 'object' ? (ticket.assignee as Member) : null
                   const overdue =
                     ticket.dueDate &&
-                    ticket.status !== TicketStatus.DONE &&
+                    !isClosedStatus(ticket.status) &&
                     new Date(ticket.dueDate).getTime() < Date.now()
 
                   return (

@@ -4,10 +4,12 @@ import { cn } from '@/lib/cn'
 import {
   TONE_TEXT,
   ticketPriorityMeta,
-  ticketStatusMeta,
+  statusMeta,
+  statusTypeMeta,
   projectStatusMeta,
   type StateMeta,
 } from '@/lib/status'
+import type { Status } from '@/payload-types'
 import { Badge } from './Badge'
 
 function InlineState({ meta, className }: { meta: StateMeta; className?: string }) {
@@ -24,10 +26,10 @@ export function TicketStatusBadge({
   status,
   className,
 }: {
-  status: string | null | undefined
+  status: Status | string | null | undefined
   className?: string
 }) {
-  const meta = ticketStatusMeta(status)
+  const meta = statusMeta(status)
   return (
     <Badge tone={meta.tone} icon={meta.icon} className={className}>
       {meta.label}
@@ -39,10 +41,27 @@ export function TicketStatusInline({
   status,
   className,
 }: {
-  status: string | null | undefined
+  status: Status | string | null | undefined
   className?: string
 }) {
-  return <InlineState meta={ticketStatusMeta(status)} className={className} />
+  return <InlineState meta={statusMeta(status)} className={className} />
+}
+
+export function StatusTypeBadge({
+  type,
+  label,
+  className,
+}: {
+  type: string | null | undefined
+  label: string
+  className?: string
+}) {
+  const meta = statusTypeMeta(type)
+  return (
+    <Badge tone={meta.tone} icon={meta.icon} className={className}>
+      {label}
+    </Badge>
+  )
 }
 
 export function ProjectStatusBadge({

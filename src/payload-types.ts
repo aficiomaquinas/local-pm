@@ -71,6 +71,7 @@ export interface Config {
     projects: Project;
     teams: Team;
     members: Member;
+    statuses: Status;
     tickets: Ticket;
     comments: Comment;
     attachments: Attachment;
@@ -86,6 +87,7 @@ export interface Config {
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
     teams: TeamsSelect<false> | TeamsSelect<true>;
     members: MembersSelect<false> | MembersSelect<true>;
+    statuses: StatusesSelect<false> | StatusesSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     comments: CommentsSelect<false> | CommentsSelect<true>;
     attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
@@ -321,6 +323,41 @@ export interface Member {
   createdAt: string;
 }
 /**
+ * Workflow states a ticket can occupy, globally or per project
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "statuses".
+ */
+export interface Status {
+  id: string;
+  /**
+   * The label shown on the board column and on tickets
+   */
+  name: string;
+  /**
+   * Stable identifier used by the API and the MCP server. Derived from the name.
+   */
+  key: string;
+  /**
+   * The semantic category. Drives the icon, the tone, and whether a ticket counts as open or closed.
+   */
+  type: 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'COMPLETED' | 'CANCELLED';
+  /**
+   * Column position, ascending. Gaps are intentional so a status can be inserted.
+   */
+  order: number;
+  /**
+   * Leave empty for a workspace-wide status. Set it to scope the status to one project.
+   */
+  project?: (string | null) | Project;
+  /**
+   * Optional hint shown when picking this status
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Individual work items within projects
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -355,9 +392,9 @@ export interface Ticket {
     [k: string]: unknown;
   } | null;
   /**
-   * Current status of the ticket
+   * Current status of the ticket, drawn from its project workflow
    */
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  status: string | Status;
   /**
    * Priority level of the ticket
    */
@@ -548,6 +585,10 @@ export interface PayloadLockedDocument {
         value: string | Member;
       } | null)
     | ({
+        relationTo: 'statuses';
+        value: string | Status;
+      } | null)
+    | ({
         relationTo: 'tickets';
         value: string | Ticket;
       } | null)
@@ -668,6 +709,20 @@ export interface MembersSelect<T extends boolean = true> {
   team?: T;
   active?: T;
   user?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "statuses_select".
+ */
+export interface StatusesSelect<T extends boolean = true> {
+  name?: T;
+  key?: T;
+  type?: T;
+  order?: T;
+  project?: T;
+  description?: T;
   updatedAt?: T;
   createdAt?: T;
 }

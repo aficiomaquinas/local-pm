@@ -2,12 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { requireAuthEnabled, readAccess, writeAccess, deleteAccess } from '@/lib/access'
 import type { Access } from 'payload'
 
-/**
- * The access gate's whole contract is "open by default, closed on request".
- * Both halves are pinned here, because getting either backwards is a security
- * bug rather than a behaviour change.
- */
-
 const call = (fn: Access, user: unknown) =>
   (fn as (args: { req: { user: unknown } }) => unknown)({ req: { user } })
 
@@ -30,8 +24,6 @@ describe('requireAuthEnabled', () => {
     process.env.LOCAL_PM_REQUIRE_AUTH = 'false'
     expect(requireAuthEnabled()).toBe(false)
 
-    // Guard against a truthy-string mistake enabling auth by accident,
-    // and against "1"/"yes" silently NOT enabling it.
     process.env.LOCAL_PM_REQUIRE_AUTH = 'TRUE'
     expect(requireAuthEnabled()).toBe(false)
 

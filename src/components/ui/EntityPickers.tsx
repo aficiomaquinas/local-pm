@@ -4,7 +4,7 @@ import { useCallback } from 'react'
 import { FolderKanban, Users } from 'lucide-react'
 import { EntitySelect, type EntityOption } from './EntitySelect'
 import { projectIcon } from './EntityMark'
-import { ticketStatusMeta } from '@/lib/status'
+import { statusMeta } from '@/lib/status'
 import type { Member, Project, Team, Ticket } from '@/payload-types'
 
 const PROJECT_SORTS = [
@@ -60,7 +60,7 @@ export const NO_ASSIGNEE_OPTION: EntityOption = {
 }
 
 export function ticketOption(ticket: Ticket): EntityOption {
-  const meta = ticketStatusMeta(ticket.status)
+  const meta = statusMeta(ticket.status)
   return {
     value: ticket.id,
     label: ticket.title,

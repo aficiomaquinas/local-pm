@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react'
 import { Ban, Check, GitBranch, Plus, Tag } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { BLOCKED_META, ticketPriorityOptions, ticketStatusOptions } from '@/lib/status'
+import { BLOCKED_META, ticketPriorityOptions, statusOptions, isClosedStatus } from '@/lib/status'
 import { formatDateTimeRelative } from '@/lib/format'
 import { TicketPriority, TicketStatus } from '@/types/enums'
 import { useOptimisticPatch } from '@/hooks/useOptimisticPatch'
@@ -21,6 +21,8 @@ import { DependencyGraph } from '@/components/kanban/DependencyGraph'
 import { CommentsSection } from '@/components/comments/CommentsSection'
 import { SubtaskList } from './SubtaskList'
 import type { Project, Ticket } from '@/payload-types'
+import { useWorkflow } from '@/components/shell/WorkflowProvider'
+import { statusIdOf } from '@/lib/workflow'
 
 export function Section({
   title,
@@ -54,6 +56,10 @@ export function TicketBody({
   onUpdate: (next: Ticket) => void
   columns?: 1 | 2
 }) {
+  const { statusesForProject } = useWorkflow()
+  const projectId = typeof ticket.project === 'string' ? ticket.project : ticket.project?.id
+  const workflow = statusesForProject(projectId)
+
   const apply = useCallback((next: Ticket) => onUpdate(next), [onUpdate])
   const { patch } = useOptimisticPatch<Ticket>({
     collection: 'tickets',
@@ -161,10 +167,10 @@ export function TicketBody({
             {({ id }) => (
               <Select
                 id={id}
-                value={ticket.status}
-                options={ticketStatusOptions()}
+                value={statusIdOf(ticket) ?? ''}
+                options={statusOptions(workflow)}
                 onValueChange={(next) =>
-                  patch({ status: next as TicketStatus } as Partial<Ticket>, 'the status')
+                  patch({ status: next } as Partial<Ticket>, 'the status')
                 }
               />
             )}
@@ -317,7 +323,7 @@ export function TicketBody({
               <span
                 className={cn(
                   'min-w-0 flex-1 truncate text-base',
-                  blocker.status === TicketStatus.DONE
+                  isClosedStatus(blocker.status)
                     ? 'text-text-muted line-through'
                     : 'text-text',
                 )}
@@ -325,7 +331,7 @@ export function TicketBody({
               >
                 {blocker.title}
               </span>
-              {blocker.status === TicketStatus.DONE ? (
+              {isClosedStatus(blocker.status) ? (
                 <Badge tone="success" icon={Check}>
                   Done
                 </Badge>

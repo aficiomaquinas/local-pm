@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ProjectDetail } from '@/components/projects/ProjectDetail'
-import { TicketStatus } from '@/types/enums'
+import { StatusType } from '@/types/enums'
+import { resolveWorkflow } from '@/lib/workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,20 +32,24 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
     const project = await payload.findByID({ collection: 'projects', id, depth: 0 })
     if (!project) notFound()
 
-    const countFor = (status?: TicketStatus) =>
+    const workflow = await resolveWorkflow(payload, id)
+    const idsOfType = (...types: StatusType[]) =>
+      workflow.filter((entry) => types.includes(entry.type as StatusType)).map((entry) => entry.id)
+
+    const countFor = (statusIds?: string[]) =>
       payload.count({
         collection: 'tickets',
         where: {
           project: { equals: id },
-          ...(status ? { status: { equals: status } } : {}),
+          ...(statusIds ? { status: { in: statusIds } } : {}),
         },
       })
 
     const [total, todo, inProgress, done] = await Promise.all([
       countFor(),
-      countFor(TicketStatus.TODO),
-      countFor(TicketStatus.IN_PROGRESS),
-      countFor(TicketStatus.DONE),
+      countFor(idsOfType(StatusType.BACKLOG, StatusType.UNSTARTED)),
+      countFor(idsOfType(StatusType.STARTED)),
+      countFor(idsOfType(StatusType.COMPLETED, StatusType.CANCELLED)),
     ])
 
     return (

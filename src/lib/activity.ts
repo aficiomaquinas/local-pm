@@ -1,4 +1,4 @@
-import { TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
+import { TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 
 export type ActivityAction =
   | 'created'
@@ -69,7 +69,6 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
 const OPAQUE_FIELDS = new Set<TrackedField>(['description'])
 
 const CHOICE_LABELS: Partial<Record<TrackedField, Record<string, string>>> = {
-  status: Object.fromEntries(TICKET_STATUS_OPTIONS.map((o) => [o.value, o.label])),
   priority: Object.fromEntries(TICKET_PRIORITY_OPTIONS.map((o) => [o.value, o.label])),
 }
 
@@ -175,7 +174,8 @@ function comparable(field: TrackedField, value: unknown): string {
     const date = new Date(value as string)
     return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
   }
-  if (field === 'assignee' || field === 'project' || field === 'team') return idOf(value) ?? ''
+  if (field === 'assignee' || field === 'project' || field === 'team' || field === 'status')
+    return idOf(value) ?? ''
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value.trim()
   return String(value)

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { seedProject, createTicket, type SeedRefs } from './helpers'
+import { seedProject, createTicket, type SeedRefs, statusId } from './helpers'
 
 let refs: SeedRefs
 
@@ -46,7 +46,7 @@ test.describe('the activity collection', () => {
       await (await createTicket(request, refs, { title: 'Move me', status: 'TODO' })).json()
     ).doc
 
-    await request.patch(`/api/tickets/${ticket.id}`, { data: { status: 'IN_PROGRESS' } })
+    await request.patch(`/api/tickets/${ticket.id}`, { data: { status: await statusId(request, 'IN_PROGRESS') } })
 
     const entries = await activityFor(request, ticket.id)
     const change = entries.find((e) => e.field === 'status')
@@ -59,7 +59,7 @@ test.describe('the activity collection', () => {
     ).doc
 
     await request.patch(`/api/tickets/${ticket.id}`, {
-      data: { status: 'DONE', priority: 'URGENT', title: 'Renamed' },
+      data: { status: await statusId(request, 'DONE'), priority: 'URGENT', title: 'Renamed' },
     })
 
     const fields = (await activityFor(request, ticket.id))
@@ -107,7 +107,7 @@ test.describe('the activity collection', () => {
     const ticket = (
       await (await createTicket(request, refs, { title: 'Temporary', status: 'TODO' })).json()
     ).doc
-    await request.patch(`/api/tickets/${ticket.id}`, { data: { status: 'DONE' } })
+    await request.patch(`/api/tickets/${ticket.id}`, { data: { status: await statusId(request, 'DONE') } })
     expect((await activityFor(request, ticket.id)).length).toBeGreaterThan(0)
 
     await request.delete(`/api/tickets/${ticket.id}`)
@@ -120,7 +120,7 @@ test.describe('the activity feed in the ticket page', () => {
     const ticket = (
       await (await createTicket(request, refs, { title: 'Watch me change', status: 'TODO' })).json()
     ).doc
-    await request.patch(`/api/tickets/${ticket.id}`, { data: { status: 'IN_PROGRESS' } })
+    await request.patch(`/api/tickets/${ticket.id}`, { data: { status: await statusId(request, 'IN_PROGRESS') } })
 
     await page.goto(`/tickets/${ticket.id}`)
 

@@ -17,9 +17,9 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { MousePointerSensor } from './sensors'
-import { ticketStatusMeta } from '@/lib/status'
+import { statusMeta } from '@/lib/status'
+import { statusIdOf } from '@/lib/workflow'
 import { useShortcut } from '@/lib/shortcuts'
-import { TicketStatus } from '@/types/enums'
 import { useToast } from '@/components/ui/Toast'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -29,7 +29,7 @@ import { KanbanCard } from './KanbanCard'
 import { KanbanColumn } from './KanbanColumn'
 import { TicketPanel } from './TicketPanel'
 import { applyDrop, isRealMove, resultFromPreview, type DragResult } from './dragLogic'
-import type { Ticket } from '@/payload-types'
+import type { Status, Ticket } from '@/payload-types'
 
 interface ColumnPaginationInfo {
   page: number
@@ -39,10 +39,10 @@ interface ColumnPaginationInfo {
   loadedCount: number
 }
 
-type ColumnPaginationState = Record<TicketStatus, ColumnPaginationInfo>
+type ColumnPaginationState = Record<string, ColumnPaginationInfo>
 
 interface InitialColumnPagination {
-  status: TicketStatus
+  status: string
   page: number
   totalPages: number
   hasNextPage: boolean
@@ -51,28 +51,28 @@ interface InitialColumnPagination {
 
 interface KanbanBoardProps {
   initialTickets: Ticket[]
+  statuses: Status[]
   hasProjects: boolean
   initialColumnPagination?: InitialColumnPagination[]
 }
 
-const COLUMNS: TicketStatus[] = [TicketStatus.TODO, TicketStatus.IN_PROGRESS, TicketStatus.DONE]
 const PAGE_SIZE = 20
 const COLLAPSED_COLUMNS_KEY = 'local-pm:board-collapsed'
 const BOARD_PATH = '/board'
 
-function emptyPagination(): ColumnPaginationState {
-  return {
-    [TicketStatus.TODO]: { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 },
-    [TicketStatus.IN_PROGRESS]: { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 },
-    [TicketStatus.DONE]: { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 },
-  }
+function emptyPagination(columnIds: string[]): ColumnPaginationState {
+  return columnIds.reduce<ColumnPaginationState>((acc, id) => {
+    acc[id] = { page: 1, totalPages: 1, hasNextPage: false, totalDocs: 0, loadedCount: 0 }
+    return acc
+  }, {})
 }
 
 function createInitialColumnPagination(
   initialTickets: Ticket[],
+  columnIds: string[],
   initial?: InitialColumnPagination[],
 ): ColumnPaginationState {
-  const state = emptyPagination()
+  const state = emptyPagination(columnIds)
   if (initial) {
     for (const column of initial) {
       state[column.status] = {
@@ -80,13 +80,13 @@ function createInitialColumnPagination(
         totalPages: column.totalPages,
         hasNextPage: column.hasNextPage,
         totalDocs: column.totalDocs,
-        loadedCount: initialTickets.filter((t) => t.status === column.status).length,
+        loadedCount: initialTickets.filter((t) => statusIdOf(t) === column.status).length,
       }
     }
   } else {
-    for (const status of COLUMNS) {
-      const count = initialTickets.filter((t) => t.status === status).length
-      state[status] = { page: 1, totalPages: 1, hasNextPage: false, totalDocs: count, loadedCount: count }
+    for (const id of columnIds) {
+      const count = initialTickets.filter((t) => statusIdOf(t) === id).length
+      state[id] = { page: 1, totalPages: 1, hasNextPage: false, totalDocs: count, loadedCount: count }
     }
   }
   return state
@@ -105,9 +105,19 @@ function filtersToSearch(filters: BoardFilters, ticketId: string | null): string
 
 export function KanbanBoard({
   initialTickets,
+  statuses,
   hasProjects,
   initialColumnPagination,
 }: KanbanBoardProps) {
+  const columnIds = useMemo(() => statuses.map((entry) => entry.id), [statuses])
+  const statusById = useMemo(
+    () => new Map(statuses.map((entry) => [entry.id, entry])),
+    [statuses],
+  )
+  const labelFor = useCallback(
+    (id: string | null | undefined) => (id ? (statusById.get(id)?.name ?? 'Unknown') : 'Unknown'),
+    [statusById],
+  )
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -128,15 +138,11 @@ export function KanbanBoard({
   const [pendingDelete, setPendingDelete] = useState<Ticket | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const [collapsedColumns, setCollapsedColumns] = useState<TicketStatus[]>([])
+  const [collapsedColumns, setCollapsedColumns] = useState<string[]>([])
   const [columnPagination, setColumnPagination] = useState<ColumnPaginationState>(() =>
-    createInitialColumnPagination(initialTickets, initialColumnPagination),
+    createInitialColumnPagination(initialTickets, columnIds, initialColumnPagination),
   )
-  const [loadingColumns, setLoadingColumns] = useState<Record<TicketStatus, boolean>>({
-    [TicketStatus.TODO]: false,
-    [TicketStatus.IN_PROGRESS]: false,
-    [TicketStatus.DONE]: false,
-  })
+  const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({})
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchedFor = useRef(
@@ -147,7 +153,7 @@ export function KanbanBoard({
       query: searchParams.get('q') ?? '',
     }),
   )
-  const dragOriginRef = useRef<{ status: TicketStatus; sortOrder: number } | null>(null)
+  const dragOriginRef = useRef<{ status: string; sortOrder: number } | null>(null)
 
   const ticketsRef = useRef<Ticket[]>(tickets)
   useEffect(() => {
@@ -156,13 +162,16 @@ export function KanbanBoard({
 
   useEffect(() => {
     const focused = new URLSearchParams(window.location.search).get('status')
-    if (focused && COLUMNS.includes(focused as TicketStatus)) {
-      setCollapsedColumns(COLUMNS.filter((s) => s !== focused))
+    const focusedId = focused
+      ? (statuses.find((entry) => entry.key === focused || entry.id === focused)?.id ?? null)
+      : null
+    if (focusedId) {
+      setCollapsedColumns(statuses.map((entry) => entry.id).filter((id) => id !== focusedId))
       return
     }
     try {
       const stored = localStorage.getItem(COLLAPSED_COLUMNS_KEY)
-      if (stored) setCollapsedColumns(JSON.parse(stored) as TicketStatus[])
+      if (stored) setCollapsedColumns(JSON.parse(stored) as string[])
     } catch {}
   }, [])
 
@@ -208,7 +217,7 @@ export function KanbanBoard({
   )
 
   const createTicket = useCallback(
-    (status: TicketStatus) => {
+    (status: string) => {
       const params = new URLSearchParams({ status })
       if (filters.projectId) params.set('project', filters.projectId)
       params.set('returnTo', filtersToSearch(filters, null))
@@ -239,7 +248,7 @@ export function KanbanBoard({
     const run = async () => {
       setRefreshing(true)
       try {
-        const fetchColumn = async (status: TicketStatus) => {
+        const fetchColumn = async (status: string) => {
           const params = new URLSearchParams({
             page: '1',
             limit: String(PAGE_SIZE),
@@ -258,15 +267,26 @@ export function KanbanBoard({
           return response.json()
         }
 
-        const [todo, inProgress, done] = await Promise.all(COLUMNS.map(fetchColumn))
-        const byStatus = { TODO: todo, IN_PROGRESS: inProgress, DONE: done } as Record<
-          TicketStatus,
-          { docs?: Ticket[]; page?: number; totalPages?: number; hasNextPage?: boolean; totalDocs?: number }
-        >
+        const columns = await Promise.all(columnIds.map(fetchColumn))
+        const byStatus = columnIds.reduce<
+          Record<
+            string,
+            {
+              docs?: Ticket[]
+              page?: number
+              totalPages?: number
+              hasNextPage?: boolean
+              totalDocs?: number
+            }
+          >
+        >((acc, id, index) => {
+          acc[id] = columns[index]
+          return acc
+        }, {})
 
-        setTickets(COLUMNS.flatMap((status) => byStatus[status].docs ?? []))
+        setTickets(columnIds.flatMap((status) => byStatus[status].docs ?? []))
         setColumnPagination(
-          COLUMNS.reduce((acc, status) => {
+          columnIds.reduce((acc, status) => {
             const data = byStatus[status]
             acc[status] = {
               page: data.page ?? 1,
@@ -276,7 +296,7 @@ export function KanbanBoard({
               loadedCount: data.docs?.length ?? 0,
             }
             return acc
-          }, emptyPagination()),
+          }, emptyPagination(columnIds)),
         )
       } catch (error) {
         if ((error as Error).name === 'AbortError') return
@@ -305,9 +325,9 @@ export function KanbanBoard({
   )
 
   const ticketsByStatus = useCallback(
-    (status: TicketStatus) =>
+    (status: string) =>
       tickets
-        .filter((t) => t.status === status)
+        .filter((t) => statusIdOf(t) === status)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     [tickets],
   )
@@ -329,7 +349,7 @@ export function KanbanBoard({
 
   const revertTicket = (
     ticketId: string,
-    origin: { status: TicketStatus; sortOrder: number } | null,
+    origin: { status: string; sortOrder: number } | null,
   ) => {
     if (!origin) return
     const reverted = ticketsRef.current.map((ticket) =>
@@ -341,9 +361,9 @@ export function KanbanBoard({
 
   const persistMove = async (
     ticketId: string,
-    status: TicketStatus,
+    status: string,
     sortOrder: number,
-    origin: { status: TicketStatus; sortOrder: number } | null,
+    origin: { status: string; sortOrder: number } | null,
   ) => {
     try {
       const response = await fetch(`/api/tickets/${ticketId}`, {
@@ -363,7 +383,7 @@ export function KanbanBoard({
         tone: 'error',
         title: "Couldn't move that ticket",
         description: `${ticket?.ticketId ?? 'The ticket'} is back in ${
-          ticketStatusMeta(origin?.status).label
+          labelFor(origin?.status)
         }. ${error instanceof Error ? error.message : ''}`.trim(),
       })
     }
@@ -374,7 +394,7 @@ export function KanbanBoard({
     setActiveTicket(ticket ?? null)
 
     dragOriginRef.current = ticket
-      ? { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
+      ? { status: (statusIdOf(ticket) as string), sortOrder: ticket.sortOrder ?? 0 }
       : null
   }
 
@@ -382,7 +402,7 @@ export function KanbanBoard({
     const { active, over } = event
     if (!over) return
 
-    const next = applyDrop(ticketsRef.current, active.id as string, over.id as string).tickets
+    const next = applyDrop(ticketsRef.current, active.id as string, over.id as string, columnIds).tickets
     ticketsRef.current = next
     setTickets(next)
   }
@@ -401,51 +421,51 @@ export function KanbanBoard({
     const result: DragResult =
       overId === activeId
         ? resultFromPreview(ticketsRef.current, activeId)
-        : applyDrop(ticketsRef.current, activeId, overId)
+        : applyDrop(ticketsRef.current, activeId, overId, columnIds)
     ticketsRef.current = result.tickets
     setTickets(result.tickets)
 
     if (!isRealMove(result, origin)) return
 
-    await persistMove(activeId, result.status as TicketStatus, result.sortOrder as number, origin)
+    await persistMove(activeId, (result.status as string), result.sortOrder as number, origin)
   }
 
-  const moveToColumn = async (ticket: Ticket, status: TicketStatus) => {
-    const origin = { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
-    const result = applyDrop(ticketsRef.current, ticket.id, status)
+  const moveToColumn = async (ticket: Ticket, status: string) => {
+    const origin = { status: (statusIdOf(ticket) as string), sortOrder: ticket.sortOrder ?? 0 }
+    const result = applyDrop(ticketsRef.current, ticket.id, status, columnIds)
     if (!isRealMove(result, origin)) return
 
     ticketsRef.current = result.tickets
     setTickets(result.tickets)
     setAnnouncement(
-      `${ticket.ticketId ?? ticket.title} moved to ${ticketStatusMeta(status).label} from ${
-        ticketStatusMeta(origin.status).label
+      `${ticket.ticketId ?? ticket.title} moved to ${labelFor(status)} from ${
+        labelFor(origin.status)
       }.`,
     )
-    await persistMove(ticket.id, result.status as TicketStatus, result.sortOrder as number, origin)
+    await persistMove(ticket.id, (result.status as string), result.sortOrder as number, origin)
   }
 
   const reorder = async (ticket: Ticket, direction: -1 | 1) => {
-    const column = ticketsByStatus(ticket.status as TicketStatus)
+    const column = ticketsByStatus((statusIdOf(ticket) as string))
     const index = column.findIndex((t) => t.id === ticket.id)
     const neighbour = column[index + direction]
     if (!neighbour) return
 
-    const origin = { status: ticket.status as TicketStatus, sortOrder: ticket.sortOrder ?? 0 }
-    const result = applyDrop(ticketsRef.current, ticket.id, neighbour.id)
+    const origin = { status: (statusIdOf(ticket) as string), sortOrder: ticket.sortOrder ?? 0 }
+    const result = applyDrop(ticketsRef.current, ticket.id, neighbour.id, columnIds)
     if (!isRealMove(result, origin)) return
 
     ticketsRef.current = result.tickets
     setTickets(result.tickets)
     setAnnouncement(
       `${ticket.ticketId ?? ticket.title} moved to position ${index + direction + 1} in ${
-        ticketStatusMeta(origin.status).label
+        labelFor(origin.status)
       }.`,
     )
-    await persistMove(ticket.id, result.status as TicketStatus, result.sortOrder as number, origin)
+    await persistMove(ticket.id, (result.status as string), result.sortOrder as number, origin)
   }
 
-  const loadMore = async (status: TicketStatus) => {
+  const loadMore = async (status: string) => {
     const column = columnPagination[status]
     if (!column.hasNextPage || loadingColumns[status]) return
 
@@ -485,7 +505,7 @@ export function KanbanBoard({
     } catch (error) {
       toast({
         tone: 'error',
-        title: `Couldn't load more ${ticketStatusMeta(status).label} tickets`,
+        title: `Couldn't load more ${labelFor(status)} tickets`,
         description: error instanceof Error ? error.message : undefined,
       })
     } finally {
@@ -493,7 +513,7 @@ export function KanbanBoard({
     }
   }
 
-  const toggleColumn = (status: TicketStatus) => {
+  const toggleColumn = (status: string) => {
     setCollapsedColumns((prev) => {
       const next = prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
       try {
@@ -511,7 +531,7 @@ export function KanbanBoard({
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
       setTickets((prev) => prev.filter((t) => t.id !== pendingDelete.id))
       setColumnPagination((prev) => {
-        const status = pendingDelete.status as TicketStatus
+        const status = statusIdOf(pendingDelete) as string
         return {
           ...prev,
           [status]: {
@@ -550,22 +570,22 @@ export function KanbanBoard({
       const ticket = ticketsRef.current.find((t) => t.id === active.id)
       if (!ticket) return
       return `Picked up ${ticket.ticketId ?? ticket.title}, "${ticket.title}", from list ${
-        ticketStatusMeta(ticket.status).label
+        statusMeta(ticket.status).label
       }. Use the arrow keys to move it, Space to drop, Escape to cancel.`
     },
     onDragOver: ({ active, over }) => {
       const ticket = ticketsRef.current.find((t) => t.id === active.id)
       if (!ticket || !over) return
       return `${ticket.ticketId ?? ticket.title} is over list ${
-        ticketStatusMeta(ticket.status).label
+        statusMeta(ticket.status).label
       }.`
     },
     onDragEnd: ({ active }) => {
       const ticket = ticketsRef.current.find((t) => t.id === active.id)
       const origin = dragOriginRef.current
       if (!ticket) return
-      return `Task "${ticket.title}" moved to list "${ticketStatusMeta(ticket.status).label}"${
-        origin ? ` from "${ticketStatusMeta(origin.status).label}"` : ''
+      return `Task "${ticket.title}" moved to list "${statusMeta(ticket.status).label}"${
+        origin ? ` from "${labelFor(origin.status)}"` : ''
       }.`
     },
     onDragCancel: ({ active }) => {
@@ -580,7 +600,7 @@ export function KanbanBoard({
         filters={filters}
         onChange={updateFilters}
         resultCount={totalLoaded}
-        onCreateTicket={() => createTicket(TicketStatus.TODO)}
+        onCreateTicket={() => columnIds[0] && createTicket(columnIds[0])}
       />
 
       <p className="sr-only" role="status" aria-live="polite">
@@ -621,10 +641,13 @@ export function KanbanBoard({
                 'max-md:snap-mandatory max-md:gap-3 max-md:p-4'
               }
             >
-              {COLUMNS.map((status) => (
+              {columnIds.map((status) => (
                 <KanbanColumn
                   key={status}
                   id={status}
+                  statusKey={statusById.get(status)?.key ?? status}
+                  label={statusById.get(status)?.name ?? 'Unknown'}
+                  type={statusById.get(status)?.type ?? null}
                   tickets={ticketsByStatus(status)}
                   collapsed={collapsedColumns.includes(status)}
                   onToggleCollapsed={() => toggleColumn(status)}
@@ -636,11 +659,11 @@ export function KanbanBoard({
                   onMoveToColumn={moveToColumn}
                   onReorder={reorder}
                   pagination={{
-                    hasNextPage: columnPagination[status].hasNextPage,
-                    totalDocs: columnPagination[status].totalDocs,
-                    loadedCount: columnPagination[status].loadedCount,
+                    hasNextPage: columnPagination[status]?.hasNextPage ?? false,
+                    totalDocs: columnPagination[status]?.totalDocs ?? 0,
+                    loadedCount: columnPagination[status]?.loadedCount ?? 0,
                   }}
-                  isLoadingMore={loadingColumns[status]}
+                  isLoadingMore={loadingColumns[status] ?? false}
                   onLoadMore={() => loadMore(status)}
                   isRefreshing={refreshing}
                   landedTicketId={landedTicketId}

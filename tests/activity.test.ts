@@ -11,7 +11,7 @@ import {
 const base = {
   id: 't1',
   title: 'Fix login redirect',
-  status: 'TODO',
+  status: { id: 's-todo', name: 'Todo' },
   priority: 'MEDIUM',
   assignee: null,
   project: 'p1',
@@ -28,14 +28,18 @@ describe('diffTicket', () => {
   })
 
   it('names both sides of a status change in human words', () => {
-    const events = diffTicket(base, { ...base, status: 'IN_PROGRESS' })
+    const events = diffTicket(base, { ...base, status: { id: 's-doing', name: 'In Progress' } })
     expect(events).toEqual([
       { action: 'changed', field: 'status', from: 'Todo', to: 'In Progress' },
     ])
   })
 
   it('records one event per changed field', () => {
-    const events = diffTicket(base, { ...base, status: 'DONE', priority: 'URGENT' })
+    const events = diffTicket(base, {
+      ...base,
+      status: { id: 's-done', name: 'Done' },
+      priority: 'URGENT',
+    })
     expect(events.map((e) => e.field)).toEqual(['status', 'priority'])
   })
 

@@ -15,15 +15,67 @@ const STATUS_MAP: Record<string, string> = {
   on_hold: 'ON_HOLD',
   completed: 'COMPLETED',
   cancelled: 'CANCELLED',
-  todo: 'TODO',
-  in_progress: 'IN_PROGRESS',
-  done: 'DONE',
   no_priority: 'NO_PRIORITY',
   urgent: 'URGENT',
   high: 'HIGH',
   medium: 'MEDIUM',
   low: 'LOW',
 };
+
+interface StatusDoc {
+  id: string;
+  name: string;
+  key: string;
+  type: string;
+  order?: number;
+  project?: { id: string } | string | null;
+}
+
+let statusCache: { at: number; docs: StatusDoc[] } | null = null;
+
+async function loadStatuses(): Promise<StatusDoc[]> {
+  if (statusCache && Date.now() - statusCache.at < 30000) return statusCache.docs;
+  const response = (await apiRequest('/statuses?limit=200&depth=0')) as { docs?: StatusDoc[] };
+  const docs = response.docs ?? [];
+  statusCache = { at: Date.now(), docs };
+  return docs;
+}
+
+function statusesForProject(docs: StatusDoc[], projectId?: string): StatusDoc[] {
+  const sorted = [...docs].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const globals = sorted.filter((doc) => !doc.project);
+  if (!projectId) return globals;
+
+  const scoped = sorted.filter((doc) => {
+    const project = doc.project;
+    if (!project) return false;
+    return (typeof project === 'string' ? project : project.id) === projectId;
+  });
+
+  return [...globals, ...scoped].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+async function resolveStatusId(value: string | undefined, projectId?: string): Promise<string | undefined> {
+  if (!value) return undefined;
+  const docs = await loadStatuses();
+  const scope = statusesForProject(docs, projectId);
+  const needle = value.trim().toLowerCase();
+  const match =
+    scope.find((doc) => doc.id === value) ??
+    scope.find((doc) => doc.key.toLowerCase() === needle) ??
+    scope.find((doc) => doc.name.toLowerCase() === needle) ??
+    docs.find((doc) => doc.id === value);
+  if (!match) {
+    const known = scope.map((doc) => doc.key).join(', ');
+    throw new Error(`Unknown status "${value}". Available statuses: ${known || '(none configured)'}`);
+  }
+  return match.id;
+}
+
+async function defaultStatusId(projectId?: string): Promise<string | undefined> {
+  const scope = statusesForProject(await loadStatuses(), projectId);
+  return scope[0]?.id;
+}
 
 function toPayloadValue(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -1221,7 +1273,7 @@ async function handleToolCall(
         query += `&where[assignee][equals]=${args.assigneeId}`;
       }
       if (args.status) {
-        query += `&where[status][equals]=${toPayloadValue(args.status as string)}`;
+        query += `&where[status][equals]=${await resolveStatusId(args.status as string, args.projectId as string | undefined)}`;
       }
       if (args.priority) {
         query += `&where[priority][equals]=${toPayloadValue(args.priority as string)}`;
@@ -1260,7 +1312,9 @@ async function handleToolCall(
         project: args.project,
         team: args.team || null,
         assignee: args.assignee || null,
-        status: toPayloadValue(args.status as string) || 'TODO',
+        status:
+          (await resolveStatusId(args.status as string, args.projectId as string | undefined)) ||
+          (await defaultStatusId(args.projectId as string | undefined)),
         priority: toPayloadValue(args.priority as string) || 'NO_PRIORITY',
         dueDate: args.dueDate || null,
         labels: args.labels || [],
@@ -1275,7 +1329,7 @@ async function handleToolCall(
       if (args.description !== undefined) updates.description = args.description;
       if (args.team !== undefined) updates.team = args.team;
       if (args.assignee !== undefined) updates.assignee = args.assignee;
-      if (args.status) updates.status = toPayloadValue(args.status as string);
+      if (args.status) updates.status = await resolveStatusId(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
       if (args.labels) updates.labels = args.labels;
@@ -1285,7 +1339,7 @@ async function handleToolCall(
     }
     case 'move_ticket': {
       return apiRequest(`/tickets/${args.id}`, 'PATCH', {
-        status: toPayloadValue(args.status as string),
+        status: await resolveStatusId(args.status as string),
       });
     }
     case 'delete_ticket': {
@@ -1313,18 +1367,33 @@ async function handleToolCall(
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
-      const board = {
-        todo: tickets.filter((t) => t.status === 'TODO').map(t => slimTicket(t, fieldsToInclude)),
-        in_progress: tickets.filter((t) => t.status === 'IN_PROGRESS').map(t => slimTicket(t, fieldsToInclude)),
-        done: tickets.filter((t) => t.status === 'DONE').map(t => slimTicket(t, fieldsToInclude)),
+      const workflow = statusesForProject(await loadStatuses(), args.projectId as string | undefined);
+      const keyOf = (ticket: Record<string, unknown>): string | null => {
+        const status = ticket.status;
+        if (!status) return null;
+        if (typeof status === 'string') {
+          return workflow.find((doc) => doc.id === status)?.key ?? null;
+        }
+        return (status as StatusDoc).key ?? null;
+      };
+
+      const columns = workflow.map((doc) => ({
+        key: doc.key,
+        name: doc.name,
+        type: doc.type,
+        tickets: tickets.filter((t) => keyOf(t) === doc.key).map((t) => slimTicket(t, fieldsToInclude)),
+      }));
+
+      return {
+        columns,
         summary: {
           total: tickets.length,
-          todo: tickets.filter((t) => t.status === 'TODO').length,
-          inProgress: tickets.filter((t) => t.status === 'IN_PROGRESS').length,
-          done: tickets.filter((t) => t.status === 'DONE').length,
+          byStatus: columns.reduce<Record<string, number>>((acc, column) => {
+            acc[column.key] = column.tickets.length;
+            return acc;
+          }, {}),
         },
       };
-      return board;
     }
 
     case 'toggle_subtask': {

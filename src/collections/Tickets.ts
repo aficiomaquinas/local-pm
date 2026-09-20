@@ -1,8 +1,8 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
-import { TicketStatus, TicketPriority, TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
+import { TicketPriority, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 import { collectionAccess } from '@/lib/access'
-import { diffTicket } from '@/lib/activity'
+import { diffTicket, idOf } from '@/lib/activity'
 
 export const Tickets: CollectionConfig = {
   slug: 'tickets',
@@ -67,12 +67,12 @@ export const Tickets: CollectionConfig = {
     },
     {
       name: 'status',
-      type: 'select',
-      options: TICKET_STATUS_OPTIONS,
-      defaultValue: TicketStatus.TODO,
+      type: 'relationship',
+      relationTo: 'statuses',
       required: true,
+      index: true,
       admin: {
-        description: 'Current status of the ticket',
+        description: 'Current status of the ticket, drawn from its project workflow',
       },
     },
     {
@@ -198,13 +198,54 @@ async function deleteActivityFor(req: PayloadRequest, id: string | number): Prom
   })
 }
 
+async function hydrateStatus(
+  req: PayloadRequest,
+  record: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (!record) return record
+  const status = record.status
+  if (!status || typeof status === 'object') return record
+
+  try {
+    const doc = await req.payload.findByID({
+      req,
+      collection: 'statuses',
+      id: String(status),
+      depth: 0,
+      overrideAccess: true,
+    })
+    return { ...record, status: { id: doc.id, name: doc.name } }
+  } catch {
+    return record
+  }
+}
+
 async function recordActivity(
   req: PayloadRequest,
   doc: Record<string, unknown>,
   previousDoc: Record<string, unknown> | undefined,
   operation: 'create' | 'update',
 ): Promise<void> {
-  const events = diffTicket(operation === 'create' ? null : previousDoc, doc)
+  if (operation === 'create') {
+    await writeEvents(req, doc, diffTicket(null, doc))
+    return
+  }
+
+  const statusChanged = idOf(previousDoc?.status) !== idOf(doc.status)
+  const hydratedDoc = statusChanged
+    ? ((await hydrateStatus(req, doc)) as Record<string, unknown>)
+    : doc
+  const hydratedPrevious = statusChanged ? await hydrateStatus(req, previousDoc) : previousDoc
+
+  const events = diffTicket(hydratedPrevious, hydratedDoc)
+  await writeEvents(req, doc, events)
+}
+
+async function writeEvents(
+  req: PayloadRequest,
+  doc: Record<string, unknown>,
+  events: ReturnType<typeof diffTicket>,
+): Promise<void> {
   if (events.length === 0) return
 
   const actor = await memberForRequest(req)

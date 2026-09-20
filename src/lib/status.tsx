@@ -3,6 +3,7 @@ import {
   Check,
   CheckCircle2,
   Circle,
+  CircleDashed,
   CircleDot,
   PauseCircle,
   Timer,
@@ -16,7 +17,8 @@ import {
   PriorityNone,
   PriorityUrgent,
 } from '@/components/ui/icons/Priority'
-import { ProjectStatus, TicketPriority, TicketStatus } from '@/types/enums'
+import { ProjectStatus, StatusType, TicketPriority } from '@/types/enums'
+import type { Status } from '@/payload-types'
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'accent'
 
@@ -47,29 +49,57 @@ export const TONE_TEXT: Record<Tone, string> = {
   accent: 'text-accent-text',
 }
 
-export const TICKET_STATUS_META: Record<TicketStatus, StateMeta> = {
-  [TicketStatus.TODO]: {
-    value: TicketStatus.TODO,
-    label: 'Todo',
-    icon: Circle,
-    tone: 'neutral',
-  },
-  [TicketStatus.IN_PROGRESS]: {
-    value: TicketStatus.IN_PROGRESS,
-    label: 'In Progress',
-    icon: Timer,
-    tone: 'info',
-  },
-  [TicketStatus.DONE]: {
-    value: TicketStatus.DONE,
-    label: 'Done',
-    icon: CheckCircle2,
-    tone: 'success',
-  },
+export const STATUS_TYPE_META: Record<StatusType, { icon: StateIcon; tone: Tone }> = {
+  [StatusType.BACKLOG]: { icon: CircleDashed, tone: 'neutral' },
+  [StatusType.UNSTARTED]: { icon: Circle, tone: 'neutral' },
+  [StatusType.STARTED]: { icon: Timer, tone: 'info' },
+  [StatusType.COMPLETED]: { icon: CheckCircle2, tone: 'success' },
+  [StatusType.CANCELLED]: { icon: XCircle, tone: 'neutral' },
 }
 
-export function ticketStatusMeta(status: string | null | undefined): StateMeta {
-  return TICKET_STATUS_META[status as TicketStatus] ?? TICKET_STATUS_META[TicketStatus.TODO]
+export const OPEN_STATUS_TYPES: StatusType[] = [
+  StatusType.BACKLOG,
+  StatusType.UNSTARTED,
+  StatusType.STARTED,
+]
+
+export function statusTypeMeta(type: string | null | undefined): { icon: StateIcon; tone: Tone } {
+  return STATUS_TYPE_META[type as StatusType] ?? STATUS_TYPE_META[StatusType.UNSTARTED]
+}
+
+export function isOpenStatusType(type: string | null | undefined): boolean {
+  return OPEN_STATUS_TYPES.includes(type as StatusType)
+}
+
+export const FALLBACK_STATUS_META: StateMeta = {
+  value: 'todo',
+  label: 'Todo',
+  icon: Circle,
+  tone: 'neutral',
+}
+
+export function statusMeta(status: Status | string | null | undefined): StateMeta {
+  if (!status || typeof status === 'string') return FALLBACK_STATUS_META
+  const { icon, tone } = statusTypeMeta(status.type)
+  return { value: status.key, label: status.name, icon, tone }
+}
+
+export function statusTypeOf(status: Status | string | null | undefined): string | null {
+  return status && typeof status !== 'string' ? status.type : null
+}
+
+export function isClosedStatus(status: Status | string | null | undefined): boolean {
+  const type = statusTypeOf(status)
+  return type ? !isOpenStatusType(type) : false
+}
+
+export function statusOptions(statuses: Status[]): StateSelectOption[] {
+  return [...statuses]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((status) => {
+      const { icon, tone } = statusTypeMeta(status.type)
+      return { value: status.id, label: status.name, icon, tone }
+    })
 }
 
 export interface PriorityMeta extends StateMeta {
@@ -164,15 +194,6 @@ export interface StateSelectOption {
   label: string
   icon?: StateIcon
   tone?: Tone
-}
-
-export function ticketStatusOptions(): StateSelectOption[] {
-  return Object.values(TICKET_STATUS_META).map((meta) => ({
-    value: meta.value,
-    label: meta.label,
-    icon: meta.icon,
-    tone: meta.tone,
-  }))
 }
 
 export function ticketPriorityOptions(): StateSelectOption[] {

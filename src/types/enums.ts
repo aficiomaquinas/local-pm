@@ -4,6 +4,14 @@ export enum TicketStatus {
   DONE = 'DONE',
 }
 
+export enum StatusType {
+  BACKLOG = 'BACKLOG',
+  UNSTARTED = 'UNSTARTED',
+  STARTED = 'STARTED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
 export enum TicketPriority {
   NO_PRIORITY = 'NO_PRIORITY',
   URGENT = 'URGENT',
@@ -24,6 +32,38 @@ export const TICKET_STATUS_OPTIONS = [
   { label: 'In Progress', value: TicketStatus.IN_PROGRESS },
   { label: 'Done', value: TicketStatus.DONE },
 ]
+
+export const STATUS_TYPE_OPTIONS = [
+  { label: 'Backlog', value: StatusType.BACKLOG },
+  { label: 'Unstarted', value: StatusType.UNSTARTED },
+  { label: 'Started', value: StatusType.STARTED },
+  { label: 'Completed', value: StatusType.COMPLETED },
+  { label: 'Cancelled', value: StatusType.CANCELLED },
+]
+
+export const DEFAULT_STATUSES: {
+  key: string
+  name: string
+  type: StatusType
+  order: number
+  legacy: TicketStatus
+}[] = [
+  { key: 'todo', name: 'Todo', type: StatusType.UNSTARTED, order: 1000, legacy: TicketStatus.TODO },
+  {
+    key: 'in_progress',
+    name: 'In Progress',
+    type: StatusType.STARTED,
+    order: 2000,
+    legacy: TicketStatus.IN_PROGRESS,
+  },
+  { key: 'done', name: 'Done', type: StatusType.COMPLETED, order: 3000, legacy: TicketStatus.DONE },
+]
+
+export const LEGACY_STATUS_KEYS: Record<string, string> = {
+  [TicketStatus.TODO]: 'todo',
+  [TicketStatus.IN_PROGRESS]: 'in_progress',
+  [TicketStatus.DONE]: 'done',
+}
 
 export const TICKET_PRIORITY_OPTIONS = [
   { label: 'No Priority', value: TicketPriority.NO_PRIORITY },

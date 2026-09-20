@@ -11,7 +11,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { EntityMark } from '@/components/ui/EntityMark'
 import { Expandable } from '@/components/ui/Expandable'
 import { InlineEdit } from '@/components/ui/InlineEdit'
-import { TicketStatusBadge } from '@/components/ui/StateIndicator'
+import { StatusTypeBadge } from '@/components/ui/StateIndicator'
+import { StatusType } from '@/types/enums'
 import { TabList, TabPanel } from '@/components/ui/Tabs'
 import { formatDateTimeRelative } from '@/lib/format'
 import { useToast } from '@/components/ui/Toast'
@@ -275,17 +276,17 @@ export function TeamDetail({
                 <dl className="flex flex-col">
                   {(
                     [
-                      ['Todo', stats.todo, TicketStatus.TODO],
-                      ['In progress', stats.inProgress, TicketStatus.IN_PROGRESS],
-                      ['Done', stats.done, TicketStatus.DONE],
+                      ['Todo', stats.todo, StatusType.UNSTARTED],
+                      ['In progress', stats.inProgress, StatusType.STARTED],
+                      ['Done', stats.done, StatusType.COMPLETED],
                     ] as const
-                  ).map(([label, value, status]) => (
+                  ).map(([label, value, type]) => (
                     <div
                       key={label}
                       className="flex h-9 items-center justify-between gap-2 border-b border-border-subtle last:border-b-0"
                     >
                       <dt>
-                        <TicketStatusBadge status={status} />
+                        <StatusTypeBadge type={type} label={label} />
                       </dt>
                       <dd className="text-base text-text tabular">{value}</dd>
                     </div>

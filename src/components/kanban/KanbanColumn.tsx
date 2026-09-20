@@ -4,8 +4,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ChevronDown, ChevronsLeftRight, Plus } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { ticketStatusMeta } from '@/lib/status'
-import { TicketStatus } from '@/types/enums'
+import { statusTypeMeta } from '@/lib/status'
 import { Button } from '@/components/ui/Button'
 import { CountBadge } from '@/components/ui/Badge'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -20,7 +19,10 @@ export interface ColumnPaginationInfo {
 }
 
 export interface KanbanColumnProps {
-  id: TicketStatus
+  id: string
+  statusKey: string
+  label: string
+  type: string | null
   tickets: Ticket[]
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -29,7 +31,7 @@ export interface KanbanColumnProps {
   ticketHref: (ticket: Ticket) => string
   onEditTicket: (ticket: Ticket) => void
   onDeleteTicket: (ticket: Ticket) => void
-  onMoveToColumn: (ticket: Ticket, status: TicketStatus) => void
+  onMoveToColumn: (ticket: Ticket, status: string) => void
   onReorder: (ticket: Ticket, direction: -1 | 1) => void
   pagination: ColumnPaginationInfo
   isLoadingMore: boolean
@@ -41,6 +43,9 @@ export interface KanbanColumnProps {
 
 export function KanbanColumn({
   id,
+  statusKey,
+  label,
+  type,
   tickets,
   collapsed,
   onToggleCollapsed,
@@ -58,7 +63,7 @@ export function KanbanColumn({
   landedTicketId,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id })
-  const meta = ticketStatusMeta(id)
+  const meta = { ...statusTypeMeta(type), label }
   const StatusIcon = meta.icon
 
   if (collapsed) {
@@ -121,8 +126,9 @@ export function KanbanColumn({
 
       <div
         ref={setNodeRef}
-        data-testid={`column-${id}`}
-        data-column-status={id}
+        data-testid={`column-${statusKey.toUpperCase()}`}
+        data-column-status={statusKey}
+        data-column-id={id}
         className={cn(
           'flex min-h-40 flex-1 flex-col gap-2 overflow-y-auto p-3',
 
@@ -149,7 +155,7 @@ export function KanbanColumn({
 
         {!isRefreshing && tickets.length === 0 && (
           <p className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border-subtle px-3 py-8 text-center text-base text-text-muted">
-            Nothing in {meta.label.toLowerCase()}.
+            Nothing in {meta.label}.
           </p>
         )}
 

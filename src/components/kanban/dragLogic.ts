@@ -1,22 +1,18 @@
 import { arrayMove } from '@dnd-kit/sortable'
-import { TicketStatus } from '@/types/enums'
+import { statusIdOf } from '@/lib/workflow'
 import type { Ticket } from '@/payload-types'
 
-export const KANBAN_COLUMNS: TicketStatus[] = [
-  TicketStatus.TODO,
-  TicketStatus.IN_PROGRESS,
-  TicketStatus.DONE,
-]
+
 
 export interface DragResult {
   activeId: string | null
-  status: TicketStatus | null
+  status: string | null
   sortOrder: number | null
   tickets: Ticket[]
 }
 
 export interface DragTarget {
-  status: TicketStatus
+  status: string
   isColumnTarget: boolean
 }
 
@@ -24,32 +20,38 @@ export function resolveDragTarget(
   tickets: Ticket[],
   activeId: string,
   overId: string,
+  columnIds: string[],
 ): DragTarget | null {
   if (activeId === overId) return null
 
   const activeTicket = tickets.find((t) => t.id === activeId)
   if (!activeTicket) return null
 
-  if (KANBAN_COLUMNS.some((col) => col === overId)) {
-    return { status: overId as TicketStatus, isColumnTarget: true }
+  if (columnIds.includes(overId)) {
+    return { status: overId as string, isColumnTarget: true }
   }
 
   const overTicket = tickets.find((t) => t.id === overId)
   if (!overTicket) return null
 
-  return { status: overTicket.status as TicketStatus, isColumnTarget: false }
+  return { status: statusIdOf(overTicket) as string, isColumnTarget: false }
 }
 
-export function applyDrop(tickets: Ticket[], activeId: string, overId: string): DragResult {
+export function applyDrop(
+  tickets: Ticket[],
+  activeId: string,
+  overId: string,
+  columnIds: string[],
+): DragResult {
   const noOp: DragResult = { activeId: null, status: null, sortOrder: null, tickets }
 
-  const target = resolveDragTarget(tickets, activeId, overId)
+  const target = resolveDragTarget(tickets, activeId, overId, columnIds)
   if (!target) return noOp
 
   const activeTicket = tickets.find((t) => t.id === activeId) as Ticket
   const targetStatus = target.status
 
-  const columnTickets = tickets.filter((t) => t.status === targetStatus)
+  const columnTickets = tickets.filter((t) => statusIdOf(t) === targetStatus)
   const oldIndex = columnTickets.findIndex((t) => t.id === activeId)
 
   const dropIndex = target.isColumnTarget
@@ -89,7 +91,7 @@ export function resultFromPreview(tickets: Ticket[], activeId: string): DragResu
 
   return {
     activeId,
-    status: active.status as TicketStatus,
+    status: statusIdOf(active) as string,
     sortOrder: active.sortOrder ?? 0,
     tickets,
   }
@@ -97,7 +99,7 @@ export function resultFromPreview(tickets: Ticket[], activeId: string): DragResu
 
 export function isRealMove(
   result: DragResult,
-  origin: { status: TicketStatus; sortOrder: number } | null,
+  origin: { status: string; sortOrder: number } | null,
 ): boolean {
   if (result.status === null || result.sortOrder === null) return false
   if (!origin) return true
@@ -108,8 +110,9 @@ export function computeDragResult(
   tickets: Ticket[],
   activeId: string,
   overId: string,
+  columnIds: string[],
 ): DragResult {
-  const result = applyDrop(tickets, activeId, overId)
+  const result = applyDrop(tickets, activeId, overId, columnIds)
 
   if (result.status === null) return result
 
@@ -118,7 +121,7 @@ export function computeDragResult(
   if (
     activePrev &&
     activeNext &&
-    activeNext.status === activePrev.status &&
+    statusIdOf(activeNext) === statusIdOf(activePrev) &&
     (activeNext.sortOrder ?? 0) === (activePrev.sortOrder ?? 0)
   ) {
     return { activeId: null, status: null, sortOrder: null, tickets }

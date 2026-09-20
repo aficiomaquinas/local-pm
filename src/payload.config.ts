@@ -9,6 +9,7 @@ import { Attachments } from './collections/Attachments'
 import { Comments } from './collections/Comments'
 import { Members } from './collections/Members'
 import { Projects } from './collections/Projects'
+import { Statuses } from './collections/Statuses'
 import { Teams } from './collections/Teams'
 import { Tickets } from './collections/Tickets'
 import { Users } from './collections/Users'
@@ -22,7 +23,17 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Projects, Teams, Members, Tickets, Comments, Attachments, Activity],
+  collections: [
+    Users,
+    Projects,
+    Teams,
+    Members,
+    Statuses,
+    Tickets,
+    Comments,
+    Attachments,
+    Activity,
+  ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

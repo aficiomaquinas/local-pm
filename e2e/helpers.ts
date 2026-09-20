@@ -6,10 +6,7 @@ export interface SeedRefs {
   teamId: string
 }
 
-/** Create a throwaway project + team for one spec, with a unique prefix. */
 export async function seedProject(request: APIRequestContext, label: string): Promise<SeedRefs> {
-  // Prefix must be 2-6 UPPERCASE LETTERS (no digits) per the Projects schema,
-  // and unique per run; ticket ids are `${prefix}-${n}`.
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
   const prefix =
     'E' + Array.from({ length: 4 }, () => letters[Math.floor(Math.random() * 26)]).join('')
@@ -38,19 +35,61 @@ export async function seedProject(request: APIRequestContext, label: string): Pr
   return { projectId: project.doc.id, prefix, teamId: team.doc.id }
 }
 
+let statusCache: { id: string; key: string; name: string }[] | null = null
+
+export async function loadStatuses(request: APIRequestContext, refresh = false) {
+  if (statusCache && !refresh) return statusCache
+  const res = await request.get('/api/statuses?limit=200&depth=0')
+  const body = await res.json()
+  statusCache = (body.docs ?? []) as { id: string; key: string; name: string }[]
+  return statusCache
+}
+
+function matchStatus(
+  statuses: { id: string; key: string; name: string }[],
+  value: string,
+) {
+  const needle = value.trim().toLowerCase()
+  return (
+    statuses.find((s) => s.id === value) ??
+    statuses.find((s) => s.key.toLowerCase() === needle) ??
+    statuses.find((s) => s.name.toLowerCase() === needle)
+  )
+}
+
+export async function statusId(request: APIRequestContext, value: string) {
+  let match = matchStatus(await loadStatuses(request), value)
+  if (!match) match = matchStatus(await loadStatuses(request, true), value)
+  if (!match) throw new Error(`Unknown status "${value}" in e2e helpers`)
+  return match.id
+}
+
+export async function statusKeyOf(request: APIRequestContext, statusValue: unknown) {
+  if (!statusValue) return null
+  if (typeof statusValue === 'object') return (statusValue as { key?: string }).key ?? null
+
+  const cached = await loadStatuses(request)
+  const hit = cached.find((s) => s.id === statusValue)
+  if (hit) return hit.key
+
+  const fresh = await loadStatuses(request, true)
+  return fresh.find((s) => s.id === statusValue)?.key ?? null
+}
+
 export async function createTicket(
   request: APIRequestContext,
   refs: SeedRefs,
   fields: Record<string, unknown>,
 ) {
+  const { status, ...rest } = fields
   const res = await request.post('/api/tickets', {
     data: {
       title: 'E2E ticket',
-      status: 'TODO',
       priority: 'NO_PRIORITY',
       project: refs.projectId,
       team: refs.teamId,
-      ...fields,
+      status: await statusId(request, (status as string) ?? 'TODO'),
+      ...rest,
     },
   })
   return res
@@ -61,22 +100,10 @@ export async function getTicket(request: APIRequestContext, id: string) {
   return res.json()
 }
 
-/**
- * Drive a dnd-kit drag with real mouse events.
- *
- * dnd-kit's PointerSensor has an 8px activation distance, and it needs several
- * intermediate moves to register a drag rather than a click — a single
- * mouse.move() to the destination is silently treated as a click.
- */
 export async function dragTo(
   page: Page,
   sourceSelector: string,
   targetSelector: string,
-  /**
-   * Where to release within the target, as a fraction of its height.
-   * Use a value near 1 to land on EMPTY space below the existing cards, which
-   * is the "append to column" case; the default aims mid-column.
-   */
   dropAtHeightFraction = 0.5,
 ) {
   const source = page.locator(sourceSelector).first()
@@ -90,12 +117,10 @@ export async function dragTo(
   const startX = from.x + from.width / 2
   const startY = from.y + from.height / 2
   const endX = to.x + to.width / 2
-  // Keep a small inset so the pointer stays inside the droppable.
   const endY = to.y + Math.min(Math.max(to.height * dropAtHeightFraction, 8), to.height - 8)
 
   await page.mouse.move(startX, startY)
   await page.mouse.down()
-  // Cross the activation distance first, then travel in steps.
   await page.mouse.move(startX + 12, startY + 12, { steps: 5 })
   for (let i = 1; i <= 12; i += 1) {
     await page.mouse.move(
