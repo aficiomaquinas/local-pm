@@ -1238,6 +1238,25 @@
       "startedAt": "2026-09-19",
       "completedAt": "2026-09-19",
       "notes": "Task 1 (assignees) was not done, so the comment was corrected rather than pointed at a real collection. The doc block now states plainly that per-person assignment does not exist and that tickets are assigned to a team. The admin description was reworded too, and src/payload-types.ts regenerated because Payload mirrors that string into the generated types. Revisit when task 1 lands."
+    },
+    {
+      "id": 54,
+      "slug": "e2e-webserver-dies-mid-run",
+      "title": "The Playwright web server dies mid-run, cascading the suite into failures",
+      "tier": 0,
+      "status": "todo",
+      "effort": "M",
+      "summary": "npm run verify does not pass on main. Partway through the Playwright run the dev server on port 3020 stops answering and every remaining spec fails with ERR_CONNECTION_REFUSED or is skipped.",
+      "rationale": "Observed on 2026-09-20 on unmodified main (6 passed, 7 failed, 26 skipped) and again on a feature branch (12 passed, 10 failed, 17 skipped). The cut-off point moves between runs, so it is the server dying rather than any one spec. Two compounding factors to rule out: reuseExistingServer is true outside CI, so a stale server from a previous run silently serves the wrong code, and the suite talks to a remote Atlas database. Until this is fixed, verify cannot gate anything, which is the standing rule in CLAUDE.md.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "playwright.config.ts",
+        "e2e/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Surfaced while reviewing PR 12 and 13. Smoke specs pass reliably in isolation (npx playwright test e2e/smoke.spec.ts is 7/7 green), so the failure is about run duration or resource exhaustion, not correctness. Consider pinning reuseExistingServer to false, a local Mongo for e2e, and per-spec server health assertions."
     }
   ]
 }
