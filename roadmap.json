@@ -789,7 +789,7 @@
       ],
       "startedAt": "2026-09-20",
       "completedAt": "2026-09-20",
-      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild. 2026-09-20: shipped on the comment surface. Drop, paste or pick files in the comment editor; a placeholder holds the caret position while a determinate progress row runs, then it is replaced by markdown carrying the name the user dropped and the URL the server saved. Images render inline, everything else becomes a link. Oversized or unaccepted files are refused client-side without touching the draft. Descriptions are task 55."
+      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild. 2026-09-20: shipped on the comment surface. Drop, paste or pick files in the comment editor; a placeholder holds the caret position while a determinate progress row runs, then it is replaced by markdown carrying the name the user dropped and the URL the server saved. Images render inline, everything else becomes a link. Oversized or unaccepted files are refused client-side without touching the draft. Descriptions are task 55. Shipped as commit bfc8b57 on feat/attachments, PR #20. Also carried in that commit, because they shared the editor rewrite: a formatting toolbar (Write/Preview tabs, bold/italic/link/lists/quote/code, one tab stop walked with the arrow keys) and comment permalinks (#comment-<id> scrolls, highlights, and expands a resolved thread). Verified green on a quiet machine: typecheck clean, 90 unit tests, 64 e2e passed. An earlier red run was concurrent-session contention, not this change; see task 54."
     },
     {
       "id": 32,
