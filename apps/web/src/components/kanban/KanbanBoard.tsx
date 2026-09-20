@@ -107,6 +107,19 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
   const pathname = usePathname()
 
   const [tickets, setTickets] = useState<Ticket[]>(initialTickets)
+  // Synchronous mirror of `tickets` for event handlers that need the current
+  // state immediately (dragEnd computes the PATCH synchronously — reading the
+  // result of a setTickets(updater) in the next statement is invalid under
+  // React concurrent rendering: the updater runs deferred/double, so the
+  // patch closure stays null and the mutation silently never fires).
+  const ticketsRef = useRef<Ticket[]>(initialTickets)
+  const setTicketsSync = useCallback((updater: Ticket[] | ((prev: Ticket[]) => Ticket[])) => {
+    setTickets((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      ticketsRef.current = next
+      return next
+    })
+  }, [])
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
 
   // Initialize from URL params
@@ -384,6 +397,19 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
     const { active, over } = event
     setActiveTicket(null)
 
+    // TEMP DEBUG (drag-persistence investigation 2026-09-20): surface the
+    // exact active/over pair the collision system resolved. Remove after fix.
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as { __dragDebug?: unknown[] }
+      w.__dragDebug = w.__dragDebug || []
+      w.__dragDebug.push({
+        activeId: active?.id,
+        overId: over?.id ?? null,
+        activeData: active?.data?.current ?? null,
+        overData: over?.data?.current ?? null,
+      })
+    }
+
     if (!over) return
 
     const activeId = active.id as string
@@ -405,18 +431,47 @@ export function KanbanBoard({ initialTickets, projects, teams, initialColumnPagi
       // committed tickets are always the normalized applyDrop result; the
       // PATCH itself is skipped only when the drop changes nothing relative
       // to what the server already knows.
+      //
+      // CROSS-COLUMN RESOLUTION (2026-09-20, browser-verified): when the
+      // pointer releases over a DIFFERENT column than the drag started in,
+      // the final DragEndEvent.over may still report the ORIGIN column
+      // (dnd-kit's collision state lags the fast pointer by one event; the
+      // origin column's droppable also contains the moved card's translate
+      // shadow). In that case dragOver ALREADY validated the real collision
+      // and optimistically moved the card — applyDrop(overId=origin) would
+      // silently undo it and isRealMove=false returns with no PATCH, no
+      // error, no history row. Resolution: when the optimistic state shows
+      // the card in a DIFFERENT column than its drag origin, commit the
+      // optimistic position instead of the stale over.id.
       let patch: { status: TicketStatus; sortOrder: number } | null = null
+      const origin = dragOriginRef.current
 
-      setTickets((prev) => {
-        const result = applyDrop(prev, activeId, overId)
-        if (result.status !== null && result.sortOrder !== null) {
-          if (isRealMove(result, dragOriginRef.current)) {
-            patch = { status: result.status, sortOrder: result.sortOrder }
-          }
+      // Compute synchronously from ticketsRef (React concurrent makes
+      // setTickets(updater) deferred — the previous pattern read `patch` from
+      // the updater closure before React ran it → patch stayed null → silent
+      // no-OP return with no PATCH, no error, no history row).
+      const prev = ticketsRef.current
+      const optimistic = prev.find((t) => t.id === activeId)
+      const crossedColumn =
+        origin !== null &&
+        optimistic !== undefined &&
+        optimistic.status !== origin.status
+
+      const result = crossedColumn
+        ? applyDrop(prev, activeId, optimistic.status as TicketStatus)
+        : applyDrop(prev, activeId, overId)
+
+      if (result.status !== null && result.sortOrder !== null) {
+        if (isRealMove(result, origin)) {
+          patch = { status: result.status, sortOrder: result.sortOrder }
         }
-        return result.tickets
-      })
+      }
 
+      setTicketsSync(result.tickets)
+
+      // REQ-VIS-2: a genuine no-op (dropped back on the same slot) is a valid
+      // outcome — but it must not be SILENT when the card actually moved in
+      // the optimistic preview. Revert refetch below covers that case.
       if (!patch) return
 
       // Refetch only after the PATCH resolves (fresh column pagination and
