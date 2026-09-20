@@ -126,6 +126,42 @@ html {
 .h3 { @apply scroll-m-20 text-2xl font-semibold tracking-tight; }
 .p { @apply leading-7 [&:not(:first-child)]:mt-6; }
 
+/* SPC-007 v2 (REQ-005.4): soft alarm nudge on the anonymous auth banner —
+   fired when a mutation receives 401/403 (KanbanBoard dispatches
+   `localpm:auth-nudge`). Color shift amber → red tint and back, ~600 ms,
+   two iterations, background/border colors ONLY: no layout shift, no
+   dialog. The class is applied via a remount (React key) so repeated
+   nudge events replay the animation from the start. */
+@keyframes auth-nudge-pulse {
+  0%, 100% {
+    background-color: rgb(239 68 68 / 0.1);   /* red-500/10 */
+    border-color: rgb(239 68 68 / 0.4);       /* red-500/40 */
+  }
+  50% {
+    background-color: rgb(245 158 11 / 0.1);  /* amber-500/10 */
+    border-color: rgb(245 158 11 / 0.3);      /* amber-500/30 */
+  }
+}
+.auth-nudge {
+  animation: auth-nudge-pulse 600ms ease-in-out 2;
+}
+
+/* UserMenu popover appearance (SPC-007 §2.1): standard opacity/translate
+   transition, ~150 ms ease-out. */
+@keyframes auth-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.auth-menu-pop {
+  animation: auth-menu-in 150ms ease-out;
+}
+
 /* Rich Text Editor - Notion-like borderless design */
 .rich-text-editor .ql-container {
   @apply bg-transparent border-none text-sm font-sans;
