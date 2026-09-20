@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  UserRound,
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -26,6 +27,7 @@ const WIDTH_KEY = 'local-pm:sidebar-width'
 
 export const NAV_ITEMS = [
   { href: '/board', label: 'Board', icon: LayoutDashboard, chord: 'g v' },
+  { href: '/my-tickets', label: 'My tickets', icon: UserRound, chord: 'g m' },
   { href: '/projects', label: 'Projects', icon: FolderKanban, chord: 'g p' },
   { href: '/teams', label: 'Teams', icon: Users, chord: 'g t' },
 ]

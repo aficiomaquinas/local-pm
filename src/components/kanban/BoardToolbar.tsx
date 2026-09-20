@@ -8,12 +8,13 @@ import { useEntityDoc } from '@/hooks/useEntityDoc'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { Kbd } from '@/components/ui/Kbd'
-import { ProjectSelect, TeamSelect } from '@/components/ui/EntityPickers'
-import type { Project, Team } from '@/payload-types'
+import { MemberSelect, ProjectSelect, TeamSelect } from '@/components/ui/EntityPickers'
+import type { Member, Project, Team } from '@/payload-types'
 
 export interface BoardFilters {
   projectId: string | null
   teamId: string | null
+  assigneeId: string | null
   query: string
 }
 
@@ -32,7 +33,10 @@ export function BoardToolbar({
 
   const selectedProject = useEntityDoc<Project>('projects', filters.projectId)
   const selectedTeam = useEntityDoc<Team>('teams', filters.teamId)
-  const hasFilters = Boolean(filters.projectId || filters.teamId || filters.query)
+  const selectedAssignee = useEntityDoc<Member>('members', filters.assigneeId)
+  const hasFilters = Boolean(
+    filters.projectId || filters.teamId || filters.assigneeId || filters.query,
+  )
 
   useShortcut({
     id: 'board.search',
@@ -102,6 +106,16 @@ export function BoardToolbar({
           onChange={(next) => onChange({ teamId: next || null })}
         />
 
+        <MemberSelect
+          id="board-assignee-filter"
+          aria-label="Filter by assignee"
+          value={filters.assigneeId ?? ''}
+          allLabel="Anyone"
+          placeholder="Anyone"
+          className="w-40 max-sm:w-full"
+          onChange={(next) => onChange({ assigneeId: next || null })}
+        />
+
         <Button
           variant="primary"
           icon={Plus}
@@ -136,6 +150,15 @@ export function BoardToolbar({
             Team: {selectedTeam.name}
           </Chip>
         )}
+        {selectedAssignee && (
+          <Chip
+            tone="accent"
+            onRemove={() => onChange({ assigneeId: null })}
+            removeLabel={`Remove assignee filter ${selectedAssignee.name}`}
+          >
+            Assignee: {selectedAssignee.name}
+          </Chip>
+        )}
         {filters.query && (
           <Chip tone="accent" onRemove={() => onChange({ query: '' })} removeLabel="Clear the search">
             Search: {filters.query}
@@ -146,7 +169,9 @@ export function BoardToolbar({
           variant="ghost"
           size="sm"
           icon={X}
-          onClick={() => onChange({ projectId: null, teamId: null, query: '' })}
+          onClick={() =>
+            onChange({ projectId: null, teamId: null, assigneeId: null, query: '' })
+          }
         >
           Clear all
         </Button>

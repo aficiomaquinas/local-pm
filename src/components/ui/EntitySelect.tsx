@@ -6,6 +6,7 @@ import { AlertCircle, ArrowDownUp, Check, ChevronDown, Loader2, Search, X } from
 import { cn } from '@/lib/cn'
 import { useEntityQuery, type EntityCollection } from '@/hooks/useEntityQuery'
 import { TONE_TEXT, type StateIcon, type Tone } from '@/lib/status'
+import { Avatar } from './Avatar'
 import { Skeleton } from './Skeleton'
 
 export interface EntityOption {
@@ -15,6 +16,7 @@ export interface EntityOption {
   icon?: StateIcon
   swatch?: string | null
   tone?: Tone
+  avatar?: { name: string | null; seed?: string | null }
 }
 
 export interface EntitySortOption {
@@ -56,6 +58,14 @@ function OptionBody({ option }: { option: EntityOption }) {
           aria-hidden
           className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
           style={{ backgroundColor: option.swatch }}
+        />
+      )}
+      {option.avatar && (
+        <Avatar
+          name={option.avatar.name}
+          seed={option.avatar.seed}
+          size="md"
+          decorative
         />
       )}
       {Icon && (

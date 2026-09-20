@@ -17,7 +17,8 @@ import { formatDateTimeRelative } from '@/lib/format'
 import { useToast } from '@/components/ui/Toast'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketsTable } from '@/components/tickets/TicketsTable'
-import type { Team } from '@/payload-types'
+import { Avatar } from '@/components/ui/Avatar'
+import type { Member, Team } from '@/payload-types'
 
 export interface TeamStats {
   total: number
@@ -32,10 +33,12 @@ type TabId = (typeof TAB_IDS)[number]
 export function TeamDetail({
   team: initialTeam,
   stats,
+  members,
   initialTab = 'overview',
 }: {
   team: Team
   stats: TeamStats
+  members: Member[]
   initialTab?: TabId
 }) {
   const router = useRouter()
@@ -237,6 +240,34 @@ export function TeamDetail({
             </section>
 
             <aside className="flex flex-col gap-6">
+              <section className="flex flex-col gap-3">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Members
+                </h2>
+                {members.length === 0 ? (
+                  <p className="text-base text-text-muted">
+                    Nobody is on this team yet. Set a person&rsquo;s team to add them.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col">
+                    {members.map((member) => (
+                      <li
+                        key={member.id}
+                        className="flex h-9 items-center gap-2 border-b border-border-subtle last:border-b-0"
+                      >
+                        <Avatar name={member.name} seed={member.id} size="md" decorative />
+                        <span className="min-w-0 flex-1 truncate text-base text-text" title={member.name}>
+                          {member.name}
+                        </span>
+                        {!member.active && (
+                          <span className="shrink-0 text-xs text-text-muted">Inactive</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
               <section className="flex flex-col gap-3">
                 <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
                   Workload

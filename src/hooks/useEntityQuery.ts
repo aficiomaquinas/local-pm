@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type EntityCollection = 'projects' | 'teams' | 'tickets'
+export type EntityCollection = 'projects' | 'teams' | 'tickets' | 'members'
 
 export interface EntityQueryOptions {
   collection: EntityCollection

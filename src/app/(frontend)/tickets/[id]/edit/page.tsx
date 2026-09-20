@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
-import type { Project, Team } from '@/payload-types'
+import type { Member, Project, Team } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +36,7 @@ export default async function EditTicketPage({ params, searchParams }: EditTicke
         ticket={ticket}
         project={typeof ticket.project === 'object' ? (ticket.project as Project) : null}
         team={typeof ticket.team === 'object' ? (ticket.team as Team) : null}
+        assignee={typeof ticket.assignee === 'object' ? (ticket.assignee as Member) : null}
         returnTo={returnTo}
       />
     )

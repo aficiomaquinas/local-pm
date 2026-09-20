@@ -20,8 +20,15 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `update_team` - Update an existing team
 - `delete_team` - Delete a team
 
+### Members
+- `list_members` - List the people tickets can be assigned to
+- `get_member` - Get member details by ID
+- `create_member` - Create a person work can be assigned to
+- `update_member` - Update a member, or deactivate one who has left
+- `delete_member` - Delete a member (their tickets become unassigned)
+
 ### Tickets
-- `list_tickets` - List tickets with filtering by project, team, or status
+- `list_tickets` - List tickets with filtering by project, team, assignee, or status
 - `get_ticket` - Get ticket details by ID (includes subtasks)
 - `create_ticket` - Create a new ticket with optional subtasks
 - `update_ticket` - Update ticket fields
@@ -231,12 +238,58 @@ Deletes a team.
 **Parameters:**
 - `id` (string, required): Team ID
 
+### list_members
+Lists the people tickets can be assigned to. Members are distinct from login
+accounts: a member is a person work is assigned to, a user is a credential.
+
+**Parameters:**
+- `teamId` (string, optional): Filter by team ID
+- `activeOnly` (boolean, optional): Only people still active (default: true)
+- `limit` (number, optional): Max results (default: 20)
+- `page` (number, optional): Page number (default: 1)
+- `include` (array, optional): Extra fields — `email`, `team`, `user`, `createdAt`, `updatedAt`
+
+### get_member
+Gets a member by ID.
+
+**Parameters:**
+- `id` (string, required): Member ID
+
+### create_member
+Creates a person work can be assigned to.
+
+**Parameters:**
+- `name` (string, required): Display name
+- `email` (string, optional): Email address
+- `team` (string, optional): Team ID
+- `user` (string, optional): Login account ID to link. One account maps to at most one member.
+
+### update_member
+Updates a member.
+
+**Parameters:**
+- `id` (string, required): Member ID
+- `name` (string, optional): New display name
+- `email` (string, optional): New email address
+- `team` (string, optional): New team ID (null to remove from the team)
+- `active` (boolean, optional): Set false when someone leaves — they keep existing
+  assignments but drop out of the assignee pickers
+- `user` (string, optional): Login account ID to link (null to unlink)
+
+### delete_member
+Deletes a member. Tickets assigned to them become unassigned. Prefer
+`update_member` with `active: false`, which preserves history.
+
+**Parameters:**
+- `id` (string, required): Member ID
+
 ### list_tickets
 Lists tickets with optional filtering.
 
 **Parameters:**
 - `project` (string, optional): Filter by project ID
 - `team` (string, optional): Filter by team ID
+- `assigneeId` (string, optional): Filter by assignee (member) ID
 - `status` (string, optional): Filter by status (todo, in_progress, done)
 - `limit` (number, optional): Max results (default: 50)
 - `page` (number, optional): Page number (default: 1)
@@ -256,6 +309,7 @@ Creates a new ticket.
 - `description` (string, optional): Ticket description (supports markdown)
 - `status` (string, optional): Initial status (todo, in_progress, done) - defaults to todo
 - `team` (string, optional): Assigned team ID
+- `assignee` (string, optional): Assignee member ID — use `list_members` to find one
 - `subtasks` (array, optional): Array of subtask objects with `title` and optional `completed` fields
 
 ### update_ticket
