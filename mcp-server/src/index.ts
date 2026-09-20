@@ -895,6 +895,34 @@ const tools: Tool[] = [
     },
   },
 
+  // ============== ACTIVITY ==============
+  {
+    name: 'list_activity',
+    description: 'Read the change history of a ticket, oldest first. Each entry records one field that changed, the value before and after as they read at the time, and who made the change. The history is written automatically and cannot be edited or deleted. Board reordering is not recorded.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket whose history to read',
+        },
+        field: {
+          type: 'string',
+          description: 'Only return changes to this field, e.g. "status", "assignee", "priority", "title", "dueDate", "labels", "blockedBy", "subtasks", "project", "team", "description"',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of entries to return (default: 50)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
+
   // ============== COMMENTS ==============
   {
     name: 'list_comments',
@@ -1363,6 +1391,45 @@ async function handleToolCall(
       const subtasks = ticket.subtasks || [];
       subtasks.push({ title: args.title as string, completed: false });
       return apiRequest(`/tickets/${args.ticketId}`, 'PATCH', { subtasks });
+    }
+
+    // Activity
+    case 'list_activity': {
+      const limit = (args.limit as number) || 50;
+      const page = (args.page as number) || 1;
+
+      let query = `?limit=${limit}&page=${page}&depth=1&sort=createdAt`;
+      query += `&where[ticket][equals]=${args.ticketId}`;
+      if (args.field) {
+        query += `&where[field][equals]=${args.field}`;
+      }
+
+      const response = await apiRequest(`/activity${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const slimmed = response.docs.map(entry => ({
+        id: entry.id,
+        action: entry.action,
+        field: entry.field ?? null,
+        from: entry.from ?? null,
+        to: entry.to ?? null,
+        actor: slimMember(entry.actor),
+        at: entry.createdAt,
+      }));
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: slimmed,
+      });
     }
 
     // Comments

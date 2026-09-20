@@ -1,13 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, MessageSquare, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertCircle, CheckCircle2, ChevronDown, History, MessageSquare, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { plainSummary } from '@/lib/markdown'
 import { formatDateTimeRelative } from '@/lib/format'
 import { useComments, type CommentThread } from '@/hooks/useComments'
 import { useCurrentMember } from '@/hooks/useCurrentMember'
 import { useCommentPermalink } from '@/hooks/useCommentPermalink'
+import { useActivity } from '@/hooks/useActivity'
+import { groupActivity } from '@/lib/activity'
+import { ActivityGroup } from '@/components/activity/ActivityItem'
+import { TabList, type TabItem } from '@/components/ui/Tabs'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -15,14 +19,48 @@ import { Skeleton, useDelayedFlag } from '@/components/ui/Skeleton'
 import { useToast } from '@/components/ui/Toast'
 import { CommentComposer } from './CommentComposer'
 import { CommentItem } from './CommentItem'
-import type { Comment, Member } from '@/payload-types'
+import type { Activity, Comment, Member } from '@/payload-types'
 
 const COLLAPSE_REPLIES_ABOVE = 4
+
+type FeedMode = 'all' | 'comments' | 'history'
+
+const FEED_MODES: FeedMode[] = ['all', 'comments', 'history']
+
+function actorIdOf(entry: Activity): string | null {
+  const actor = entry.actor
+  if (!actor) return null
+  return typeof actor === 'object' ? String(actor.id) : String(actor)
+}
+
+function modeFromUrl(): FeedMode {
+  if (typeof window === 'undefined') return 'all'
+  const value = new URLSearchParams(window.location.search).get('feed')
+  return FEED_MODES.includes(value as FeedMode) ? (value as FeedMode) : 'all'
+}
 
 export function CommentsSection({ ticketId }: { ticketId: string }) {
   const { toast } = useToast()
   const { member } = useCurrentMember()
   const { threads, loading, error, retry, add, edit, remove, setResolved } = useComments(ticketId)
+  const activity = useActivity(ticketId)
+
+  const [mode, setMode] = useState<FeedMode>('all')
+  useEffect(() => setMode(modeFromUrl()), [])
+
+  const changeMode = (next: FeedMode) => {
+    setMode(next)
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (next === 'all') params.delete('feed')
+    else params.set('feed', next)
+    const query = params.toString()
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`,
+    )
+  }
 
   const [draft, setDraft] = useState('')
   const [posting, setPosting] = useState(false)
@@ -32,11 +70,62 @@ export function CommentsSection({ ticketId }: { ticketId: string }) {
   )
   const [deleting, setDeleting] = useState(false)
 
-  const showSkeleton = useDelayedFlag(loading)
-  const permalink = useCommentPermalink(!loading && threads.length > 0)
+  const busy = loading || activity.loading
+  const showSkeleton = useDelayedFlag(busy)
+  const permalink = useCommentPermalink(!busy && threads.length > 0)
 
   const count = threads.reduce((sum, thread) => sum + 1 + thread.replies.length, 0)
   const resolvedCount = threads.filter((thread) => Boolean(thread.comment.resolved)).length
+
+  const activityGroups = useMemo(
+    () =>
+      groupActivity(
+        activity.entries.map((entry) => ({
+          id: String(entry.id),
+          actorId: actorIdOf(entry),
+          createdAt: entry.createdAt,
+          entry,
+        })),
+      ).map((group) => group.map((item) => item.entry)),
+    [activity.entries],
+  )
+
+  const timeline = useMemo(() => {
+    const items: { key: string; at: number; thread?: CommentThread; group?: Activity[] }[] = []
+
+    if (mode !== 'history') {
+      for (const thread of threads) {
+        items.push({
+          key: `c-${thread.comment.id}`,
+          at: new Date(thread.comment.createdAt).getTime(),
+          thread,
+        })
+      }
+    }
+
+    if (mode !== 'comments') {
+      for (const group of activityGroups) {
+        items.push({
+          key: `a-${group[0].id}`,
+          at: new Date(group[0].createdAt).getTime(),
+          group,
+        })
+      }
+    }
+
+    return items.sort((a, b) => a.at - b.at)
+  }, [mode, threads, activityGroups])
+
+  const tabs: TabItem[] = [
+    { id: 'all', label: 'All' },
+    { id: 'comments', label: 'Comments', icon: MessageSquare, count: count || undefined },
+    {
+      id: 'history',
+      label: 'History',
+      icon: History,
+      count: activity.entries.length || undefined,
+    },
+  ]
 
   const post = async () => {
     setPosting(true)
@@ -112,13 +201,8 @@ export function CommentsSection({ ticketId }: { ticketId: string }) {
           id="comments-heading"
           className="text-xs font-medium uppercase tracking-wide text-text-muted"
         >
-          Comments
+          Activity
         </h3>
-        {count > 0 && (
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-xs bg-surface-hover px-1 text-2xs font-medium tabular text-text-muted">
-            {count}
-          </span>
-        )}
         {resolvedCount > 0 && (
           <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-text-muted">
             <CheckCircle2 className="size-3.5 shrink-0 text-success-text" aria-hidden />
@@ -126,6 +210,14 @@ export function CommentsSection({ ticketId }: { ticketId: string }) {
           </span>
         )}
       </div>
+
+      <TabList
+        label="Filter the activity feed"
+        idPrefix="ticket-feed"
+        tabs={tabs}
+        value={mode}
+        onChange={(next) => changeMode(next as FeedMode)}
+      />
 
       {permalink.target && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-accent-border bg-accent-subtle px-3 py-2">
@@ -144,7 +236,19 @@ export function CommentsSection({ ticketId }: { ticketId: string }) {
         </div>
       )}
 
-      {loading || showSkeleton ? (
+      {activity.error && !busy && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-danger-border bg-danger-subtle p-3">
+          <AlertCircle className="size-4 shrink-0 text-danger-text" aria-hidden />
+          <p className="min-w-0 flex-1 text-base text-danger-text">
+            Couldn&rsquo;t load the history, so only comments are shown. {activity.error}
+          </p>
+          <Button variant="secondary" size="sm" onClick={activity.retry}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {busy || showSkeleton ? (
         <div className={cn('flex flex-col gap-4', !showSkeleton && 'invisible')} aria-busy>
           {[0, 1].map((i) => (
             <div key={i} className="flex gap-3 rounded-lg border border-border-subtle p-3">
@@ -167,28 +271,46 @@ export function CommentsSection({ ticketId }: { ticketId: string }) {
             Retry
           </Button>
         </div>
-      ) : threads.length === 0 ? (
+      ) : timeline.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border-subtle px-4 py-6 text-center">
-          <MessageSquare className="mx-auto size-6 text-text-muted" aria-hidden />
-          <p className="mt-2 text-base font-medium text-text">No comments yet.</p>
-          <p className="mt-1 text-base text-text-muted">
-            Ask a question, or leave a note for whoever picks this up.
-          </p>
+          {mode === 'history' ? (
+            <>
+              <History className="mx-auto size-6 text-text-muted" aria-hidden />
+              <p className="mt-2 text-base font-medium text-text">Nothing has changed yet.</p>
+              <p className="mt-1 text-base text-text-muted">
+                Edits to this ticket are recorded here, with who made them.
+              </p>
+            </>
+          ) : (
+            <>
+              <MessageSquare className="mx-auto size-6 text-text-muted" aria-hidden />
+              <p className="mt-2 text-base font-medium text-text">No comments yet.</p>
+              <p className="mt-1 text-base text-text-muted">
+                Ask a question, or leave a note for whoever picks this up.
+              </p>
+            </>
+          )}
         </div>
       ) : (
-        <ol className="flex flex-col gap-3">
-          {threads.map((thread) => (
-            <li key={thread.comment.id} className="min-w-0">
-              <Thread
-                thread={thread}
-                author={member}
-                highlightId={permalink.target}
-                onReplySubmit={(body) => add(body, thread.comment.id, member)}
-                onEdit={editComment}
-                onDelete={(comment, replies) => setPendingDelete({ comment, replies })}
-                onToggleResolved={() => toggleResolved(thread.comment)}
-                onCopyLink={copyLink}
-              />
+        <ol className="flex flex-col gap-3" data-testid="ticket-feed">
+          {timeline.map((item) => (
+            <li key={item.key} className="min-w-0">
+              {item.thread ? (
+                <Thread
+                  thread={item.thread}
+                  author={member}
+                  highlightId={permalink.target}
+                  onReplySubmit={(body) => add(body, item.thread!.comment.id, member)}
+                  onEdit={editComment}
+                  onDelete={(comment, replies) => setPendingDelete({ comment, replies })}
+                  onToggleResolved={() => toggleResolved(item.thread!.comment)}
+                  onCopyLink={copyLink}
+                />
+              ) : (
+                <ul className="flex flex-col">
+                  <ActivityGroup entries={item.group!} />
+                </ul>
+              )}
             </li>
           ))}
         </ol>
