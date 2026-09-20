@@ -22,7 +22,7 @@ import type { Team } from '@/payload-types'
 
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 300
-const MIN_SEARCH = 3
+const MIN_SEARCH = 1
 
 type SortKey = 'name' | '-name' | 'createdAt' | '-createdAt'
 
@@ -45,17 +45,25 @@ export function TeamsList({
 
   const [teams, setTeams] = useState<Team[]>(initialTeams)
   const [pagination, setPagination] = useState<Pagination>(
-    initialPagination ?? { page: 1, totalPages: 1, hasNextPage: false, totalDocs: initialTeams.length },
+    initialPagination ?? {
+      page: 1,
+      totalPages: 1,
+      hasNextPage: false,
+      totalDocs: initialTeams.length,
+    },
   )
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('-createdAt')
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Team | null>(null)
-  const [pendingDelete, setPendingDelete] = useState<{ team: Team; ticketCount: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ team: Team; ticketCount: number } | null>(
+    null,
+  )
   const [deleting, setDeleting] = useState(false)
 
   const searchRef = useRef<HTMLInputElement>(null)
@@ -64,10 +72,19 @@ export function TeamsList({
   const showSkeleton = useDelayedFlag(loading)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    setQuery(params.get('q') ?? '')
-    const urlSort = params.get('sort')
-    if (urlSort) setSort(urlSort as SortKey)
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search)
+      setQuery(params.get('q') ?? '')
+      const value = params.get('sort') ?? '-createdAt'
+      setSort(
+        ['name', '-name', 'createdAt', '-createdAt'].includes(value)
+          ? (value as SortKey)
+          : '-createdAt',
+      )
+    }
+    restore()
+    window.addEventListener('popstate', restore)
+    return () => window.removeEventListener('popstate', restore)
   }, [])
 
   const syncUrl = useCallback((next: { q: string; sort: SortKey }, push: boolean) => {
@@ -90,7 +107,7 @@ export function TeamsList({
   )
 
   useEffect(() => {
-    const signature = buildParams(1).toString()
+    const signature = buildParams(1).toString() + '&retry=' + retry
     if (fetchedFor.current === null) {
       fetchedFor.current = signature
       return
@@ -117,7 +134,7 @@ export function TeamsList({
         if ((err as Error).name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'The request failed.')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
 
@@ -126,7 +143,7 @@ export function TeamsList({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [buildParams, query])
+  }, [buildParams, query, retry])
 
   useShortcut({
     id: 'teams.search',
@@ -219,9 +236,14 @@ export function TeamsList({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
+      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-4 max-md:px-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="mr-1 shrink-0 text-xl font-semibold text-text">Teams</h1>
+          <div className="mr-4 min-w-0 max-sm:w-full">
+            <h1 className="text-2xl font-semibold text-text">Teams</h1>
+            <p className="mt-1 text-sm text-text-muted">
+              Bring the right people and work together.
+            </p>
+          </div>
 
           <label className="relative flex h-8 min-w-44 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-72">
             <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
@@ -229,6 +251,9 @@ export function TeamsList({
             <input
               ref={searchRef}
               type="search"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setFilters({ q: '' }, false)
+              }}
               value={query}
               onChange={(e) => setFilters({ q: e.target.value }, false)}
               placeholder="Search teams"
@@ -257,7 +282,11 @@ export function TeamsList({
           </span>
           {query && (
             <>
-              <Chip tone="accent" onRemove={() => setFilters({ q: '' })} removeLabel="Clear the search">
+              <Chip
+                tone="accent"
+                onRemove={() => setFilters({ q: '' })}
+                removeLabel="Clear the search"
+              >
                 Search: {query}
               </Chip>
               <Button variant="ghost" size="sm" icon={X} onClick={() => setFilters({ q: '' })}>
@@ -274,7 +303,7 @@ export function TeamsList({
             kind="error"
             title="Couldn't load teams"
             description={error}
-            action={{ label: 'Retry', onClick: () => setFilters({}, false) }}
+            action={{ label: 'Retry', onClick: () => setRetry((value) => value + 1) }}
             className="m-6"
           />
         ) : showSkeleton && teams.length === 0 ? (
@@ -304,7 +333,11 @@ export function TeamsList({
             <Table caption="Teams, with the date each was created">
               <thead>
                 <tr>
-                  <Th sortable sortDirection={sortDirection('name')} onSort={() => toggleSort('name')}>
+                  <Th
+                    sortable
+                    sortDirection={sortDirection('name')}
+                    onSort={() => toggleSort('name')}
+                  >
                     Team
                   </Th>
                   <Th
@@ -405,14 +438,18 @@ export function TeamsList({
         }}
         team={editing}
         onSaved={(saved, created) => {
-          setTeams((prev) => (created ? [saved, ...prev] : prev.map((t) => (t.id === saved.id ? saved : t))))
+          setTeams((prev) =>
+            created ? [saved, ...prev] : prev.map((t) => (t.id === saved.id ? saved : t)),
+          )
           if (created) setPagination((p) => ({ ...p, totalDocs: p.totalDocs + 1 }))
           setFormOpen(false)
           setEditing(null)
           toast({
             title: created ? `${saved.name} created` : 'Changes saved',
             tone: 'success',
-            action: created ? { label: 'Open', onClick: () => router.push(`/teams/${saved.id}`) } : undefined,
+            action: created
+              ? { label: 'Open', onClick: () => router.push(`/teams/${saved.id}`) }
+              : undefined,
           })
         }}
       />

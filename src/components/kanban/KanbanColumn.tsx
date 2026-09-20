@@ -93,10 +93,20 @@ export function KanbanColumn({
   return (
     <section
       aria-label={`${meta.label} column`}
-      className="flex w-72 shrink-0 snap-start flex-col rounded-md border border-border-subtle bg-bg-subtle max-md:w-full"
+      className="flex w-72 min-w-72 flex-1 snap-start flex-col rounded-md border border-border-subtle bg-bg max-md:w-full max-md:min-w-full"
     >
       <header className="sticky top-0 z-10 flex h-10 flex-none items-center gap-2 rounded-t-md border-b border-border-subtle bg-bg-subtle px-3">
-        <StatusIcon className={cn('size-4 shrink-0', meta.tone === 'success' ? 'text-success-text' : meta.tone === 'info' ? 'text-info-text' : 'text-text-muted')} aria-hidden />
+        <StatusIcon
+          className={cn(
+            'size-4 shrink-0',
+            meta.tone === 'success'
+              ? 'text-success-text'
+              : meta.tone === 'info'
+                ? 'text-info-text'
+                : 'text-text-muted',
+          )}
+          aria-hidden
+        />
         <h2 className="truncate text-sm font-medium text-text">{meta.label}</h2>
         <CountBadge value={pagination.totalDocs} />
 
@@ -155,7 +165,13 @@ export function KanbanColumn({
 
         {!isRefreshing && tickets.length === 0 && (
           <p className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border-subtle px-3 py-8 text-center text-base text-text-muted">
-            Nothing in {meta.label}.
+            {type === 'UNSTARTED' || type === 'BACKLOG'
+              ? 'A clear next step starts here. Add a ticket to get going.'
+              : type === 'STARTED'
+                ? 'Ready when you are. Move a ticket here when you start.'
+                : type === 'COMPLETED'
+                  ? 'Finished work belongs here. Make your progress visible.'
+                  : 'Nothing here yet. Move a ticket here when it belongs in ' + meta.label + '.'}
           </p>
         )}
 

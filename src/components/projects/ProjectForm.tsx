@@ -46,13 +46,7 @@ function validateField(name: FieldName, form: FormState): string | null {
   return null
 }
 
-export function ProjectForm({
-  project,
-  returnTo,
-}: {
-  project: Project | null
-  returnTo?: string
-}) {
+export function ProjectForm({ project, returnTo }: { project: Project | null; returnTo?: string }) {
   const router = useRouter()
   const { toast } = useToast()
 
@@ -148,13 +142,29 @@ export function ProjectForm({
 
   return (
     <div className="h-full overflow-y-auto">
-      <form id="project-form" noValidate onSubmit={handleSubmit}>
+      <form
+        id="project-form"
+        noValidate
+        onSubmit={handleSubmit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault()
+            event.currentTarget.requestSubmit()
+          }
+        }}
+      >
         <header className="sticky top-0 z-20 border-b border-border-subtle bg-bg">
           <div className="mx-auto flex max-w-[960px] flex-wrap items-center gap-3 px-6 py-4 max-md:px-4">
             <div className="min-w-0 flex-1">
               <nav aria-label="Breadcrumb">
                 <Link
                   href={cancelHref}
+                  onClick={(event) => {
+                    if (dirty) {
+                      event.preventDefault()
+                      setConfirmDiscard(true)
+                    }
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-muted transition-colors duration-micro hover:text-text"
                 >
                   <ArrowLeft className="size-3.5" aria-hidden />
@@ -206,7 +216,7 @@ export function ProjectForm({
           </div>
 
           <div className="grid grid-cols-[1fr_9rem] gap-4 max-sm:grid-cols-1">
-            <Field label="Name" required error={errorFor('name')}>
+            <Field id="project-form-name" label="Name" required error={errorFor('name')}>
               {({ describedBy, invalid }) => (
                 <Input
                   ref={nameRef}
@@ -222,6 +232,7 @@ export function ProjectForm({
             </Field>
 
             <Field
+              id="project-form-prefix"
               label="Prefix"
               required
               error={errorFor('prefix')}
@@ -233,7 +244,13 @@ export function ProjectForm({
                   value={form.prefix}
                   disabled={Boolean(project)}
                   onChange={(e) =>
-                    set('prefix', e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6))
+                    set(
+                      'prefix',
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z]/g, '')
+                        .slice(0, 6),
+                    )
                   }
                   onBlur={(e) =>
                     e.target.value.trim() && setTouched((t) => ({ ...t, prefix: true }))

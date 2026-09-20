@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Menu as MenuIcon, Search } from 'lucide-react'
+import { Menu as MenuIcon, Search, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useShortcut } from '@/lib/shortcuts'
 import { Button } from '@/components/ui/Button'
@@ -14,6 +15,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { CommandPalette } from './CommandPalette'
 import { ShortcutHelp } from './ShortcutHelp'
 import { OfflineBanner } from './OfflineBanner'
+import { GettingStarted } from './GettingStarted'
 
 const COLLAPSED_KEY = 'local-pm:sidebar-collapsed'
 
@@ -23,6 +25,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -93,6 +96,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     run: () => router.push('/board?status=TODO'),
   })
 
+  useShortcut({
+    id: 'shell.createTicket',
+    keys: 'mod+alt+n',
+    description: 'Create a ticket from anywhere',
+    group: 'Global',
+    scope: 'global',
+    run: () => router.push('/tickets/new'),
+  })
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg">
       <a href="#main" className="sr-only-focusable">
@@ -102,23 +114,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <OfflineBanner />
 
       <div className="flex min-h-0 flex-1">
-
         <div className="max-md:hidden">
           <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
         </div>
 
-        {drawerOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
-            <div
-              className="absolute inset-0 bg-scrim animate-fade-in"
-              onClick={() => setDrawerOpen(false)}
-              aria-hidden
-            />
-            <div className="relative h-full w-64 animate-panel-in">
-              <Sidebar collapsed={false} onToggleCollapsed={() => setDrawerOpen(false)} />
-            </div>
-          </div>
-        )}
+        <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+          <DialogPrimitive.Portal>
+            <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim md:hidden" />
+            <DialogPrimitive.Content
+              aria-describedby={undefined}
+              className="fixed inset-y-0 left-0 z-50 w-64 max-w-full bg-bg-subtle outline-none md:hidden"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setDrawerOpen(false)
+                }
+              }}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault()
+                document.getElementById('open-navigation')?.focus()
+              }}
+            >
+              <DialogPrimitive.Title className="sr-only">Navigation</DialogPrimitive.Title>
+              <Sidebar
+                collapsed={false}
+                mobile
+                onNavigate={() => setDrawerOpen(false)}
+                onToggleCollapsed={() => setDrawerOpen(false)}
+              />
+            </DialogPrimitive.Content>
+          </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-12 flex-none items-center gap-2 border-b border-border-subtle bg-bg px-3">
@@ -127,7 +154,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               size="md"
               iconOnly
               icon={MenuIcon}
+              id="open-navigation"
               aria-label="Open navigation"
+              aria-expanded={drawerOpen}
               onClick={() => setDrawerOpen(true)}
               className="md:hidden"
             />
@@ -135,11 +164,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <PaletteTrigger onClick={() => setPaletteOpen(true)} />
 
             <div className="ml-auto flex items-center gap-1">
+              <Button
+                variant="ghost"
+                icon={BookOpen}
+                onClick={() => setGuideOpen(true)}
+                aria-label="Getting started"
+              >
+                <span className="max-sm:hidden">Getting started</span>
+              </Button>
               <ThemeToggle />
             </div>
           </header>
 
-          <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-hidden max-md:pb-14">
+          <main
+            id="main"
+            tabIndex={-1}
+            className="min-h-0 flex-1 overflow-hidden mobile-main-inset"
+          >
             <ErrorBoundary region="This page">{children}</ErrorBoundary>
           </main>
         </div>
@@ -149,6 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <ShortcutHelp />
+      <GettingStarted open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   )
 }
@@ -159,7 +201,7 @@ function PaletteTrigger({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       className={cn(
-        'flex h-8 w-full max-w-80 items-center gap-2 rounded-sm border border-border bg-surface px-2.5',
+        'flex h-8 min-w-0 w-full max-w-80 items-center gap-2 rounded-sm border border-border bg-surface px-2.5',
         'text-base text-text-muted transition-colors duration-micro ease-standard',
         'hover:border-border-strong hover:bg-surface-hover',
       )}
@@ -177,7 +219,7 @@ function MobileNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 flex h-14 border-t border-border-subtle bg-bg-subtle pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 mobile-nav-height flex border-t border-border-subtle bg-bg-subtle pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {NAV_ITEMS.map((item) => {
         const active = pathname === item.href || pathname?.startsWith(`${item.href}/`)
@@ -188,7 +230,7 @@ function MobileNav() {
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex flex-1 flex-col items-center justify-center gap-0.5 text-2xs',
+              'flex flex-1 flex-col items-center justify-center gap-0.5 text-xs',
               active ? 'font-medium text-accent-text' : 'text-text-muted',
             )}
           >

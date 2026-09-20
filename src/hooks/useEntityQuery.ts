@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { appendTicketSearch } from '@/lib/ticket-search'
 
 export type EntityCollection = 'projects' | 'teams' | 'tickets' | 'members'
 
@@ -36,15 +37,7 @@ export function useEntityQuery<T extends { id: string }>(
   query: string,
   options: EntityQueryOptions,
 ): EntityQueryResult<T> {
-  const {
-    collection,
-    searchField,
-    sort,
-    where,
-    pageSize = 20,
-    depth = 0,
-    enabled = true,
-  } = options
+  const { collection, searchField, sort, where, pageSize = 20, depth = 0, enabled = true } = options
 
   const [docs, setDocs] = useState<T[]>([])
   const [page, setPage] = useState(1)
@@ -67,7 +60,8 @@ export function useEntityQuery<T extends { id: string }>(
         depth: String(depth),
       })
       const trimmed = search.trim()
-      if (trimmed) params.set(`where[${searchField}][like]`, trimmed)
+      if (collection === 'tickets') appendTicketSearch(params, trimmed)
+      else if (trimmed) params.set(`where[${searchField}][like]`, trimmed)
       for (const [field, value] of Object.entries(
         (JSON.parse(whereKey) ?? {}) as Record<string, string | null | undefined>,
       )) {
@@ -99,7 +93,7 @@ export function useEntityQuery<T extends { id: string }>(
         setDocs([])
         setHasNextPage(false)
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
 

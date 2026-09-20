@@ -4,6 +4,8 @@ node_modules/
 # Next.js
 .next/
 .next-e2e/
+.next-e2e-*/
+.next-ui/
 out/
 
 # Production
@@ -40,6 +42,7 @@ logs/
 
 # Playwright
 /test-results/
+/test-results-*/
 /playwright-report/
 /blob-report/
 /playwright/.cache/

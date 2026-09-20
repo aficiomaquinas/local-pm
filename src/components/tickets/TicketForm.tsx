@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { TicketPriority, TicketStatus } from '@/types/enums'
+import { TicketPriority } from '@/types/enums'
 import { ticketPriorityOptions, statusOptions } from '@/lib/status'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
@@ -13,10 +13,16 @@ import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ErrorSummary, Field, Input } from '@/components/ui/Field'
-import { MemberSelect, ProjectSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import {
+  MemberSelect,
+  ProjectSelect,
+  TeamSelect,
+  TicketSelect,
+} from '@/components/ui/EntityPickers'
 import { Select } from '@/components/ui/Select'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketKey } from '@/components/ui/EntityMark'
+import { useTicketDraft } from '@/hooks/useTicketDraft'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 import type { Member, Project, Team, Ticket } from '@/payload-types'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
@@ -73,8 +79,7 @@ function fromTicket(ticket: Ticket): FormState {
     priority: (ticket.priority as TicketPriority) ?? TicketPriority.NO_PRIORITY,
     projectId: typeof ticket.project === 'string' ? ticket.project : (ticket.project?.id ?? ''),
     teamId: typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? ''),
-    assigneeId:
-      typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
+    assigneeId: typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
     dueDate: ticket.dueDate ? ticket.dueDate.slice(0, 10) : '',
     labels: (ticket.labels ?? []).map((l) => ({ name: l.name })),
     subtasks: (ticket.subtasks ?? []).map((s) => ({
@@ -121,7 +126,11 @@ export function TicketForm({
 
   const initialState = ticket
     ? fromTicket(ticket)
-    : emptyForm(defaultProjectId ?? '', defaultStatus ?? fallbackStatusId)
+    : {
+        ...emptyForm(defaultProjectId ?? '', defaultStatus ?? fallbackStatusId),
+        teamId: team?.id ?? '',
+        assigneeId: assignee?.id ?? '',
+      }
 
   const [form, setForm] = useState<FormState>(initialState)
   const [initial] = useState<FormState>(initialState)
@@ -140,7 +149,37 @@ export function TicketForm({
   const summaryRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
 
-  const dirty = !submitting && JSON.stringify(form) !== JSON.stringify(initial)
+  const hasChanges = JSON.stringify(form) !== JSON.stringify(initial)
+  const dirty = !submitting && hasChanges
+  const draft = useTicketDraft<FormState>(
+    ticket ? null : 'local-pm:ticket-draft:' + (defaultProjectId ?? 'new'),
+    form,
+    hasChanges,
+    (value): value is FormState => {
+      if (!value || typeof value !== 'object') return false
+      const candidate = value as FormState
+      return (
+        ['title', 'description', 'projectId', 'teamId', 'assigneeId', 'dueDate'].every(
+          (key) => typeof candidate[key as keyof FormState] === 'string',
+        ) &&
+        typeof candidate.status === 'string' &&
+        Object.values(TicketPriority).includes(candidate.priority) &&
+        Array.isArray(candidate.labels) &&
+        candidate.labels.every((label) => typeof label?.name === 'string') &&
+        Array.isArray(candidate.subtasks) &&
+        candidate.subtasks.every(
+          (task) => typeof task?.title === 'string' && typeof task?.completed === 'boolean',
+        ) &&
+        Array.isArray(candidate.blockers) &&
+        candidate.blockers.every(
+          (blocker) =>
+            typeof blocker?.id === 'string' &&
+            typeof blocker?.key === 'string' &&
+            typeof blocker?.title === 'string',
+        )
+      )
+    },
+  )
   useUnsavedChangesGuard(dirty)
 
   useEffect(() => {
@@ -166,6 +205,7 @@ export function TicketForm({
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (submitting) return
     setSubmitAttempted(true)
 
     if (errors.length > 0) {
@@ -202,6 +242,7 @@ export function TicketForm({
       }
 
       const saved = ((await response.json()).doc ?? {}) as Ticket
+      draft.clear()
       toast({
         tone: 'success',
         title: ticket ? 'Changes saved' : `${saved.ticketId ?? 'Ticket'} created`,
@@ -219,6 +260,10 @@ export function TicketForm({
   const addLabel = () => {
     const name = newLabel.trim()
     if (!name) return
+    if (form.labels.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
+      setNewLabel('')
+      return
+    }
     set('labels', [...form.labels, { name }])
     setNewLabel('')
   }
@@ -232,13 +277,29 @@ export function TicketForm({
 
   return (
     <div className="h-full overflow-y-auto">
-      <form id="ticket-form" noValidate onSubmit={handleSubmit}>
+      <form
+        id="ticket-form"
+        noValidate
+        onSubmit={handleSubmit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault()
+            event.currentTarget.requestSubmit()
+          }
+        }}
+      >
         <header className="sticky top-0 z-20 border-b border-border-subtle bg-bg">
           <div className="mx-auto flex max-w-[960px] flex-wrap items-center gap-3 px-6 py-4 max-md:px-4">
             <div className="min-w-0 flex-1">
               <nav aria-label="Breadcrumb">
                 <Link
                   href={cancelHref}
+                  onClick={(event) => {
+                    if (dirty) {
+                      event.preventDefault()
+                      setConfirmDiscard(true)
+                    }
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-muted transition-colors duration-micro hover:text-text"
                 >
                   <ArrowLeft className="size-3.5" aria-hidden />
@@ -248,6 +309,15 @@ export function TicketForm({
               <h1 className="mt-1 text-xl font-semibold text-text">
                 {ticket ? 'Edit ticket' : 'New ticket'}
               </h1>
+              {!ticket && (
+                <p className="mt-1 text-xs text-text-muted">
+                  {draft.unavailable
+                    ? 'Draft storage unavailable. Keep this tab open until you save.'
+                    : draft.saved
+                      ? 'Draft saved in this tab'
+                      : 'Start with a title and project. Add the details as you go.'}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -258,7 +328,13 @@ export function TicketForm({
               >
                 Cancel
               </Button>
-              <Button type="submit" form="ticket-form" variant="primary" loading={submitting}>
+              <Button
+                type="submit"
+                form="ticket-form"
+                variant="primary"
+                loading={submitting}
+                shortcut="mod+enter"
+              >
                 {ticket ? 'Save changes' : 'Create ticket'}
               </Button>
             </div>
@@ -266,6 +342,32 @@ export function TicketForm({
         </header>
 
         <div className="mx-auto flex max-w-[960px] flex-col gap-6 px-6 py-6 max-md:px-4">
+          {draft.recovered && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent-border bg-accent-subtle p-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">Pick up where you left off</p>
+                <p className="text-sm text-text-muted">
+                  An unfinished ticket is saved in this tab.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  if (draft.recovered) {
+                    setForm(draft.recovered)
+                    setSelectedProject(null)
+                    setSelectedTeam(null)
+                    setSelectedAssignee(null)
+                    draft.dismiss()
+                  }
+                }}
+              >
+                Restore draft
+              </Button>
+              <Button variant="ghost" onClick={draft.dismiss}>
+                Discard draft
+              </Button>
+            </div>
+          )}
           {(submitAttempted && errors.length > 0) || formError ? (
             <ErrorSummary
               ref={summaryRef}
@@ -275,14 +377,19 @@ export function TicketForm({
                   : errors.map((e) => ({
                       field: e.field,
                       message: e.message,
-                      targetId:
-                        e.field === 'title' ? 'ticket-form-title' : 'ticket-form-project',
+                      targetId: e.field === 'title' ? 'ticket-form-title' : 'ticket-form-project',
                     }))
               }
             />
           ) : null}
 
-          <Field label="Title" required error={errorFor('title')} hint="Keep it under 80 characters.">
+          <Field
+            id="ticket-form-title"
+            label="Title"
+            required
+            error={errorFor('title')}
+            hint="A short, specific title makes the next step clear."
+          >
             {({ describedBy, invalid }) => (
               <Input
                 ref={titleRef}
@@ -294,6 +401,7 @@ export function TicketForm({
                 aria-describedby={describedBy}
                 aria-required
                 autoComplete="off"
+                placeholder="e.g. Add a welcome screen for new users"
               />
             )}
           </Field>
@@ -318,7 +426,7 @@ export function TicketForm({
           </div>
 
           <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-            <Field label="Project" required error={errorFor('projectId')}>
+            <Field id="ticket-form-project" label="Project" required error={errorFor('projectId')}>
               {({ describedBy, invalid }) => (
                 <ProjectSelect
                   id="ticket-form-project"
@@ -402,130 +510,159 @@ export function TicketForm({
             </Field>
           </div>
 
-          <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
-            <legend className="text-xs font-medium text-text-muted">Labels</legend>
-            <div className={cn('flex flex-wrap gap-2', form.labels.length === 0 && 'hidden')}>
-              {form.labels.map((label, index) => (
-                <Chip
-                  key={`${label.name}-${index}`}
-                  shape="tag"
-                  onRemove={() => set('labels', form.labels.filter((_, i) => i !== index))}
-                  removeLabel={`Remove label ${label.name}`}
-                >
-                  {label.name}
-                </Chip>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Field label="Add a label" hideLabel className="flex-1">
-                {({ id }) => (
-                  <Input
-                    id={id}
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' && e.key !== ',') return
-                      e.preventDefault()
-                      addLabel()
-                    }}
-                    placeholder="Type and press Enter"
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-              <Button icon={Plus} onClick={addLabel}>
-                Add
-              </Button>
-            </div>
-          </fieldset>
+          <details
+            className="group rounded-lg border border-border-subtle bg-bg-subtle p-4"
+            open={Boolean(ticket)}
+          >
+            <summary className="cursor-pointer rounded-sm text-base font-medium">
+              More details{' '}
+              <span className="ml-2 text-sm font-normal text-text-muted">
+                Labels, subtasks, dependencies
+              </span>
+            </summary>
+            <div className="mt-5 flex flex-col gap-6">
+              <fieldset className="flex flex-col gap-2">
+                <legend className="text-xs font-medium text-text-muted">Labels</legend>
+                <div className={cn('flex flex-wrap gap-2', form.labels.length === 0 && 'hidden')}>
+                  {form.labels.map((label, index) => (
+                    <Chip
+                      key={`${label.name}-${index}`}
+                      shape="tag"
+                      onRemove={() =>
+                        set(
+                          'labels',
+                          form.labels.filter((_, i) => i !== index),
+                        )
+                      }
+                      removeLabel={`Remove label ${label.name}`}
+                    >
+                      {label.name}
+                    </Chip>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Field label="Add a label" hideLabel className="flex-1">
+                    {({ id }) => (
+                      <Input
+                        id={id}
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ',') return
+                          e.preventDefault()
+                          addLabel()
+                        }}
+                        placeholder="Type and press Enter"
+                        autoComplete="off"
+                      />
+                    )}
+                  </Field>
+                  <Button icon={Plus} onClick={addLabel}>
+                    Add
+                  </Button>
+                </div>
+              </fieldset>
 
-          <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
-            <legend className="text-xs font-medium text-text-muted">Subtasks</legend>
-            <ul className={cn('flex flex-col gap-1', form.subtasks.length === 0 && 'hidden')}>
-              {form.subtasks.map((subtask, index) => (
-                <li
-                  key={`${subtask.title}-${index}`}
-                  className="flex items-center gap-2 rounded-sm px-1 py-0.5 can-hover:hover:bg-surface-hover"
-                >
-                  <span className="min-w-0 flex-1 truncate text-base text-text">
-                    {subtask.title}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    iconOnly
-                    icon={Trash2}
-                    aria-label={`Remove subtask ${subtask.title}`}
-                    onClick={() => set('subtasks', form.subtasks.filter((_, i) => i !== index))}
-                    className="hover:text-danger-text"
-                  />
-                </li>
-              ))}
-            </ul>
-            <div className="flex gap-2">
-              <Field label="Add a subtask" hideLabel className="flex-1">
-                {({ id }) => (
-                  <Input
-                    id={id}
-                    value={newSubtask}
-                    onChange={(e) => setNewSubtask(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return
-                      e.preventDefault()
-                      addSubtask()
-                    }}
-                    placeholder="Type and press Enter"
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-              <Button icon={Plus} onClick={addSubtask}>
-                Add
-              </Button>
+              <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
+                <legend className="text-xs font-medium text-text-muted">Subtasks</legend>
+                <ul className={cn('flex flex-col gap-1', form.subtasks.length === 0 && 'hidden')}>
+                  {form.subtasks.map((subtask, index) => (
+                    <li
+                      key={`${subtask.title}-${index}`}
+                      className="flex items-center gap-2 rounded-sm px-1 py-0.5 can-hover:hover:bg-surface-hover"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-base text-text">
+                        {subtask.title}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        iconOnly
+                        icon={Trash2}
+                        aria-label={`Remove subtask ${subtask.title}`}
+                        onClick={() =>
+                          set(
+                            'subtasks',
+                            form.subtasks.filter((_, i) => i !== index),
+                          )
+                        }
+                        className="hover:text-danger-text"
+                      />
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <Field label="Add a subtask" hideLabel className="flex-1">
+                    {({ id }) => (
+                      <Input
+                        id={id}
+                        value={newSubtask}
+                        onChange={(e) => setNewSubtask(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return
+                          e.preventDefault()
+                          addSubtask()
+                        }}
+                        placeholder="Type and press Enter"
+                        autoComplete="off"
+                      />
+                    )}
+                  </Field>
+                  <Button icon={Plus} onClick={addSubtask}>
+                    Add
+                  </Button>
+                </div>
+              </fieldset>
+
+              <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
+                <legend className="text-xs font-medium text-text-muted">Blocked by</legend>
+                <ul className={cn('flex flex-col gap-1.5', form.blockers.length === 0 && 'hidden')}>
+                  {form.blockers.map((blocker) => (
+                    <li
+                      key={blocker.id}
+                      className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1.5"
+                    >
+                      <TicketKey value={blocker.key} />
+                      <span
+                        className="min-w-0 flex-1 truncate text-base text-text"
+                        title={blocker.title}
+                      >
+                        {blocker.title}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        iconOnly
+                        icon={X}
+                        aria-label={`Remove blocker ${blocker.key}`}
+                        onClick={() =>
+                          set(
+                            'blockers',
+                            form.blockers.filter((b) => b.id !== blocker.id),
+                          )
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+
+                <TicketSelect
+                  value=""
+                  selected={null}
+                  aria-label="Add a blocking ticket"
+                  placeholder="Search for a ticket…"
+                  onChange={(next, doc) => {
+                    if (!next || !doc) return
+                    if (next === ticket?.id || form.blockers.some((b) => b.id === next)) return
+                    set('blockers', [
+                      ...form.blockers,
+                      { id: doc.id, key: doc.ticketId ?? doc.id, title: doc.title },
+                    ])
+                  }}
+                />
+              </fieldset>
             </div>
-          </fieldset>
-
-          <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
-            <legend className="text-xs font-medium text-text-muted">Blocked by</legend>
-            <ul className={cn('flex flex-col gap-1.5', form.blockers.length === 0 && 'hidden')}>
-              {form.blockers.map((blocker) => (
-                <li
-                  key={blocker.id}
-                  className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1.5"
-                >
-                  <TicketKey value={blocker.key} />
-                  <span className="min-w-0 flex-1 truncate text-base text-text" title={blocker.title}>
-                    {blocker.title}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    iconOnly
-                    icon={X}
-                    aria-label={`Remove blocker ${blocker.key}`}
-                    onClick={() =>
-                      set('blockers', form.blockers.filter((b) => b.id !== blocker.id))
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-
-            <TicketSelect
-              value=""
-              selected={null}
-              aria-label="Add a blocking ticket"
-              placeholder="Search for a ticket…"
-              onChange={(next, doc) => {
-                if (!next || !doc) return
-                if (next === ticket?.id || form.blockers.some((b) => b.id === next)) return
-                set('blockers', [
-                  ...form.blockers,
-                  { id: doc.id, key: doc.ticketId ?? doc.id, title: doc.title },
-                ])
-              }}
-            />
-          </fieldset>
+          </details>
         </div>
       </form>
 
@@ -534,6 +671,7 @@ export function TicketForm({
         onClose={() => setConfirmDiscard(false)}
         onConfirm={() => {
           setConfirmDiscard(false)
+          draft.clear()
           leave(cancelHref)
         }}
         title="Discard your changes?"

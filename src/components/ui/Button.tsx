@@ -106,6 +106,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <button
       ref={ref}
+      data-touch-target
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
@@ -129,8 +130,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 })
 
 export interface LinkButtonProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof Link>, 'className'>,
-    Appearance {
+  extends Omit<React.ComponentPropsWithoutRef<typeof Link>, 'className'>, Appearance {
   icon?: StateIcon
   trailingIcon?: StateIcon
   className?: string
@@ -155,12 +155,15 @@ export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(functio
   return (
     <Link
       ref={ref}
+      data-touch-target
       className={cn(shellClasses({ variant, size, iconOnly, fullWidth }), className)}
       {...props}
     >
       {Icon && <Icon className={cn(iconClass, 'shrink-0')} aria-hidden />}
       {!iconOnly && children}
-      {!iconOnly && TrailingIcon && <TrailingIcon className={cn(iconClass, 'shrink-0')} aria-hidden />}
+      {!iconOnly && TrailingIcon && (
+        <TrailingIcon className={cn(iconClass, 'shrink-0')} aria-hidden />
+      )}
     </Link>
   )
 })

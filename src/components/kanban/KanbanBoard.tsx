@@ -19,6 +19,9 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { MousePointerSensor } from './sensors'
 import { statusMeta } from '@/lib/status'
 import { statusIdOf } from '@/lib/workflow'
+import { appendTicketSearch } from '@/lib/ticket-search'
+import { useEntityDoc } from '@/hooks/useEntityDoc'
+import { WelcomeBoard } from './WelcomeBoard'
 import { useShortcut } from '@/lib/shortcuts'
 import { useToast } from '@/components/ui/Toast'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -100,7 +103,7 @@ function filtersToSearch(filters: BoardFilters, ticketId: string | null): string
   if (filters.query) params.set('q', filters.query)
   if (ticketId) params.set('ticket', ticketId)
   const qs = params.toString()
-  return qs ? `?${qs}` : BOARD_PATH
+  return qs ? `/board?${qs}` : BOARD_PATH
 }
 
 export function KanbanBoard({
@@ -134,6 +137,9 @@ export function KanbanBoard({
     query: searchParams.get('q') ?? '',
   })
   const [openTicketId, setOpenTicketId] = useState<string | null>(searchParams.get('ticket'))
+  const [updatedPanelTicket, setUpdatedPanelTicket] = useState<Ticket | null>(null)
+
+  useEffect(() => setUpdatedPanelTicket(null), [openTicketId])
 
   const [pendingDelete, setPendingDelete] = useState<Ticket | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -144,6 +150,8 @@ export function KanbanBoard({
   )
   const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({})
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
 
   const fetchedFor = useRef(
     JSON.stringify({
@@ -198,14 +206,12 @@ export function KanbanBoard({
 
   const updateFilters = useCallback(
     (patch: Partial<BoardFilters>) => {
-      setFilters((current) => {
-        const next = { ...current, ...patch }
-        const isTyping = 'query' in patch && Object.keys(patch).length === 1
-        syncUrl(next, openTicketId, !isTyping)
-        return next
-      })
+      const next = { ...filters, ...patch }
+      const isTyping = 'query' in patch && Object.keys(patch).length === 1
+      setFilters(next)
+      syncUrl(next, openTicketId, !isTyping)
     },
-    [openTicketId, syncUrl],
+    [filters, openTicketId, syncUrl],
   )
 
   const openTicket = useCallback(
@@ -220,6 +226,8 @@ export function KanbanBoard({
     (status: string) => {
       const params = new URLSearchParams({ status })
       if (filters.projectId) params.set('project', filters.projectId)
+      if (filters.teamId) params.set('team', filters.teamId)
+      if (filters.assigneeId) params.set('assignee', filters.assigneeId)
       params.set('returnTo', filtersToSearch(filters, null))
       router.push(`/tickets/new?${params}`)
     },
@@ -241,12 +249,13 @@ export function KanbanBoard({
       assigneeId: filters.assigneeId,
       query: filters.query,
     })
-    if (signature === fetchedFor.current) return
+    if (signature === fetchedFor.current && retry === 0) return
     fetchedFor.current = signature
 
     const controller = new AbortController()
     const run = async () => {
       setRefreshing(true)
+      setLoadError(null)
       try {
         const fetchColumn = async (status: string) => {
           const params = new URLSearchParams({
@@ -261,7 +270,7 @@ export function KanbanBoard({
           if (filters.assigneeId) {
             params.set('where[assignee][equals]', filters.assigneeId)
           }
-          if (filters.query.trim()) params.set('where[title][like]', filters.query.trim())
+          appendTicketSearch(params, filters.query)
           const response = await fetch(`/api/tickets?${params}`, { signal: controller.signal })
           if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
           return response.json()
@@ -300,13 +309,9 @@ export function KanbanBoard({
         )
       } catch (error) {
         if ((error as Error).name === 'AbortError') return
-        toast({
-          tone: 'error',
-          title: "Couldn't load the board",
-          description: error instanceof Error ? error.message : 'Check your connection and try again.',
-        })
+        setLoadError('Your board could not be updated. Check your connection and try again.')
       } finally {
-        setRefreshing(false)
+        if (!controller.signal.aborted) setRefreshing(false)
       }
     }
 
@@ -315,7 +320,7 @@ export function KanbanBoard({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [filters.projectId, filters.teamId, filters.assigneeId, filters.query, toast])
+  }, [filters.projectId, filters.teamId, filters.assigneeId, filters.query, toast, retry])
 
   const sensors = useSensors(
     useSensor(MousePointerSensor, { activationConstraint: { distance: 8 } }),
@@ -332,9 +337,20 @@ export function KanbanBoard({
     [tickets],
   )
 
+  const linkedTicket = useEntityDoc<Ticket>(
+    'tickets',
+    openTicketId,
+    tickets.find((ticket) => ticket.id === openTicketId),
+    2,
+  )
   const openedTicket = useMemo(
-    () => tickets.find((t) => t.id === openTicketId) ?? null,
-    [tickets, openTicketId],
+    () =>
+      openTicketId
+        ? updatedPanelTicket?.id === openTicketId
+          ? updatedPanelTicket
+          : (tickets.find((t) => t.id === openTicketId) ?? linkedTicket)
+        : null,
+    [tickets, openTicketId, linkedTicket, updatedPanelTicket],
   )
 
   const totalLoaded = tickets.length
@@ -353,7 +369,9 @@ export function KanbanBoard({
   ) => {
     if (!origin) return
     const reverted = ticketsRef.current.map((ticket) =>
-      ticket.id === ticketId ? { ...ticket, status: origin.status, sortOrder: origin.sortOrder } : ticket,
+      ticket.id === ticketId
+        ? { ...ticket, status: origin.status, sortOrder: origin.sortOrder }
+        : ticket,
     )
     ticketsRef.current = reverted
     setTickets(reverted)
@@ -374,6 +392,21 @@ export function KanbanBoard({
 
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`)
+      }
+      if (origin && origin.status !== status) {
+        setColumnPagination((previous) => ({
+          ...previous,
+          [origin.status]: {
+            ...previous[origin.status],
+            totalDocs: Math.max(0, previous[origin.status].totalDocs - 1),
+            loadedCount: Math.max(0, previous[origin.status].loadedCount - 1),
+          },
+          [status]: {
+            ...previous[status],
+            totalDocs: previous[status].totalDocs + 1,
+            loadedCount: previous[status].loadedCount + 1,
+          },
+        }))
       }
       flash(ticketId)
     } catch (error) {
@@ -413,7 +446,10 @@ export function KanbanBoard({
 
     const origin = dragOriginRef.current
     dragOriginRef.current = null
-    if (!over) return
+    if (!over) {
+      revertTicket(active.id as string, origin)
+      return
+    }
 
     const activeId = active.id as string
     const overId = over.id as string
@@ -481,7 +517,7 @@ export function KanbanBoard({
       if (filters.projectId) params.set('where[project][equals]', filters.projectId)
       if (filters.teamId) params.set('where[team][equals]', filters.teamId)
       if (filters.assigneeId) params.set('where[assignee][equals]', filters.assigneeId)
-      if (filters.query.trim()) params.set('where[title][like]', filters.query.trim())
+      appendTicketSearch(params, filters.query)
 
       const response = await fetch(`/api/tickets?${params}`)
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
@@ -599,7 +635,9 @@ export function KanbanBoard({
       <BoardToolbar
         filters={filters}
         onChange={updateFilters}
-        resultCount={totalLoaded}
+        resultCount={columnIds.reduce((count, status) => count + (columnPagination[status]?.totalDocs ?? 0), 0)}
+        hasProjects={hasProjects}
+        refreshing={refreshing}
         onCreateTicket={() => columnIds[0] && createTicket(columnIds[0])}
       />
 
@@ -608,13 +646,16 @@ export function KanbanBoard({
       </p>
 
       <ErrorBoundary region="The board">
-        {!hasProjects ? (
+        {loadError ? (
           <EmptyState
-            kind="no-data"
-            title="No projects yet"
-            description="Tickets belong to a project, so create one first and the board fills up from there."
-            action={{ label: 'Go to Projects', onClick: () => window.location.assign('/projects') }}
+            kind="error"
+            title="Could not update the board"
+            description={loadError}
+            action={{ label: 'Retry', onClick: () => setRetry((value) => value + 1) }}
+            className="m-6"
           />
+        ) : !hasProjects ? (
+          <WelcomeBoard />
         ) : totalLoaded === 0 && hasFilters && !refreshing ? (
           <EmptyState
             kind="no-match"
@@ -634,10 +675,15 @@ export function KanbanBoard({
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={() => {
+              if (activeTicket) revertTicket(activeTicket.id, dragOriginRef.current)
+              dragOriginRef.current = null
+              setActiveTicket(null)
+            }}
           >
             <div
               className={
-                'flex min-h-0 flex-1 snap-x snap-proximity gap-4 overflow-x-auto p-6 ' +
+                'flex min-h-0 flex-1 bg-bg-subtle snap-x snap-proximity gap-4 overflow-x-auto p-6 ' +
                 'max-md:snap-mandatory max-md:gap-3 max-md:p-4'
               }
             >
@@ -686,7 +732,10 @@ export function KanbanBoard({
         <TicketPanel
           ticket={openedTicket}
           onClose={() => openTicket(null)}
-          onUpdate={(next) => setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)))}
+          onUpdate={(next) => {
+            setUpdatedPanelTicket(next)
+            setTickets((prev) => prev.map((t) => (t.id === next.id ? next : t)))
+          }}
           onDelete={setPendingDelete}
         />
       )}

@@ -15,10 +15,12 @@ import { cn } from '@/lib/cn'
 import { useShortcut, useShortcutRegistry } from '@/lib/shortcuts'
 import { Dialog } from '@/components/ui/Dialog'
 import { Kbd } from '@/components/ui/Kbd'
+import { appendTicketSearch } from '@/lib/ticket-search'
+import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 const DEBOUNCE_MS = 300
-const MIN_QUERY = 3
+const MIN_QUERY = 1
 
 interface Row {
   id: string
@@ -63,6 +65,8 @@ export function CommandPalette({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Row[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState(false)
+  const [retry, setRetry] = useState(0)
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -150,6 +154,7 @@ export function CommandPalette({
 
   useEffect(() => {
     const q = query.trim()
+    setSearchError(false)
     if (q.length < MIN_QUERY) {
       setResults([])
       setSearching(false)
@@ -158,19 +163,26 @@ export function CommandPalette({
 
     const controller = new AbortController()
     setSearching(true)
+    setResults([])
     const timer = setTimeout(async () => {
       try {
         const encoded = encodeURIComponent(q)
+        const ticketParams = new URLSearchParams({ limit: '5', depth: '0' })
+        appendTicketSearch(ticketParams, q)
+        const read = async (response: Response) => {
+          if (!response.ok) throw new Error('Search failed')
+          return response.json()
+        }
         const [tickets, projects, teams] = await Promise.all([
-          fetch(`/api/tickets?limit=5&depth=0&where[title][like]=${encoded}`, {
+          fetch('/api/tickets?' + ticketParams, {
             signal: controller.signal,
-          }).then((r) => r.json()),
+          }).then(read),
           fetch(`/api/projects?limit=5&where[name][like]=${encoded}`, {
             signal: controller.signal,
-          }).then((r) => r.json()),
+          }).then(read),
           fetch(`/api/teams?limit=5&where[name][like]=${encoded}`, {
             signal: controller.signal,
-          }).then((r) => r.json()),
+          }).then(read),
         ])
 
         const rows: Row[] = [
@@ -200,9 +212,12 @@ export function CommandPalette({
         ]
         setResults(rows)
       } catch (error) {
-        if ((error as Error).name !== 'AbortError') setResults([])
+        if ((error as Error).name !== 'AbortError') {
+          setResults([])
+          setSearchError(true)
+        }
       } finally {
-        setSearching(false)
+        if (!controller.signal.aborted) setSearching(false)
       }
     }, DEBOUNCE_MS)
 
@@ -210,13 +225,17 @@ export function CommandPalette({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [query, router])
+  }, [query, router, retry])
 
   const rows = useMemo(() => [...filteredCommands, ...results], [filteredCommands, results])
 
   useEffect(() => {
     setActive(0)
   }, [query])
+
+  useEffect(() => {
+    setActive((index) => Math.min(index, Math.max(0, rows.length - 1)))
+  }, [rows.length])
 
   useEffect(() => {
     listRef.current
@@ -266,7 +285,7 @@ export function CommandPalette({
             aria-label="Search commands, tickets, projects and teams"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command or search…"
+            placeholder="Search by title, ticket key, or command…"
             className="h-10 min-w-0 flex-1 bg-transparent text-md text-text outline-none"
             autoComplete="off"
           />
@@ -287,11 +306,11 @@ export function CommandPalette({
             </div>
           )}
 
-          {!searching && rows.length === 0 && (
+          {!searching && !searchError && rows.length === 0 && (
             <p className="px-2 py-8 text-center text-base text-text-muted">
               {query.trim().length > 0 && query.trim().length < MIN_QUERY
                 ? `Type at least ${MIN_QUERY} characters to search records.`
-                : 'Nothing matched.'}
+                : 'No results. Try a different title or ticket key.'}
             </p>
           )}
 
@@ -306,28 +325,42 @@ export function CommandPalette({
                     {row.group}
                   </div>
                 )}
-                <div
+                <button
+                  type="button"
+                  tabIndex={-1}
                   id={`palette-row-${row.id}`}
                   role="option"
                   aria-selected={index === active}
                   onClick={() => choose(row)}
                   onMouseMove={() => setActive(index)}
                   className={cn(
-                    'flex h-9 cursor-pointer items-center gap-2.5 rounded-sm px-2 text-base',
+                    'flex min-h-9 w-full text-left cursor-pointer items-center gap-2.5 rounded-sm px-2 text-base',
                     index === active ? 'bg-surface-hover text-text' : 'text-text-muted',
                   )}
                 >
                   <Icon className="size-4 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-text">
+                  <span className="min-w-0 flex-1 truncate text-text" title={row.label}>
                     <Highlight text={row.label} query={query.trim()} />
                   </span>
                   {row.sublabel && <span className="shrink-0 text-xs tabular">{row.sublabel}</span>}
                   {row.shortcut && <Kbd keys={row.shortcut} />}
-                </div>
+                </button>
               </div>
             )
           })}
         </div>
+        {searchError && (
+          <div
+            role="alert"
+            className="mt-3 flex items-center justify-between gap-3 rounded-md bg-danger-subtle p-3 text-danger-text"
+          >
+            <p>Search is unavailable. Try again.</p>
+            <Button onClick={() => setRetry((value) => value + 1)}>Retry search</Button>
+          </div>
+        )}
+        <p className="mt-4 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3 text-xs text-text-muted">
+          <Kbd raw="↑ ↓" /> Navigate <Kbd raw="Enter" /> Open <Kbd raw="Esc" /> Close
+        </p>
       </div>
     </Dialog>
   )

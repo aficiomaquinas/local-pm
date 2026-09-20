@@ -10,12 +10,12 @@ const CONTROL_BASE =
   'hover:border-border-strong ' +
   'disabled:cursor-not-allowed disabled:bg-surface-hover disabled:text-text-disabled disabled:hover:border-border ' +
   'aria-[invalid=true]:border-danger aria-[invalid=true]:hover:border-danger ' +
-
   'text-base max-sm:text-md'
 
 const CONTROL_SIZE = 'h-8 px-3'
 
 export interface FieldProps {
+  id?: string
   label: string
 
   hint?: string
@@ -26,10 +26,15 @@ export interface FieldProps {
   className?: string
 
   hideLabel?: boolean
-  children: (ids: { id: string; describedBy: string | undefined; invalid: boolean }) => React.ReactNode
+  children: (ids: {
+    id: string
+    describedBy: string | undefined
+    invalid: boolean
+  }) => React.ReactNode
 }
 
 export function Field({
+  id: providedId,
   label,
   hint,
   error,
@@ -39,20 +44,19 @@ export function Field({
   hideLabel,
   children,
 }: FieldProps) {
-  const id = useId()
+  const generatedId = useId()
+  const id = providedId ?? generatedId
   const hintId = `${id}-hint`
   const errorId = `${id}-error`
   const invalid = Boolean(error)
-  const describedBy = [hint ? hintId : null, invalid ? errorId : null].filter(Boolean).join(' ') || undefined
+  const describedBy =
+    [hint ? hintId : null, invalid ? errorId : null].filter(Boolean).join(' ') || undefined
 
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       <label
         htmlFor={id}
-        className={cn(
-          'text-xs font-medium text-text-muted',
-          hideLabel && 'sr-only',
-        )}
+        className={cn('text-xs font-medium text-text-muted', hideLabel && 'sr-only')}
       >
         {label}
         {optional && <span className="ml-1 font-normal text-text-muted">(optional)</span>}
@@ -70,10 +74,7 @@ export function Field({
       <p
         id={errorId}
         role="alert"
-        className={cn(
-          'flex items-center gap-1 text-xs text-danger-text',
-          !invalid && 'hidden',
-        )}
+        className={cn('flex items-center gap-1 text-xs text-danger-text', !invalid && 'hidden')}
       >
         {invalid && (
           <>
@@ -88,14 +89,24 @@ export function Field({
 
 export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {
-    return <input ref={ref} className={cn(CONTROL_BASE, CONTROL_SIZE, className)} {...props} />
+    return (
+      <input
+        ref={ref}
+        data-touch-target
+        className={cn(CONTROL_BASE, CONTROL_SIZE, className)}
+        {...props}
+      />
+    )
   },
 )
 
 export const Textarea = forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement> & { autoGrow?: boolean; maxRows?: number }
->(function Textarea({ className, autoGrow = true, maxRows = 12, rows = 3, onChange, ...props }, ref) {
+>(function Textarea(
+  { className, autoGrow = true, maxRows = 12, rows = 3, onChange, ...props },
+  ref,
+) {
   const innerRef = useRef<HTMLTextAreaElement | null>(null)
 
   const resize = (el: HTMLTextAreaElement | null) => {
@@ -149,7 +160,10 @@ export const ErrorSummary = forwardRef<HTMLDivElement, ErrorSummaryProps>(functi
         className,
       )}
     >
-      <h2 id="error-summary-title" className="flex items-center gap-2 text-base font-semibold text-danger-text">
+      <h2
+        id="error-summary-title"
+        className="flex items-center gap-2 text-base font-semibold text-danger-text"
+      >
         <AlertCircle className="size-4 shrink-0" aria-hidden />
         There is a problem
       </h2>

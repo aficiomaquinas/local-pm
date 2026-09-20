@@ -88,7 +88,9 @@ export function Menu({ items, trigger, label, align = 'end' }: MenuProps) {
                       )}
                     />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate" title={item.label}>
+                    {item.label}
+                  </span>
                   {item.shortcut && <Kbd keys={item.shortcut} />}
                 </DropdownMenu.Item>
               </div>

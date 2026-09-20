@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ListFilter, Loader2, Plus, Search, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
 import { statusOptions, isClosedStatus } from '@/lib/status'
-import { TicketStatus } from '@/types/enums'
 import { useEntityQuery } from '@/hooks/useEntityQuery'
 import { AvatarLabel } from '@/components/ui/Avatar'
 import { Button, LinkButton } from '@/components/ui/Button'
@@ -54,7 +53,6 @@ export function TicketsTable({
 }: TicketsTableProps) {
   const { statuses } = useWorkflow()
   const router = useRouter()
-  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<string>('')
@@ -74,23 +72,38 @@ export function TicketsTable({
   const hasFilters = Boolean(query || status)
 
   useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel || !hasNextPage || loading || loadingMore) return
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search)
+      setQuery(params.get('ticketQ') ?? '')
+      const status = params.get('ticketStatus')
+      setStatus(statuses.some((entry) => entry.id === status) ? status! : '')
+      const sort = params.get('ticketSort')
+      setSort(SORTS.some((item) => item.value === sort) ? (sort as SortKey) : 'sortOrder')
+    }
+    restore()
+    window.addEventListener('popstate', restore)
+    return () => window.removeEventListener('popstate', restore)
+  }, [statuses])
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadMore()
-      },
-      { rootMargin: '300px' },
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [hasNextPage, loading, loadingMore, loadMore, docs.length])
-
-  const clearFilters = () => {
-    setQuery('')
-    setStatus('')
+  const update = (patch: Partial<{ query: string; status: string; sort: SortKey }>) => {
+    const next = { query, status, sort, ...patch }
+    setQuery(next.query)
+    setStatus(next.status)
+    setSort(next.sort)
+    const params = new URLSearchParams(window.location.search)
+    for (const [key, value] of Object.entries({
+      ticketQ: next.query,
+      ticketStatus: next.status,
+      ticketSort: next.sort === 'sortOrder' ? '' : next.sort,
+    })) {
+      if (value) params.set(key, value)
+      else params.delete(key)
+    }
+    const url = window.location.pathname + (params.size ? '?' + params : '') + window.location.hash
+    if ('query' in patch) window.history.replaceState(null, '', url)
+    else window.history.pushState(null, '', url)
   }
+  const clearFilters = () => update({ query: '', status: '' })
 
   return (
     <div className="flex flex-col gap-3">
@@ -101,8 +114,11 @@ export function TicketsTable({
           <input
             type="search"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tickets"
+            onChange={(e) => update({ query: e.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') update({ query: '' })
+            }}
+            placeholder="Search by title or ticket key"
             className="min-w-0 flex-1 bg-transparent text-base text-text outline-none max-sm:text-md"
           />
           {loading && (
@@ -113,15 +129,18 @@ export function TicketsTable({
         <Select
           aria-label="Filter by status"
           value={status}
-          onValueChange={(next) => setStatus(next)}
+          onValueChange={(next) => update({ status: next })}
           className="w-40 max-sm:w-full"
-          options={[{ value: '', label: 'All statuses', icon: ListFilter }, ...statusOptions(statuses)]}
+          options={[
+            { value: '', label: 'All statuses', icon: ListFilter },
+            ...statusOptions(statuses),
+          ]}
         />
 
         <Select
           aria-label="Sort tickets"
           value={sort}
-          onValueChange={(next) => setSort(next as SortKey)}
+          onValueChange={(next) => update({ sort: next as SortKey })}
           className="w-44 max-sm:w-full"
           options={SORTS}
         />
@@ -145,12 +164,16 @@ export function TicketsTable({
         </span>
 
         {status && (
-          <Chip tone="accent" onRemove={() => setStatus('')} removeLabel="Remove status filter">
+          <Chip
+            tone="accent"
+            onRemove={() => update({ status: '' })}
+            removeLabel="Remove status filter"
+          >
             Status: {statusOptions(statuses).find((o) => o.value === status)?.label}
           </Chip>
         )}
         {query && (
-          <Chip tone="accent" onRemove={() => setQuery('')} removeLabel="Clear the search">
+          <Chip tone="accent" onRemove={() => update({ query: '' })} removeLabel="Clear the search">
             Search: {query}
           </Chip>
         )}
@@ -277,7 +300,7 @@ export function TicketsTable({
           </div>
 
           {hasNextPage && (
-            <div ref={sentinelRef} className="flex justify-center py-3">
+            <div className="flex justify-center py-3">
               <Button variant="secondary" loading={loadingMore} onClick={loadMore}>
                 {loadingMore ? 'Loading…' : `Load more (${docs.length} of ${totalDocs})`}
               </Button>

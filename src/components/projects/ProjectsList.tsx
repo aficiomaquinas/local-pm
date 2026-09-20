@@ -25,7 +25,7 @@ import type { Project } from '@/payload-types'
 
 const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 300
-const MIN_SEARCH = 3
+const MIN_SEARCH = 1
 
 type SortKey = 'name' | '-name' | 'createdAt' | '-createdAt' | 'prefix' | '-prefix'
 
@@ -48,7 +48,12 @@ export function ProjectsList({
 
   const [projects, setProjects] = useState<Project[]>(initialProjects)
   const [pagination, setPagination] = useState<Pagination>(
-    initialPagination ?? { page: 1, totalPages: 1, hasNextPage: false, totalDocs: initialProjects.length },
+    initialPagination ?? {
+      page: 1,
+      totalPages: 1,
+      hasNextPage: false,
+      totalDocs: initialProjects.length,
+    },
   )
 
   const [query, setQuery] = useState('')
@@ -57,8 +62,12 @@ export function ProjectsList({
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
 
-  const [pendingDelete, setPendingDelete] = useState<{ project: Project; ticketCount: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{
+    project: Project
+    ticketCount: number
+  } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   const searchRef = useRef<HTMLInputElement>(null)
@@ -67,26 +76,40 @@ export function ProjectsList({
   const showSkeleton = useDelayedFlag(loading)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    setQuery(params.get('q') ?? '')
-    const urlStatus = params.get('status')
-    if (urlStatus && PROJECT_STATUS_OPTIONS.some((o) => o.value === urlStatus)) {
-      setStatus(urlStatus as ProjectStatus)
+    const restore = () => {
+      const params = new URLSearchParams(window.location.search)
+      setQuery(params.get('q') ?? '')
+      const value = params.get('sort') ?? '-createdAt'
+      setSort(
+        ['name', '-name', 'createdAt', '-createdAt', 'prefix', '-prefix'].includes(value)
+          ? (value as SortKey)
+          : '-createdAt',
+      )
+      const status = params.get('status')
+      setStatus(
+        PROJECT_STATUS_OPTIONS.some((option) => option.value === status)
+          ? (status as ProjectStatus)
+          : '',
+      )
     }
-    const urlSort = params.get('sort')
-    if (urlSort) setSort(urlSort as SortKey)
+    restore()
+    window.addEventListener('popstate', restore)
+    return () => window.removeEventListener('popstate', restore)
   }, [])
 
-  const syncUrl = useCallback((next: { q: string; status: string; sort: SortKey }, push: boolean) => {
-    const params = new URLSearchParams()
-    if (next.q) params.set('q', next.q)
-    if (next.status) params.set('status', next.status)
-    if (next.sort !== '-createdAt') params.set('sort', next.sort)
-    const qs = params.toString()
-    const url = qs ? `?${qs}` : window.location.pathname
-    if (push) window.history.pushState(null, '', url)
-    else window.history.replaceState(null, '', url)
-  }, [])
+  const syncUrl = useCallback(
+    (next: { q: string; status: string; sort: SortKey }, push: boolean) => {
+      const params = new URLSearchParams()
+      if (next.q) params.set('q', next.q)
+      if (next.status) params.set('status', next.status)
+      if (next.sort !== '-createdAt') params.set('sort', next.sort)
+      const qs = params.toString()
+      const url = qs ? `?${qs}` : window.location.pathname
+      if (push) window.history.pushState(null, '', url)
+      else window.history.replaceState(null, '', url)
+    },
+    [],
+  )
 
   const buildParams = useCallback(
     (page: number) => {
@@ -103,7 +126,7 @@ export function ProjectsList({
   )
 
   useEffect(() => {
-    const signature = buildParams(1).toString()
+    const signature = buildParams(1).toString() + '&retry=' + retry
     if (fetchedFor.current === null) {
       fetchedFor.current = signature
       return
@@ -116,7 +139,9 @@ export function ProjectsList({
       setLoading(true)
       setError(null)
       try {
-        const response = await fetch(`/api/projects?${buildParams(1)}`, { signal: controller.signal })
+        const response = await fetch(`/api/projects?${buildParams(1)}`, {
+          signal: controller.signal,
+        })
         if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
         const data = await response.json()
         setProjects(data.docs ?? [])
@@ -130,7 +155,7 @@ export function ProjectsList({
         if ((err as Error).name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'The request failed.')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }
 
@@ -139,7 +164,7 @@ export function ProjectsList({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [buildParams, query])
+  }, [buildParams, query, retry])
 
   useShortcut({
     id: 'projects.search',
@@ -172,7 +197,10 @@ export function ProjectsList({
     [sort],
   )
 
-  const setFilters = (next: Partial<{ q: string; status: ProjectStatus | ''; sort: SortKey }>, push = true) => {
+  const setFilters = (
+    next: Partial<{ q: string; status: ProjectStatus | ''; sort: SortKey }>,
+    push = true,
+  ) => {
     const merged = {
       q: next.q ?? query,
       status: next.status ?? status,
@@ -271,9 +299,14 @@ export function ProjectsList({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
+      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-4 max-md:px-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="mr-1 shrink-0 text-xl font-semibold text-text">Projects</h1>
+          <div className="mr-4 min-w-0 max-sm:w-full">
+            <h1 className="text-2xl font-semibold text-text">Projects</h1>
+            <p className="mt-1 text-sm text-text-muted">
+              Give every goal a home and a clear path forward.
+            </p>
+          </div>
 
           <label className="relative flex h-8 min-w-44 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-72">
             <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
@@ -281,6 +314,9 @@ export function ProjectsList({
             <input
               ref={searchRef}
               type="search"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setFilters({ q: '' }, false)
+              }}
               value={query}
               onChange={(e) => setFilters({ q: e.target.value }, false)}
               placeholder="Search projects"
@@ -319,21 +355,33 @@ export function ProjectsList({
           </span>
 
           {status && (
-            <Chip tone="accent" onRemove={() => setFilters({ status: '' })} removeLabel="Remove status filter">
+            <Chip
+              tone="accent"
+              onRemove={() => setFilters({ status: '' })}
+              removeLabel="Remove status filter"
+            >
               Status: {PROJECT_STATUS_OPTIONS.find((o) => o.value === status)?.label}
             </Chip>
           )}
           {query && (
-            <Chip tone="accent" onRemove={() => setFilters({ q: '' })} removeLabel="Clear the search">
+            <Chip
+              tone="accent"
+              onRemove={() => setFilters({ q: '' })}
+              removeLabel="Clear the search"
+            >
               Search: {query}
             </Chip>
           )}
           {hasFilters && (
-            <Button variant="ghost" size="sm" icon={X} onClick={() => setFilters({ q: '', status: '' })}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={X}
+              onClick={() => setFilters({ q: '', status: '' })}
+            >
               Clear all
             </Button>
           )}
-
         </div>
       </header>
 
@@ -343,7 +391,7 @@ export function ProjectsList({
             kind="error"
             title="Couldn't load projects"
             description={error}
-            action={{ label: 'Retry', onClick: () => setFilters({}, false) }}
+            action={{ label: 'Retry', onClick: () => setRetry((value) => value + 1) }}
             className="m-6"
           />
         ) : showSkeleton && projects.length === 0 ? (
@@ -401,13 +449,14 @@ export function ProjectsList({
               </thead>
               <tbody>
                 {projects.map((project) => (
-                  <Tr
-                    key={project.id}
-                    onOpen={() => router.push(`/projects/${project.id}`)}
-                  >
+                  <Tr key={project.id} onOpen={() => router.push(`/projects/${project.id}`)}>
                     <Td>
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <EntityMark icon={projectIcon(project.icon)} color={project.color} size="sm" />
+                        <EntityMark
+                          icon={projectIcon(project.icon)}
+                          color={project.color}
+                          size="sm"
+                        />
                         <Link
                           href={`/projects/${project.id}`}
                           onClick={(e) => e.stopPropagation()}
@@ -490,10 +539,13 @@ export function ProjectsList({
         onConfirm={confirmDelete}
         loading={deleting}
         title="Delete this project?"
-        message={pendingDelete ? `“${pendingDelete.project.name}” (${pendingDelete.project.prefix})` : ''}
+        message={
+          pendingDelete ? `“${pendingDelete.project.name}” (${pendingDelete.project.prefix})` : ''
+        }
         consequence={deleteConsequence()}
-
-        confirmPhrase={pendingDelete && pendingDelete.ticketCount > 0 ? pendingDelete.project.name : undefined}
+        confirmPhrase={
+          pendingDelete && pendingDelete.ticketCount > 0 ? pendingDelete.project.name : undefined
+        }
         confirmLabel="Delete project"
       />
     </div>

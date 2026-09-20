@@ -7,8 +7,8 @@ dotenv.config()
  * E2E configuration.
  *
  * The suite creates, mutates and deletes records, so it MUST NOT be pointed at
- * a working database. `E2E_DATABASE_URI` defaults to a separate `local-pm-e2e`
- * database derived from `DATABASE_URI`, and the server under test runs on its
+ * a working database. `E2E_DATABASE_URI` defaults to `local-pm-e2e-<port>`, a
+ * separate database derived from `DATABASE_URI`, and the server under test runs on its
  * own port so a dev server on 3010 can stay up alongside it.
  */
 
@@ -23,7 +23,8 @@ function withDatabase(uri: string, dbName: string): string {
 }
 
 const SOURCE_URI = process.env.DATABASE_URI ?? 'mongodb://localhost:27018/local-pm'
-const E2E_DATABASE_URI = process.env.E2E_DATABASE_URI ?? withDatabase(SOURCE_URI, 'local-pm-e2e')
+const E2E_DATABASE_URI =
+  process.env.E2E_DATABASE_URI ?? withDatabase(SOURCE_URI, 'local-pm-e2e-' + PORT)
 
 if (E2E_DATABASE_URI === SOURCE_URI) {
   throw new Error(
@@ -36,6 +37,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   // Serial: the suite asserts on sequential ticket IDs and on board ordering,
   // both of which are shared mutable state.
+  outputDir: 'test-results-' + PORT,
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
@@ -51,7 +53,7 @@ export default defineConfig({
   webServer: {
     command: `npx cross-env NODE_OPTIONS=--no-deprecation next dev --port ${PORT}`,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 240_000,
     stdout: 'pipe',
     stderr: 'pipe',
@@ -59,7 +61,7 @@ export default defineConfig({
       // Build into a separate directory. Sharing `.next` with a production
       // server running the app locally would replace its build with dev
       // artifacts and break it (see next.config.ts).
-      NEXT_DIST_DIR: '.next-e2e',
+      NEXT_DIST_DIR: '.next-e2e-' + PORT,
       DATABASE_URI: E2E_DATABASE_URI,
       PAYLOAD_SECRET: process.env.PAYLOAD_SECRET ?? 'e2e-secret-not-for-production',
       NEXT_PUBLIC_SERVER_URL: BASE_URL,

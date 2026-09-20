@@ -828,3 +828,24 @@
 .rdp-root .rdp-nav-btn[disabled] {
   opacity: 0.4;
 }
+
+/* Safe-area space belongs to the bar and its content inset. */
+@media (max-width: 767px) {
+  .mobile-nav-height {
+    height: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+  .mobile-main-inset {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+}
+@media (pointer: coarse) {
+  [data-touch-target],
+  [role='combobox'],
+  label:has(input[type='search']) {
+    min-height: 44px;
+  }
+  button[data-touch-target],
+  a[data-touch-target] {
+    min-width: 44px;
+  }
+}
