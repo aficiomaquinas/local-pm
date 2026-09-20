@@ -17,6 +17,8 @@ export interface MenuItem {
   checked?: boolean
   separatorBefore?: boolean
   groupLabel?: string
+  /** When set the item renders as a real link; `onSelect` still fires on select. */
+  href?: string
   onSelect: () => void
 }
 
@@ -62,6 +64,7 @@ export function Menu({ items, trigger, label, align = 'end' }: MenuProps) {
                 <DropdownMenu.Item
                   disabled={item.disabled}
                   onSelect={item.onSelect}
+                  asChild={Boolean(item.href)}
                   className={cn(
                     'flex h-8 cursor-pointer select-none items-center gap-2 rounded-sm px-2',
                     'text-base outline-none',
@@ -70,26 +73,36 @@ export function Menu({ items, trigger, label, align = 'end' }: MenuProps) {
                     item.destructive ? 'text-danger-text' : 'text-text',
                   )}
                 >
-                  {selectable && (
-                    <span className="flex size-4 shrink-0 items-center justify-center">
-                      {item.checked && <Check className="size-4 text-accent-text" aria-hidden />}
-                    </span>
-                  )}
-                  {Icon && (
-                    <Icon
-                      aria-hidden
-                      className={cn(
-                        'size-4 shrink-0',
-                        item.destructive
-                          ? 'text-danger-text'
-                          : item.tone
-                            ? TONE_TEXT[item.tone]
-                            : 'text-text-muted',
+                  {item.href ? (
+                    // Real anchor keeps native link semantics (cmd/middle-click,
+                    // new-tab); Radix still closes the menu on select.
+                    <a href={item.href} className="min-w-0 flex-1 truncate">
+                      {item.label}
+                    </a>
+                  ) : (
+                    <>
+                      {selectable && (
+                        <span className="flex size-4 shrink-0 items-center justify-center">
+                          {item.checked && <Check className="size-4 text-accent-text" aria-hidden />}
+                        </span>
                       )}
-                    />
+                      {Icon && (
+                        <Icon
+                          aria-hidden
+                          className={cn(
+                            'size-4 shrink-0',
+                            item.destructive
+                              ? 'text-danger-text'
+                              : item.tone
+                                ? TONE_TEXT[item.tone]
+                                : 'text-text-muted',
+                          )}
+                        />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {item.shortcut && <Kbd keys={item.shortcut} />}
+                    </>
                   )}
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.shortcut && <Kbd keys={item.shortcut} />}
                 </DropdownMenu.Item>
               </div>
             )

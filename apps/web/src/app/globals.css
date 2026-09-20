@@ -626,21 +626,6 @@
   animation: auth-nudge-pulse 600ms ease-in-out 2;
 }
 
-/* UserMenu popover appearance (SPC-007 §2.1): standard opacity/translate
-   transition, ~150 ms ease-out. */
-@keyframes auth-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.auth-menu-pop {
-  animation: auth-menu-in 150ms ease-out;
-}
 
 .rich-text-editor .ql-stroke {
   stroke: var(--color-text-muted);

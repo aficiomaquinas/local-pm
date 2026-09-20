@@ -7,21 +7,23 @@
  *    When a mutation fails with 401/403 the board dispatches the
  *    `localpm:auth-nudge` CustomEvent (AUTH_NUDGE_EVENT); this banner listens
  *    and plays a short amber→red attention pulse (CSS keyframe, ~600 ms ×2,
- *    colors only — no layout shift). The red `mutation-error` banner near the
- *    action still names the specific failure; the nudge points the eye at the
- *    standing explanation.
+ *    colors only — no layout shift). v2.1: the failure surface beside the
+ *    action is the generic upstream toast (see SPC-007 §7 amendment); the
+ *    nudge points the eye at the standing explanation.
  *  - Authenticated  → NO topbar banner (v1's green banner is gone). The
  *    session indicator lives exclusively in the sidebar bottom-left user
  *    block (`UserMenu`, mounted by `Sidebar`): circular avatar with the
  *    email's initial, the email below it (truncated), click opens a small
- *    popover menu with Admin and Log out.
+ *    dropdown menu with Admin and Log out.
  *
  * The session check (same-origin `/api/users/me`, re-run on focus and every
  * 60 s — covers logout in another tab and idle token expiry) is unchanged
  * from v1 and shared by both surfaces via `useAuthSession`.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { cn } from '@/lib/cn'
+import { Menu, type MenuItem } from '@/components/ui/Menu'
 
 /** CustomEvent name KanbanBoard dispatches when a mutation receives 401/403. */
 export const AUTH_NUDGE_EVENT = 'localpm:auth-nudge'
@@ -117,78 +119,51 @@ export function AnonymousBanner() {
  * Sidebar bottom-left user block for the AUTHENTICATED state (REQ-005.1):
  * circular avatar with the email's initial (mirror users may lack `name`;
  * the email is always present by identity design), the email below it,
- * click opens a small popover menu — Admin (/admin) and Log out
+ * click opens a small dropdown menu — Admin (/admin) and Log out
  * (/admin/logout; Payload owns the logout flow, the frontend adds no logic).
+ *
+ * Built on the design-system primitives (PR#9-#11 port): the menu is the
+ * Radix DropdownMenu (`ui/Menu`), so click-outside/Escape/focus handling is
+ * the primitive's, not hand-rolled listeners.
  */
 export function UserMenu() {
   const state = useAuthSession()
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement | null>(null)
-
-  // Close the popover on outside click and Escape (standard popover hygiene;
-  // the block itself never blocks the page).
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
 
   if (state.status !== 'authenticated') return null
 
   const initial = state.email.charAt(0).toUpperCase()
 
+  const items: MenuItem[] = [
+    { id: 'admin', label: 'Admin', href: '/admin', onSelect: () => {} },
+    { id: 'logout', label: 'Log out', href: '/admin/logout', onSelect: () => {} },
+  ]
+
   return (
-    <div ref={rootRef} data-testid="user-menu" className="relative px-3 pb-4 pt-2">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="flex w-full min-w-0 flex-col items-start gap-1.5 rounded-sm px-2 py-2 text-left transition-colors duration-micro ease-standard hover:bg-surface-hover"
-      >
-        <span
-          aria-hidden="true"
-          className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg"
-        >
-          {initial}
-        </span>
-        <span className="w-full truncate text-xs text-text-muted">
-          {state.email}
-        </span>
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="auth-menu-pop absolute bottom-full left-3 z-50 mb-1 w-48 rounded-sm border border-border-subtle bg-surface py-1 shadow-e2"
-        >
-          <a
-            role="menuitem"
-            href="/admin"
-            className="block px-3 py-1.5 text-sm text-text hover:bg-surface-hover"
+    <div data-testid="user-menu" className="px-3 pb-4 pt-2">
+      <Menu
+        label="User session menu"
+        align="start"
+        items={items}
+        trigger={
+          <button
+            type="button"
+            className={cn(
+              'flex w-full min-w-0 flex-col items-start gap-1.5 rounded-sm px-2 py-2 text-left',
+              'transition-colors duration-micro ease-standard',
+              'outline-none hover:bg-surface-hover',
+              'focus-visible:bg-surface-hover data-[state=open]:bg-surface-hover',
+            )}
           >
-            Admin
-          </a>
-          <a
-            role="menuitem"
-            href="/admin/logout"
-            className="block px-3 py-1.5 text-sm text-text hover:bg-surface-hover"
-          >
-            Log out
-          </a>
-        </div>
-      )}
+            <span
+              aria-hidden="true"
+              className="flex size-9 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-fg"
+            >
+              {initial}
+            </span>
+            <span className="w-full truncate text-xs text-text-muted">{state.email}</span>
+          </button>
+        }
+      />
     </div>
   )
 }
