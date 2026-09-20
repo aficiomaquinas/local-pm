@@ -67,35 +67,3 @@ export function applyMention(
   const next = text.slice(0, range.start) + token + text.slice(range.end)
   return { text: next, caret: range.start + token.length }
 }
-
-export function wrapSelection(
-  text: string,
-  start: number,
-  end: number,
-  before: string,
-  after: string = before,
-  placeholder = '',
-): { text: string; start: number; end: number } {
-  const selected = text.slice(start, end)
-  const head = text.slice(0, start)
-  const tail = text.slice(end)
-
-  if (selected.length === 0) {
-    const next = `${head}${before}${placeholder}${after}${tail}`
-    return {
-      text: next,
-      start: start + before.length,
-      end: start + before.length + placeholder.length,
-    }
-  }
-
-  const alreadyWrapped =
-    head.endsWith(before) && tail.startsWith(after) && before.length > 0 && after.length > 0
-  if (alreadyWrapped) {
-    const next = head.slice(0, head.length - before.length) + selected + tail.slice(after.length)
-    return { text: next, start: start - before.length, end: end - before.length }
-  }
-
-  const next = `${head}${before}${selected}${after}${tail}`
-  return { text: next, start: start + before.length, end: end + before.length }
-}

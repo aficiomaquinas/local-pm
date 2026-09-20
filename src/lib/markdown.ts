@@ -1,4 +1,5 @@
 const MENTION = /@\[([^\]\n]{1,80})\]\(member:([A-Za-z0-9_-]{1,64})\)/g
+const IMAGE = /!\[([^\]\n]{0,200})\]\(([^()\s]{1,500})\)/g
 const LINK = /\[([^\]\n]{1,200})\]\(([^()\s]{1,500})\)/g
 const AUTOLINK = /(^|[\s(])((?:https?:\/\/|www\.)[^\s<>()]{2,500})/g
 const BOLD = /(\*\*|__)(?=\S)([\s\S]*?\S)\1/g
@@ -123,6 +124,12 @@ function inline(text: string): string {
     (_m, name: string, id: string) => `<span class="mention" data-member="${id}">@${name}</span>`,
   )
 
+  out = out.replace(IMAGE, (match, alt: string, src: string) =>
+    SAFE_HREF.test(src)
+      ? `<img src="${src}" alt="${alt}" loading="lazy" decoding="async">`
+      : match,
+  )
+
   out = out.replace(LINK, (match, label: string, href: string) =>
     SAFE_HREF.test(href)
       ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
@@ -148,6 +155,7 @@ function inline(text: string): string {
 export function plainSummary(source: string, max = 140): string {
   const flat = source
     .replace(MENTION, (_m, name: string) => `@${name}`)
+    .replace(IMAGE, (_m, alt: string) => alt || 'image')
     .replace(/```[\s\S]*?```/g, ' code ')
     .replace(/[`*_~#>]/g, '')
     .replace(/\s+/g, ' ')

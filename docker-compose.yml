@@ -41,6 +41,9 @@ services:
       NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
       LOCAL_PM_REQUIRE_AUTH: ${LOCAL_PM_REQUIRE_AUTH:-false}
       MONGO_SERVER_SELECTION_TIMEOUT_MS: ${MONGO_SERVER_SELECTION_TIMEOUT_MS:-10000}
+      LOCAL_PM_UPLOADS_DIR: /app/uploads
+    volumes:
+      - local-pm-uploads:/app/uploads
     depends_on:
       mongodb:
         condition: service_healthy
@@ -65,3 +68,4 @@ services:
 
 volumes:
   local-pm-mongodb-data:
+  local-pm-uploads:

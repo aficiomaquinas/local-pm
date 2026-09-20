@@ -15,6 +15,7 @@ A lightweight, self-hosted project management tool with a built-in MCP (Model Co
   - Ticket dependencies (blocked by)
   - Rich text descriptions
 - **Comments** - Threaded discussion on every ticket, with markdown, `@` mentions and resolvable threads
+- **Attachments** - Drop, paste or pick files into a comment; images render inline, everything else becomes a link
 - **MCP Server** - AI-native project management via Model Context Protocol
 - **Self-Hosted** - Your data stays on your machine
 - **Docker Ready** - One command deployment

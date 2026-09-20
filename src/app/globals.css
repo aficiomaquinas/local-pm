@@ -700,12 +700,42 @@
   font-weight: 500;
   white-space: nowrap;
 }
+.rich-text-content img {
+  display: block;
+  max-width: min(100%, 480px);
+  height: auto;
+  margin-top: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+}
+
 .comment-body {
   font-size: var(--text-base);
   line-height: 1.55;
+  max-width: none;
 }
 .comment-body > * + * {
   margin-top: 8px;
+}
+.comment-body a:not(:has(img)) {
+  word-break: break-word;
+}
+
+.comment-highlight {
+  animation: comment-flash var(--duration-large) var(--ease-standard);
+  box-shadow:
+    0 0 0 2px var(--color-accent-border),
+    0 0 0 6px var(--color-accent-subtle);
+}
+
+@keyframes comment-flash {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

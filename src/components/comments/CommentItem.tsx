@@ -1,13 +1,21 @@
 'use client'
 
-import { useState } from 'react'
-import { CheckCircle2, CircleDot, Link2, MoreHorizontal, Pencil, Reply, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  CheckCircle2,
+  CircleDot,
+  Link2,
+  MoreHorizontal,
+  Pencil,
+  Reply,
+  Trash2,
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { formatDateTimeRelative } from '@/lib/format'
+import { formatDateTime, formatDateTimeRelative } from '@/lib/format'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
-import { MentionTextarea } from '@/components/ui/MentionTextarea'
+import { MarkdownEditor } from '@/components/ui/MarkdownEditor'
 import { CommentBody } from './CommentBody'
 import type { Comment, Member } from '@/payload-types'
 
@@ -19,6 +27,7 @@ export interface CommentItemProps {
   comment: Comment
   isThreadRoot: boolean
   resolved?: boolean
+  highlighted?: boolean
   onReply?: () => void
   onToggleResolved?: () => void
   onEdit: (body: string) => Promise<boolean>
@@ -30,6 +39,7 @@ export function CommentItem({
   comment,
   isThreadRoot,
   resolved,
+  highlighted,
   onReply,
   onToggleResolved,
   onEdit,
@@ -39,16 +49,27 @@ export function CommentItem({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const author = authorOf(comment)
   const pending = comment.id.startsWith('pending-')
+  const name = author?.name ?? 'Unknown'
+
+  useEffect(() => {
+    if (!editing) setSaveError(null)
+  }, [editing])
 
   const save = async () => {
-    if (!draft.trim()) return
+    if (!draft.trim()) {
+      setSaveError('A comment cannot be empty.')
+      return
+    }
     setSaving(true)
+    setSaveError(null)
     const ok = await onEdit(draft).catch(() => false)
     setSaving(false)
     if (ok) setEditing(false)
+    else setSaveError('That edit was not saved.')
   }
 
   const items: MenuItem[] = [
@@ -85,33 +106,55 @@ export function CommentItem({
   return (
     <article
       id={`comment-${comment.id}`}
-      className={cn('flex min-w-0 gap-2 scroll-mt-24', pending && 'opacity-60')}
+      tabIndex={-1}
+      className={cn(
+        'relative flex min-w-0 scroll-mt-28 gap-3 rounded-md outline-offset-4',
+        highlighted && 'comment-highlight',
+        pending && 'opacity-60',
+      )}
     >
       <Avatar
         name={author?.name ?? null}
         seed={author?.id}
-        size="lg"
+        size={isThreadRoot ? 'lg' : 'md'}
         decorative
         className="mt-0.5"
       />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="truncate text-base font-medium text-text" title={author?.name ?? 'Unknown'}>
-            {author?.name ?? 'Unknown'}
+          <span className="truncate text-base font-medium text-text" title={name}>
+            {name}
           </span>
-          <time className="shrink-0 text-xs text-text-muted" dateTime={comment.createdAt}>
-            {formatDateTimeRelative(comment.createdAt)}
-          </time>
+
+          <a
+            href={`#comment-${comment.id}`}
+            className={cn(
+              'shrink-0 rounded-xs text-xs text-text-muted',
+              'transition-colors duration-micro ease-standard hover:text-accent-text hover:underline',
+            )}
+            title={`${formatDateTime(comment.createdAt)}. Link to this comment.`}
+          >
+            <time dateTime={comment.createdAt}>
+              {formatDateTimeRelative(comment.createdAt)}
+            </time>
+          </a>
+
           {comment.editedAt && (
-            <span className="shrink-0 text-xs text-text-muted" title={formatDateTimeRelative(comment.editedAt)}>
+            <span
+              className="shrink-0 text-xs text-text-muted"
+              title={`Edited ${formatDateTime(comment.editedAt)}`}
+            >
               (edited)
             </span>
           )}
+
           {pending && <span className="shrink-0 text-xs text-text-muted">Posting…</span>}
 
-          {!pending && (
-            <div className="ml-auto flex shrink-0 items-center gap-1">
+          {!pending && !editing && (
+            <div
+              className="ml-auto flex shrink-0 items-center gap-0.5"
+            >
               {onReply && (
                 <Button variant="ghost" size="sm" icon={Reply} onClick={onReply}>
                   Reply
@@ -126,7 +169,7 @@ export function CommentItem({
                     size="sm"
                     iconOnly
                     icon={MoreHorizontal}
-                    aria-label={`Actions for the comment by ${author?.name ?? 'an unknown person'}`}
+                    aria-label={`Actions for the comment by ${name}`}
                   />
                 }
               />
@@ -135,23 +178,42 @@ export function CommentItem({
         </div>
 
         {editing ? (
-          <div className="flex flex-col gap-2">
-            <MentionTextarea
+          <div className="flex flex-col gap-1.5">
+            <MarkdownEditor
+              label={`Edit the comment by ${name}`}
               value={draft}
-              onChange={setDraft}
+              onChange={(next) => {
+                if (saveError) setSaveError(null)
+                setDraft(next)
+              }}
               onSubmit={save}
-              aria-label="Edit comment"
-              autoFocus
+              disabled={saving}
               rows={3}
+              autoFocus
+              invalid={Boolean(saveError)}
+              renderPreview={(body) => <CommentBody body={body} />}
+              actions={
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(false)}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" loading={saving} onClick={save}>
+                    Save
+                  </Button>
+                </>
+              }
             />
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button variant="primary" size="sm" loading={saving} onClick={save}>
-                Save
-              </Button>
-            </div>
+            <p
+              role="alert"
+              className={cn('text-xs text-danger-text', !saveError && 'hidden')}
+            >
+              {saveError}
+            </p>
           </div>
         ) : (
           <CommentBody body={comment.body} />
