@@ -31,5 +31,8 @@ npm-debug.log*
 # Misc
 *.tgz
 
+# Uploaded attachments (PR #20 port)
+/uploads/
+
 # TypeScript build info
 *.tsbuildinfo

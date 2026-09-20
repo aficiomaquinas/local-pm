@@ -99,6 +99,11 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=deployer --chown=nextjs:nodejs /out ./apps/web
 WORKDIR /app/apps/web
 
+# Upstream bfc8b57 port (PR #20 attachments): comment-attachment uploads write
+# here; docker-compose mounts the local-pm-uploads volume at this exact path.
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
+ENV LOCAL_PM_UPLOADS_DIR=/app/uploads
+
 USER nextjs
 
 EXPOSE 3010

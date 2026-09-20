@@ -172,7 +172,7 @@
       "slug": "activity-audit-trail",
       "title": "Activity and audit trail",
       "tier": 0,
-      "status": "todo",
+      "status": "done",
       "effort": "M",
       "summary": "Field-level change history on tickets, rendered as an activity feed in the detail view.",
       "rationale": "Already scoped in CREDITS.md as 'not adopted, strong candidate for a future release'. Build on Payload versions/drafts rather than a hand-rolled log.",
@@ -186,9 +186,9 @@
         "src/collections/Tickets.ts",
         "src/components/kanban/TicketDetailModal.tsx"
       ],
-      "startedAt": null,
-      "completedAt": null,
-      "notes": "See the CREDITS.md note: the upstream soft-delete guard 403s the project's own seed-runner. Do not repeat that."
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "See the CREDITS.md note: the upstream soft-delete guard 403s the project's own seed-runner. Do not repeat that. 2026-09-20: shipped as an append-only `activity` collection, NOT on Payload versions as the rationale above suggested. Versions store whole-document snapshots meant for draft and restore: rendering \"changed status from Todo to In Progress\" from them means diffing adjacent snapshots on every read, storing a full copy of the ticket on every save, and there is still no per-field attribution. An event row is what an audit trail actually is, is O(1) to write, pages cheaply, and is the shape tasks 20, 39 and 45 will query. One row per changed field, carrying action, field, from, to and actor. The collection is genuinely append-only: create, update and delete are denied to every caller and the hooks write with overrideAccess, so the API cannot forge or rewrite history (covered by an e2e test). Because a blanket guard here is exactly what 403d the seed-runner last time, the seeder was run against the e2e database to prove it: 14 tickets produced 14 created rows and no permission error. Values are stored as the display strings they read at the time rather than as ids, so history stays truthful after a member is renamed or a referenced ticket is deleted. sortOrder is deliberately untracked or every board drag would bury the feed; description records that it changed without storing its contents. Tracked: title, status, priority, assignee, project, team, dueDate, description, labels, blockedBy, subtasks. Presentation follows where Linear and Jira have converged (researched first): one chronological feed interleaved with comments, filtered All / Comments / History, with consecutive changes by the same person collapsed into one entry inside a 5 minute window. The section heading moved from \"Comments\" to \"Activity\" and the filter is a ?feed= URL parameter, so a filtered feed is shareable and survives a reload. Two existing comment specs were updated as a result: a fresh ticket now always has a created entry, so the All feed is never empty and \"No comments yet.\" correctly belongs to the Comments tab. Cascade: deleting a ticket deletes its activity alongside its comments. MCP parity: list_activity, with field filtering and pagination, documented in both READMEs; root README tool count corrected from 29 to 30. Counts toward task 48. Extended on request before merge: the comment thread is tracked too, as six further actions (commented, replied, edited, resolved, reopened, deleted) each carrying the comment text, with an edit keeping both sides. Researched first: Jira does NOT log comment edits or deletions in its History tab (JRACLOUD-94821, JRASERVER-12400 are the standing requests) and a third-party market exists to fill that gap, whose recurring criticism is that it still never shows what the text said, so the text is kept here. A deleted comment leaves its text behind, which is the point: the record has to outlive what it describes. A reply is recorded distinctly from a comment that opens a thread, and a save that does not change the body records nothing. In the All view the commented and replied entries are suppressed because the comment itself is right there; edited, resolved, reopened and deleted stay visible because they are not self-evident from the thread, and History shows everything. MCP list_activity gained an action filter and returns the related comment. Left out deliberately: no activity for attachment events (task 27 owns notifications), no per-entry undo, no project-level or cross-ticket feed, and no retention or archiving policy for very old rows. Follow-on worth filing if the feed grows: pagination beyond the 200-row page. npm run verify on a quiet machine: typecheck clean, 118 unit tests, 74 e2e passed. Shipped as commit 0da7cc3 on feat/activity-audit-trail. PR #22 (stacked on #20)."
     },
     {
       "id": 4,
@@ -774,20 +774,22 @@
       "slug": "attachments",
       "title": "File attachments",
       "tier": 4,
-      "status": "todo",
+      "status": "done",
       "effort": "S",
       "summary": "Attach files and images to tickets via a Payload upload collection.",
       "rationale": "`sharp` is already a dependency and Payload has uploads built in — this is close to configuration.",
       "dependsOn": [],
       "unblocks": [],
       "touches": [
-        "src/collections/",
-        "src/components/kanban/TicketDetailModal.tsx",
+        "src/collections/Attachments.ts",
+        "src/lib/attachments.ts",
+        "src/hooks/useUploads.ts",
+        "src/components/ui/MarkdownEditor.tsx",
         "docker-compose.yml"
       ],
-      "startedAt": null,
-      "completedAt": null,
-      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild."
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild. 2026-09-20: shipped on the comment surface. Drop, paste or pick files in the comment editor; a placeholder holds the caret position while a determinate progress row runs, then it is replaced by markdown carrying the name the user dropped and the URL the server saved. Images render inline, everything else becomes a link. Oversized or unaccepted files are refused client-side without touching the draft. Descriptions are task 55. Shipped as commit bfc8b57 on feat/attachments, PR #20. Also carried in that commit, because they shared the editor rewrite: a formatting toolbar (Write/Preview tabs, bold/italic/link/lists/quote/code, one tab stop walked with the arrow keys) and comment permalinks (#comment-<id> scrolls, highlights, and expands a resolved thread). Verified green on a quiet machine: typecheck clean, 90 unit tests, 64 e2e passed. An earlier red run was concurrent-session contention, not this change; see task 54."
     },
     {
       "id": 32,
@@ -1133,7 +1135,7 @@
       ],
       "startedAt": null,
       "completedAt": null,
-      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done. 2026-09-20: comments exposed through MCP as list_comments, add_comment, update_comment and delete_comment, with slimComment in the response slimming and both READMEs updated. Mention tokens are documented on add_comment so an agent can address a person by id."
+      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done. 2026-09-20: comments exposed through MCP as list_comments, add_comment, update_comment and delete_comment, with slimComment in the response slimming and both READMEs updated. Mention tokens are documented on add_comment so an agent can address a person by id. 2026-09-20: attachments (task 31) deliberately NOT exposed through MCP. Uploading a file over the tool channel means base64 in a JSON argument, which is the wrong shape for a stdio transport and would blow the token budget on any real file. An agent that needs to reference a file can already do so: attachments are plain markdown links in the comment body, so add_comment and update_comment can write and read them as they stand. Revisit if MCP grows a first-class binary resource channel."
     },
     {
       "id": 49,
@@ -1256,7 +1258,29 @@
       ],
       "startedAt": null,
       "completedAt": null,
-      "notes": "Surfaced while reviewing PR 12 and 13. Smoke specs pass reliably in isolation (npx playwright test e2e/smoke.spec.ts is 7/7 green), so the failure is about run duration or resource exhaustion, not correctness. Consider pinning reuseExistingServer to false, a local Mongo for e2e, and per-spec server health assertions."
+      "notes": "Surfaced while reviewing PR 12 and 13. Smoke specs pass reliably in isolation (npx playwright test e2e/smoke.spec.ts is 7/7 green), so the failure is about run duration or resource exhaustion, not correctness. Consider pinning reuseExistingServer to false, a local Mongo for e2e, and per-spec server health assertions. 2026-09-20 (from task 31): root cause is very likely CONCURRENT RUNS, not run duration or resource exhaustion. Two agent sessions running the suite in this repo at the same time collide on four shared resources, only one of which the task previously named: (1) port 3020, where reuseExistingServer:true outside CI makes the second run silently attach to the first run's server instead of failing; (2) the local-pm-e2e database; (3) test-results/, which Playwright CLEARS at startup, so the second run deletes the first run's trace and artifact files mid-test; (4) NEXT_DIST_DIR=.next-e2e, the shared dev build directory. Observed signatures, all of which look like a dying server but are not: \"EADDRINUSE :::3020\" with the whole suite skipped; failures whose only error is \"apiRequestContext.dispose: ENOENT ... test-results.playwright-artifacts-N\traces*.network\" with no assertion failure at all; and \"POST /api/projects 500\" caused by \"ENOENT ... .next-e2eserverapp-paths-manifest.json\", which fails beforeAll hooks and reports as 0ms test failures. Evidence: a contended full run gave 62 passed / 2 failed where both failures were artifact ENOENT rather than assertions, and the same accessibility spec passed in 8.1s on a re-run isolated to its own port and database. Note that isolating E2E_PORT and E2E_DATABASE_URI is NOT sufficient, because webServer.env hardcodes NEXT_DIST_DIR to the literal .next-e2e and does not read it from process.env. Suggested fix: set reuseExistingServer:false so a collision fails loudly instead of silently attaching; derive NEXT_DIST_DIR, outputDir and the database name from E2E_PORT (or a run id) so concurrent runs cannot share any of the four; and keep the local-Mongo idea, which removes the Atlas latency that makes the cold first /board compile (measured at 8.9s) run close to the 15s expect timeout."
+    },
+    {
+      "id": 55,
+      "slug": "attachments-on-descriptions",
+      "title": "Attachments on ticket descriptions",
+      "tier": 4,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Bring the drop/paste/select upload path from the comment editor to the ticket description field.",
+      "rationale": "Task 31 shipped uploads on the comment surface only. The description still uses RichTextEditor, a separate component with no upload path, so a user can attach a screenshot to a comment but not to the ticket it is about.",
+      "dependsOn": [
+        32
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/components/ui/RichTextEditor.tsx",
+        "src/components/tickets/TicketBody.tsx",
+        "src/components/tickets/TicketForm.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Deliberately deferred behind task 32: RichTextEditor is slated for replacement by Lexical, and wiring useUploads into the component that is about to be deleted is throwaway work. The upload plumbing is already generic (src/hooks/useUploads.ts, src/lib/attachments.ts) and is not coupled to comments."
     }
   ]
 }
