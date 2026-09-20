@@ -116,6 +116,16 @@ function slimTeam(team: unknown): SlimTeam | string | null {
   return null;
 }
 
+// Extract just the id of a parent comment, which is all a thread needs
+function slimComment(comment: unknown): string | null {
+  if (!comment) return null;
+  if (typeof comment === 'string') return comment;
+  if (typeof comment === 'object' && comment !== null) {
+    return (comment as Record<string, unknown>).id as string;
+  }
+  return null;
+}
+
 interface SlimMember {
   id: string;
   name: string;
@@ -884,6 +894,100 @@ const tools: Tool[] = [
       required: ['ticketId', 'title'],
     },
   },
+
+  // ============== COMMENTS ==============
+  {
+    name: 'list_comments',
+    description: 'List the comments on a ticket, oldest first. Threads are one level deep: a comment with a "parent" is a reply to the comment that opened that thread. Mentions appear in the body as @[Name](member:ID) and are also resolved into the "mentions" array.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket whose comments to list',
+        },
+        parentId: {
+          type: 'string',
+          description: 'Only return the replies in this thread. Omit for every comment on the ticket.',
+        },
+        includeResolved: {
+          type: 'boolean',
+          description: 'Include threads that have been marked resolved (default: true)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of comments to return (default: 50)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
+  {
+    name: 'add_comment',
+    description: 'Post a comment on a ticket, or a reply in an existing thread. The body is markdown. To mention someone write @[Their Name](member:THEIR_ID); use list_members to find the ID. Replies go on the comment that opened the thread, never on another reply.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket to comment on',
+        },
+        body: {
+          type: 'string',
+          description: 'Markdown body. Mentions use @[Name](member:ID).',
+        },
+        parentId: {
+          type: 'string',
+          description: 'The comment that opened the thread, to post this as a reply (optional)',
+        },
+        authorId: {
+          type: 'string',
+          description: 'Member ID to attribute this comment to (optional). Without it the comment is attributed to the signed-in account, or to nobody.',
+        },
+      },
+      required: ['ticketId', 'body'],
+    },
+  },
+  {
+    name: 'update_comment',
+    description: 'Edit a comment body, or resolve/reopen a thread. Only the comment that opened a thread can be resolved.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The comment ID',
+        },
+        body: {
+          type: 'string',
+          description: 'New markdown body',
+        },
+        resolved: {
+          type: 'boolean',
+          description: 'Mark the thread resolved (true) or reopen it (false)',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_comment',
+    description: 'Delete a comment. Deleting the comment that opened a thread deletes its replies too. This cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The comment ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
 ];
 
 // Tool handlers
@@ -1259,6 +1363,68 @@ async function handleToolCall(
       const subtasks = ticket.subtasks || [];
       subtasks.push({ title: args.title as string, completed: false });
       return apiRequest(`/tickets/${args.ticketId}`, 'PATCH', { subtasks });
+    }
+
+    // Comments
+    case 'list_comments': {
+      const limit = (args.limit as number) || 50;
+      const page = (args.page as number) || 1;
+
+      let query = `?limit=${limit}&page=${page}&depth=1&sort=createdAt`;
+      query += `&where[ticket][equals]=${args.ticketId}`;
+      if (args.parentId) {
+        query += `&where[parent][equals]=${args.parentId}`;
+      }
+      if (args.includeResolved === false) {
+        query += '&where[resolved][not_equals]=true';
+      }
+
+      const response = await apiRequest(`/comments${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const slimmed = response.docs.map(comment => ({
+        id: comment.id,
+        parent: slimComment(comment.parent),
+        body: comment.body,
+        author: slimMember(comment.author),
+        mentions: Array.isArray(comment.mentions)
+          ? comment.mentions.map(m => slimMember(m)).filter(Boolean)
+          : [],
+        resolved: Boolean(comment.resolved),
+        createdAt: comment.createdAt,
+        editedAt: comment.editedAt ?? null,
+      }));
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: slimmed,
+      });
+    }
+    case 'add_comment': {
+      return apiRequest('/comments', 'POST', {
+        ticket: args.ticketId,
+        body: args.body,
+        parent: args.parentId || null,
+        author: args.authorId || undefined,
+      });
+    }
+    case 'update_comment': {
+      const updates: Record<string, unknown> = {};
+      if (args.body !== undefined) updates.body = args.body;
+      if (args.resolved !== undefined) updates.resolved = args.resolved;
+      return apiRequest(`/comments/${args.id}`, 'PATCH', updates);
+    }
+    case 'delete_comment': {
+      return apiRequest(`/comments/${args.id}`, 'DELETE');
     }
 
     default:

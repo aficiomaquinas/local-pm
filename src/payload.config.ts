@@ -4,6 +4,7 @@ import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 
+import { Comments } from './collections/Comments'
 import { Members } from './collections/Members'
 import { Projects } from './collections/Projects'
 import { Teams } from './collections/Teams'
@@ -19,7 +20,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Projects, Teams, Members, Tickets],
+  collections: [Users, Projects, Teams, Members, Tickets, Comments],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

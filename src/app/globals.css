@@ -691,6 +691,23 @@
   overflow-x: auto;
 }
 
+.rich-text-content .mention {
+  display: inline;
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.comment-body {
+  font-size: var(--text-base);
+  line-height: 1.55;
+}
+.comment-body > * + * {
+  margin-top: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -18,6 +18,7 @@ import { MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPi
 import { TicketKey } from '@/components/ui/EntityMark'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { DependencyGraph } from '@/components/kanban/DependencyGraph'
+import { CommentsSection } from '@/components/comments/CommentsSection'
 import { SubtaskList } from './SubtaskList'
 import type { Project, Ticket } from '@/payload-types'
 
@@ -385,6 +386,8 @@ export function TicketBody({
           <DependencyGraph ticket={ticket} blockers={blockers} blocking={blocking} />
         </Section>
       )}
+
+      <CommentsSection ticketId={ticket.id} />
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-2 border-t border-border-subtle pt-4 text-xs text-text-muted max-sm:grid-cols-1">
         <div className="flex justify-between gap-2">
