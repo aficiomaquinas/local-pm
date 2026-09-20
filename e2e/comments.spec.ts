@@ -1,9 +1,17 @@
+import { mkdtempSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import path from 'path'
 import { test, expect, type APIRequestContext } from '@playwright/test'
 import { createTicket, seedProject, type SeedRefs } from './helpers'
 
 let refs: SeedRefs
 let memberId: string
 let memberName: string
+
+const PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 async function createComment(request: APIRequestContext, data: Record<string, unknown>) {
   return request.post('/api/comments?depth=0', { data })
@@ -330,5 +338,161 @@ test.describe('comments in the UI', () => {
     await page.goto(`/board?project=${refs.projectId}&ticket=${ticketId}`)
 
     await expect(page.getByText('Visible from the board').first()).toBeVisible()
+  })
+})
+
+test.describe('the comment editor', () => {
+  test('the toolbar formats the selection and the preview renders it', async ({
+    page,
+    request,
+  }) => {
+    const ticketId = await newTicket(request, 'UI toolbar')
+    await page.goto(`/tickets/${ticketId}`)
+
+    const composer = page.getByRole('textbox', { name: 'Write a comment' })
+    await composer.click()
+    await composer.fill('ship it')
+    await composer.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(0, 7))
+
+    await page.getByRole('button', { name: 'Bold' }).click()
+    await expect(composer).toHaveValue('**ship it**')
+
+    await page.getByRole('button', { name: 'Bulleted list' }).click()
+    await expect(composer).toHaveValue('- **ship it**')
+
+    await page.getByRole('tab', { name: 'Preview' }).click()
+    const preview = page.getByRole('tabpanel', { name: 'Preview' })
+    await expect(preview.locator('li strong')).toHaveText('ship it')
+  })
+
+  test('the formatting toolbar is one tab stop, walked with the arrow keys', async ({
+    page,
+    request,
+  }) => {
+    const ticketId = await newTicket(request, 'UI toolbar keyboard')
+    await page.goto(`/tickets/${ticketId}`)
+
+    const heading = page.getByRole('button', { name: 'Heading' })
+    await heading.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByRole('button', { name: 'Bold' })).toBeFocused()
+    await page.keyboard.press('End')
+    await expect(page.getByRole('button', { name: 'Attach files' })).toBeFocused()
+
+    await expect(page.getByRole('button', { name: 'Italic' })).toHaveAttribute('tabindex', '-1')
+  })
+
+  test('an attached image uploads and lands in the body as markdown', async ({
+    page,
+    request,
+  }) => {
+    const ticketId = await newTicket(request, 'UI attachment')
+    await page.goto(`/tickets/${ticketId}`)
+
+    const composer = page.getByRole('textbox', { name: 'Write a comment' })
+    await composer.click()
+    await composer.fill('Repro: ')
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'local-pm-e2e-'))
+    const file = path.join(dir, 'evidence.png')
+    writeFileSync(file, PIXEL_PNG)
+
+    await page.locator('input[type="file"]').first().setInputFiles(file)
+
+    await expect(composer).toHaveValue(/!\[evidence\.png\]\(\/api\/attachments\/file\/evidence/)
+
+    await page.getByRole('button', { name: 'Comment', exact: true }).click()
+
+    const image = page.locator('article[id^="comment-"] .comment-body img').first()
+    await expect(image).toBeVisible()
+    await expect(image).toHaveAttribute('alt', 'evidence.png')
+
+    const src = await image.getAttribute('src')
+    const served = await request.get(src!)
+    expect(served.ok()).toBeTruthy()
+  })
+
+  test('a file the app does not take is refused without disturbing the draft', async ({
+    page,
+    request,
+  }) => {
+    const ticketId = await newTicket(request, 'UI attachment refused')
+    await page.goto(`/tickets/${ticketId}`)
+
+    const composer = page.getByRole('textbox', { name: 'Write a comment' })
+    await composer.click()
+    await composer.fill('Still here')
+
+    const dir = mkdtempSync(path.join(tmpdir(), 'local-pm-e2e-'))
+    const file = path.join(dir, 'installer.exe')
+    writeFileSync(file, 'MZ')
+
+    await page.locator('input[type="file"]').first().setInputFiles(file)
+
+    await expect(page.getByText('installer.exe is not a file type this app accepts.')).toBeVisible()
+    await expect(composer).toHaveValue('Still here')
+
+    await page.getByRole('button', { name: 'Dismiss the error for installer.exe' }).click()
+    await expect(
+      page.getByText('installer.exe is not a file type this app accepts.'),
+    ).toHaveCount(0)
+  })
+})
+
+test.describe('linking to a comment', () => {
+  test('a shared link scrolls to the comment and highlights it', async ({ page, request }) => {
+    const ticketId = await newTicket(request, 'UI permalink')
+
+    let targetId = ''
+    for (let i = 0; i < 10; i += 1) {
+      const res = await createComment(request, { ticket: ticketId, body: `Comment number ${i}` })
+      if (i === 8) targetId = (await res.json()).doc.id
+    }
+
+    await page.goto(`/tickets/${ticketId}#comment-${targetId}`)
+
+    const target = page.locator(`#comment-${targetId}`)
+    await expect(target).toHaveClass(/comment-highlight/)
+    await expect(target).toBeInViewport()
+    await expect(page.getByText('Jumped to the comment this link points at.')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Clear highlight' }).click()
+    await expect(target).not.toHaveClass(/comment-highlight/)
+    expect(new URL(page.url()).hash).toBe('')
+  })
+
+  test('the timestamp links to the comment, and following it highlights it', async ({
+    page,
+    request,
+  }) => {
+    const ticketId = await newTicket(request, 'UI timestamp link')
+    const created = await createComment(request, { ticket: ticketId, body: 'Point at me' })
+    const commentId = (await created.json()).doc.id
+
+    await page.goto(`/tickets/${ticketId}`)
+
+    const link = page.locator(`#comment-${commentId} a[href="#comment-${commentId}"]`)
+    await expect(link).toBeVisible()
+    await link.click()
+
+    await expect(page.locator(`#comment-${commentId}`)).toHaveClass(/comment-highlight/)
+  })
+
+  test('a link into a resolved thread opens it', async ({ page, request }) => {
+    const ticketId = await newTicket(request, 'UI permalink resolved')
+    const root = await createComment(request, { ticket: ticketId, body: 'Closed question' })
+    const rootId = (await root.json()).doc.id
+    const reply = await createComment(request, {
+      ticket: ticketId,
+      body: 'Buried answer',
+      parent: rootId,
+    })
+    const replyId = (await reply.json()).doc.id
+    await request.patch(`/api/comments/${rootId}?depth=0`, { data: { resolved: true } })
+
+    await page.goto(`/tickets/${ticketId}#comment-${replyId}`)
+
+    await expect(page.getByText('Buried answer')).toBeVisible()
+    await expect(page.locator(`#comment-${replyId}`)).toHaveClass(/comment-highlight/)
   })
 })

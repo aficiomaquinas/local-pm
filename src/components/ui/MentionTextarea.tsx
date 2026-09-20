@@ -1,9 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
+import { AtSign } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { caretPoint, type CaretPoint } from '@/lib/caret'
-import { applyMention, findMentionQuery, wrapSelection, type MentionQuery } from '@/lib/mentions'
+import { applyMention, findMentionQuery, type MentionQuery } from '@/lib/mentions'
+import { wrapSelection, type Edit } from '@/lib/markdown-edit'
 import { useEntityQuery } from '@/hooks/useEntityQuery'
 import { Textarea } from './Field'
 import { Avatar } from './Avatar'
@@ -11,11 +22,20 @@ import type { Member } from '@/payload-types'
 
 const MAX_SUGGESTIONS = 6
 
+export type EditCommand = (text: string, start: number, end: number) => Edit
+
+export interface MentionTextareaHandle {
+  run: (command: EditCommand) => void
+  selection: () => { start: number; end: number }
+  focus: () => void
+}
+
 export interface MentionTextareaProps {
   id?: string
   value: string
   onChange: (value: string) => void
   onSubmit?: () => void
+  onPaste?: (event: React.ClipboardEvent<HTMLTextAreaElement>) => void
   placeholder?: string
   disabled?: boolean
   rows?: number
@@ -25,211 +45,259 @@ export interface MentionTextareaProps {
   'aria-describedby'?: string
 }
 
-export function MentionTextarea({
-  id,
-  value,
-  onChange,
-  onSubmit,
-  placeholder,
-  disabled,
-  rows = 3,
-  autoFocus,
-  className,
-  ...aria
-}: MentionTextareaProps) {
-  const listboxId = useId()
-  const ref = useRef<HTMLTextAreaElement | null>(null)
-  const [mention, setMention] = useState<MentionQuery | null>(null)
-  const [point, setPoint] = useState<CaretPoint | null>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
-  const pendingSelection = useRef<number | null>(null)
+function secondaryLabel(member: Member): string | null {
+  if (typeof member.team === 'object' && member.team?.name) return member.team.name
+  return member.email ?? null
+}
 
-  const { docs, loading } = useEntityQuery<Member>(mention?.query ?? '', {
-    collection: 'members',
-    searchField: 'name',
-    sort: 'name',
-    where: { active: 'true' },
-    pageSize: MAX_SUGGESTIONS,
-    enabled: mention !== null,
-  })
+export const MentionTextarea = forwardRef<MentionTextareaHandle, MentionTextareaProps>(
+  function MentionTextarea(
+    {
+      id,
+      value,
+      onChange,
+      onSubmit,
+      onPaste,
+      placeholder,
+      disabled,
+      rows = 3,
+      autoFocus,
+      className,
+      ...aria
+    },
+    handleRef,
+  ) {
+    const listboxId = useId()
+    const ref = useRef<HTMLTextAreaElement | null>(null)
+    const [mention, setMention] = useState<MentionQuery | null>(null)
+    const [point, setPoint] = useState<CaretPoint | null>(null)
+    const [activeIndex, setActiveIndex] = useState(0)
+    const pendingSelection = useRef<{ start: number; end: number } | null>(null)
 
-  const suggestions = docs.slice(0, MAX_SUGGESTIONS)
-  const open = mention !== null && suggestions.length > 0
+    const { docs, loading } = useEntityQuery<Member>(mention?.query ?? '', {
+      collection: 'members',
+      searchField: 'name',
+      sort: 'name',
+      where: { active: 'true' },
+      pageSize: MAX_SUGGESTIONS,
+      depth: 1,
+      enabled: mention !== null,
+    })
 
-  useEffect(() => {
-    setActiveIndex(0)
-  }, [mention?.query])
+    const suggestions = docs.slice(0, MAX_SUGGESTIONS)
+    const open = mention !== null && suggestions.length > 0
+    const empty = mention !== null && !loading && suggestions.length === 0
 
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (el && pendingSelection.current !== null) {
-      el.setSelectionRange(pendingSelection.current, pendingSelection.current)
-      pendingSelection.current = null
-      el.focus()
-    }
-  }, [value])
+    useEffect(() => {
+      setActiveIndex(0)
+    }, [mention?.query])
 
-  const syncMention = useCallback((el: HTMLTextAreaElement) => {
-    const found = findMentionQuery(el.value, el.selectionStart ?? 0)
-    setMention(found)
-    setPoint(found ? caretPoint(el, found.start) : null)
-  }, [])
+    const syncMention = useCallback((el: HTMLTextAreaElement) => {
+      const found = findMentionQuery(el.value, el.selectionStart ?? 0)
+      setMention(found)
+      setPoint(found ? caretPoint(el, found.start) : null)
+    }, [])
 
-  const insert = useCallback(
-    (member: Member) => {
+    useLayoutEffect(() => {
       const el = ref.current
-      if (!el || !mention) return
-      const next = applyMention(el.value, mention, { id: member.id, name: member.name })
-      pendingSelection.current = next.caret
+      if (el && pendingSelection.current !== null) {
+        const { start, end } = pendingSelection.current
+        pendingSelection.current = null
+        el.focus()
+        el.setSelectionRange(start, end)
+        syncMention(el)
+      }
+    }, [value, syncMention])
+
+    const run = useCallback(
+      (command: EditCommand) => {
+        const el = ref.current
+        if (!el) return
+        const next = command(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0)
+        pendingSelection.current = { start: next.start, end: next.end }
+        onChange(next.text)
+      },
+      [onChange],
+    )
+
+    useImperativeHandle(
+      handleRef,
+      () => ({
+        run,
+        selection: () => ({
+          start: ref.current?.selectionStart ?? 0,
+          end: ref.current?.selectionEnd ?? 0,
+        }),
+        focus: () => ref.current?.focus(),
+      }),
+      [run],
+    )
+
+    const closeMention = useCallback(() => {
       setMention(null)
       setPoint(null)
-      onChange(next.text)
-    },
-    [mention, onChange],
-  )
+    }, [])
 
-  const wrap = useCallback(
-    (before: string, after: string, placeholderText: string) => {
-      const el = ref.current
-      if (!el) return
-      const next = wrapSelection(
-        el.value,
-        el.selectionStart ?? 0,
-        el.selectionEnd ?? 0,
-        before,
-        after,
-        placeholderText,
-      )
-      pendingSelection.current = next.end
-      onChange(next.text)
-      requestAnimationFrame(() => el.setSelectionRange(next.start, next.end))
-    },
-    [onChange],
-  )
+    const insert = useCallback(
+      (member: Member) => {
+        const el = ref.current
+        if (!el || !mention) return
+        const next = applyMention(el.value, mention, { id: member.id, name: member.name })
+        pendingSelection.current = { start: next.caret, end: next.caret }
+        closeMention()
+        onChange(next.text)
+      },
+      [closeMention, mention, onChange],
+    )
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const mod = event.metaKey || event.ctrlKey
+    const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const mod = event.metaKey || event.ctrlKey
 
-    if (open) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault()
-        setActiveIndex((i) => (i + 1) % suggestions.length)
-        return
+      if (open) {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          setActiveIndex((i) => (i + 1) % suggestions.length)
+          return
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          setActiveIndex((i) => (i - 1 + suggestions.length) % suggestions.length)
+          return
+        }
+        if (event.key === 'Enter' || event.key === 'Tab') {
+          event.preventDefault()
+          event.stopPropagation()
+          insert(suggestions[activeIndex])
+          return
+        }
       }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault()
-        setActiveIndex((i) => (i - 1 + suggestions.length) % suggestions.length)
-        return
-      }
-      if (event.key === 'Enter' || event.key === 'Tab') {
+
+      if (mention !== null && event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
-        insert(suggestions[activeIndex])
+        closeMention()
         return
       }
-      if (event.key === 'Escape') {
+
+      if (mod && event.key === 'Enter') {
         event.preventDefault()
-        event.stopPropagation()
-        setMention(null)
-        setPoint(null)
+        onSubmit?.()
         return
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === 'b') {
+        event.preventDefault()
+        run((t, s, e) => wrapSelection(t, s, e, '**', '**', 'bold text'))
+        return
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === 'i') {
+        event.preventDefault()
+        run((t, s, e) => wrapSelection(t, s, e, '_', '_', 'italic text'))
+        return
+      }
+      if (mod && !event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        run((t, s, e) => wrapSelection(t, s, e, '[', '](https://)', 'link text'))
       }
     }
 
-    if (mod && event.key === 'Enter') {
-      event.preventDefault()
-      onSubmit?.()
-      return
-    }
-    if (mod && event.key.toLowerCase() === 'b') {
-      event.preventDefault()
-      wrap('**', '**', 'bold text')
-      return
-    }
-    if (mod && event.key.toLowerCase() === 'i') {
-      event.preventDefault()
-      wrap('_', '_', 'italic text')
-      return
-    }
-    if (mod && event.key.toLowerCase() === 'k') {
-      event.preventDefault()
-      wrap('[', '](https://)', 'link text')
-    }
-  }
+    return (
+      <div className="relative">
+        <Textarea
+          ref={ref}
+          id={id}
+          rows={rows}
+          value={value}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          placeholder={placeholder}
+          aria-controls={open ? listboxId : undefined}
+          aria-activedescendant={open ? `${listboxId}-${activeIndex}` : undefined}
+          className={cn('font-normal', className)}
+          onChange={(event) => {
+            onChange(event.target.value)
+            syncMention(event.currentTarget)
+          }}
+          onKeyUp={(event) => syncMention(event.currentTarget)}
+          onClick={(event) => syncMention(event.currentTarget)}
+          onBlur={closeMention}
+          onPaste={onPaste}
+          onKeyDown={onKeyDown}
+          {...aria}
+        />
 
-  return (
-    <div className="relative">
-      <Textarea
-        ref={ref}
-        id={id}
-        rows={rows}
-        value={value}
-        disabled={disabled}
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        aria-controls={open ? listboxId : undefined}
-        aria-activedescendant={open ? `${listboxId}-${activeIndex}` : undefined}
-        className={cn('font-normal', className)}
-        onChange={(event) => {
-          onChange(event.target.value)
-          syncMention(event.currentTarget)
-        }}
-        onKeyUp={(event) => syncMention(event.currentTarget)}
-        onClick={(event) => syncMention(event.currentTarget)}
-        onBlur={() => {
-          setMention(null)
-          setPoint(null)
-        }}
-        onKeyDown={onKeyDown}
-        {...aria}
-      />
+        {(open || empty) && point && (
+          <div
+            style={{ top: point.top + point.height + 4, left: Math.min(point.left, 220) }}
+            className={cn(
+              'absolute z-50 w-[min(300px,100%)] overflow-hidden',
+              'rounded-lg border border-border-subtle bg-overlay shadow-e2',
+              'animate-fade-in',
+            )}
+          >
+            {empty ? (
+              <p className="px-3 py-2.5 text-base text-text-muted">
+                Nobody matches &ldquo;{mention.query}&rdquo;
+              </p>
+            ) : (
+              <ul
+                id={listboxId}
+                role="listbox"
+                aria-label="People you can mention"
+                className="max-h-60 overflow-y-auto p-1"
+              >
+                {suggestions.map((member, index) => {
+                  const secondary = secondaryLabel(member)
+                  return (
+                    <li
+                      key={member.id}
+                      id={`${listboxId}-${index}`}
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      className={cn(
+                        'flex h-10 cursor-pointer items-center gap-2.5 rounded-sm px-2',
+                        'text-base text-text',
+                        index === activeIndex && 'bg-accent-subtle',
+                      )}
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        insert(member)
+                      }}
+                      onMouseEnter={() => setActiveIndex(index)}
+                    >
+                      <Avatar name={member.name} seed={member.id} size="lg" decorative />
+                      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                        <span className="truncate font-medium" title={member.name}>
+                          {member.name}
+                        </span>
+                        {secondary && (
+                          <span className="truncate text-xs text-text-muted" title={secondary}>
+                            {secondary}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
 
-      {open && point && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label="People you can mention"
-          style={{ top: point.top + point.height, left: Math.min(point.left, 240) }}
-          className={cn(
-            'absolute z-50 max-h-64 w-[min(280px,90%)] overflow-y-auto',
-            'rounded-lg border border-border-subtle bg-overlay p-1 shadow-e2',
-            'animate-fade-in',
-          )}
-        >
-          {suggestions.map((member, index) => (
-            <li
-              key={member.id}
-              id={`${listboxId}-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              className={cn(
-                'flex h-8 cursor-pointer items-center gap-2 rounded-sm px-2 text-base text-text',
-                index === activeIndex && 'bg-surface-hover',
-              )}
-              onMouseDown={(event) => {
-                event.preventDefault()
-                insert(member)
-              }}
-              onMouseEnter={() => setActiveIndex(index)}
-            >
-              <Avatar name={member.name} seed={member.id} size="md" decorative />
-              <span className="min-w-0 flex-1 truncate" title={member.name}>
-                {member.name}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+            <p className="flex items-center gap-1.5 border-t border-border-subtle px-2 py-1.5 text-2xs text-text-muted">
+              <AtSign className="size-3.5 shrink-0" aria-hidden />↑↓ to choose, Enter to insert,
+              Esc to dismiss
+            </p>
+          </div>
+        )}
 
-      <span className="sr-only" role="status">
-        {mention === null
-          ? ''
-          : open
-            ? `${suggestions.length} ${suggestions.length === 1 ? 'person' : 'people'} to mention. Use the arrow keys, then Enter to insert.`
-            : loading
-              ? ''
-              : `No people match ${mention.query}`}
-      </span>
-    </div>
-  )
-}
+        <span className="sr-only" role="status">
+          {mention === null
+            ? ''
+            : open
+              ? `${suggestions.length} ${suggestions.length === 1 ? 'person' : 'people'} to mention. Use the arrow keys, then Enter to insert.`
+              : loading
+                ? ''
+                : `No people match ${mention.query}`}
+        </span>
+      </div>
+    )
+  },
+)

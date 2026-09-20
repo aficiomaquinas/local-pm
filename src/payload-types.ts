@@ -73,6 +73,7 @@ export interface Config {
     members: Member;
     tickets: Ticket;
     comments: Comment;
+    attachments: Attachment;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -86,6 +87,7 @@ export interface Config {
     members: MembersSelect<false> | MembersSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     comments: CommentsSelect<false> | CommentsSelect<true>;
+    attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -444,6 +446,30 @@ export interface Comment {
   createdAt: string;
 }
 /**
+ * Files dropped, pasted, or picked inside a comment or a description.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments".
+ */
+export interface Attachment {
+  id: string;
+  /**
+   * What the image shows, for anyone who cannot see it.
+   */
+  alt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -490,6 +516,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'comments';
         value: string | Comment;
+      } | null)
+    | ({
+        relationTo: 'attachments';
+        value: string | Attachment;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -648,6 +678,24 @@ export interface CommentsSelect<T extends boolean = true> {
   editedAt?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments_select".
+ */
+export interface AttachmentsSelect<T extends boolean = true> {
+  alt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

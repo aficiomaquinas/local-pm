@@ -61,6 +61,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
+ENV LOCAL_PM_UPLOADS_DIR=/app/uploads
+
 USER nextjs
 
 EXPOSE 3010

@@ -774,20 +774,22 @@
       "slug": "attachments",
       "title": "File attachments",
       "tier": 4,
-      "status": "todo",
+      "status": "done",
       "effort": "S",
       "summary": "Attach files and images to tickets via a Payload upload collection.",
       "rationale": "`sharp` is already a dependency and Payload has uploads built in — this is close to configuration.",
       "dependsOn": [],
       "unblocks": [],
       "touches": [
-        "src/collections/",
-        "src/components/kanban/TicketDetailModal.tsx",
+        "src/collections/Attachments.ts",
+        "src/lib/attachments.ts",
+        "src/hooks/useUploads.ts",
+        "src/components/ui/MarkdownEditor.tsx",
         "docker-compose.yml"
       ],
-      "startedAt": null,
-      "completedAt": null,
-      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild."
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild. 2026-09-20: shipped on the comment surface. Drop, paste or pick files in the comment editor; a placeholder holds the caret position while a determinate progress row runs, then it is replaced by markdown carrying the name the user dropped and the URL the server saved. Images render inline, everything else becomes a link. Oversized or unaccepted files are refused client-side without touching the draft. Descriptions are task 55. Shipped as commit bfc8b57 on feat/attachments, PR #20. Also carried in that commit, because they shared the editor rewrite: a formatting toolbar (Write/Preview tabs, bold/italic/link/lists/quote/code, one tab stop walked with the arrow keys) and comment permalinks (#comment-<id> scrolls, highlights, and expands a resolved thread). Verified green on a quiet machine: typecheck clean, 90 unit tests, 64 e2e passed. An earlier red run was concurrent-session contention, not this change; see task 54."
     },
     {
       "id": 32,
@@ -1133,7 +1135,7 @@
       ],
       "startedAt": null,
       "completedAt": null,
-      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done. 2026-09-20: comments exposed through MCP as list_comments, add_comment, update_comment and delete_comment, with slimComment in the response slimming and both READMEs updated. Mention tokens are documented on add_comment so an agent can address a person by id."
+      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done. 2026-09-20: comments exposed through MCP as list_comments, add_comment, update_comment and delete_comment, with slimComment in the response slimming and both READMEs updated. Mention tokens are documented on add_comment so an agent can address a person by id. 2026-09-20: attachments (task 31) deliberately NOT exposed through MCP. Uploading a file over the tool channel means base64 in a JSON argument, which is the wrong shape for a stdio transport and would blow the token budget on any real file. An agent that needs to reference a file can already do so: attachments are plain markdown links in the comment body, so add_comment and update_comment can write and read them as they stand. Revisit if MCP grows a first-class binary resource channel."
     },
     {
       "id": 49,
@@ -1256,7 +1258,29 @@
       ],
       "startedAt": null,
       "completedAt": null,
-      "notes": "Surfaced while reviewing PR 12 and 13. Smoke specs pass reliably in isolation (npx playwright test e2e/smoke.spec.ts is 7/7 green), so the failure is about run duration or resource exhaustion, not correctness. Consider pinning reuseExistingServer to false, a local Mongo for e2e, and per-spec server health assertions."
+      "notes": "Surfaced while reviewing PR 12 and 13. Smoke specs pass reliably in isolation (npx playwright test e2e/smoke.spec.ts is 7/7 green), so the failure is about run duration or resource exhaustion, not correctness. Consider pinning reuseExistingServer to false, a local Mongo for e2e, and per-spec server health assertions. 2026-09-20 (from task 31): root cause is very likely CONCURRENT RUNS, not run duration or resource exhaustion. Two agent sessions running the suite in this repo at the same time collide on four shared resources, only one of which the task previously named: (1) port 3020, where reuseExistingServer:true outside CI makes the second run silently attach to the first run's server instead of failing; (2) the local-pm-e2e database; (3) test-results/, which Playwright CLEARS at startup, so the second run deletes the first run's trace and artifact files mid-test; (4) NEXT_DIST_DIR=.next-e2e, the shared dev build directory. Observed signatures, all of which look like a dying server but are not: \"EADDRINUSE :::3020\" with the whole suite skipped; failures whose only error is \"apiRequestContext.dispose: ENOENT ... test-results.playwright-artifacts-N\traces*.network\" with no assertion failure at all; and \"POST /api/projects 500\" caused by \"ENOENT ... .next-e2eserverapp-paths-manifest.json\", which fails beforeAll hooks and reports as 0ms test failures. Evidence: a contended full run gave 62 passed / 2 failed where both failures were artifact ENOENT rather than assertions, and the same accessibility spec passed in 8.1s on a re-run isolated to its own port and database. Note that isolating E2E_PORT and E2E_DATABASE_URI is NOT sufficient, because webServer.env hardcodes NEXT_DIST_DIR to the literal .next-e2e and does not read it from process.env. Suggested fix: set reuseExistingServer:false so a collision fails loudly instead of silently attaching; derive NEXT_DIST_DIR, outputDir and the database name from E2E_PORT (or a run id) so concurrent runs cannot share any of the four; and keep the local-Mongo idea, which removes the Atlas latency that makes the cold first /board compile (measured at 8.9s) run close to the 15s expect timeout."
+    },
+    {
+      "id": 55,
+      "slug": "attachments-on-descriptions",
+      "title": "Attachments on ticket descriptions",
+      "tier": 4,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Bring the drop/paste/select upload path from the comment editor to the ticket description field.",
+      "rationale": "Task 31 shipped uploads on the comment surface only. The description still uses RichTextEditor, a separate component with no upload path, so a user can attach a screenshot to a comment but not to the ticket it is about.",
+      "dependsOn": [
+        32
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/components/ui/RichTextEditor.tsx",
+        "src/components/tickets/TicketBody.tsx",
+        "src/components/tickets/TicketForm.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Deliberately deferred behind task 32: RichTextEditor is slated for replacement by Lexical, and wiring useUploads into the component that is about to be deleted is throwaway work. The upload plumbing is already generic (src/hooks/useUploads.ts, src/lib/attachments.ts) and is not coupled to comments."
     }
   ]
 }
