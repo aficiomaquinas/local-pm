@@ -41,8 +41,16 @@ describe('SPC-006 §9: dataManagementAccess — the single ACL delta', () => {
     expect(dataManagementAccess(reqWith({ roles: ['superadmin'] }) as never)).toBe(true)
   })
 
-  it('NEW: post-OIDC human doc, roles=[human] → deny (superadmin gate)', () => {
-    expect(dataManagementAccess(reqWith({ actorType: 'human', roles: ['human'] }) as never)).toBe(false)
+  it('NEW: post-OIDC human doc, roles=[human] + identity pair → deny (superadmin gate; REQ-006 discriminator)', () => {
+    // Mirror docs always carry the identity pair (§8 upsert) — the pair is
+    // what makes this shape claims-only. REQ-006: the identity-less twin is
+    // the LOCAL master (first-register defaults) and is allowed (see
+    // o4.req006-data-management).
+    expect(
+      dataManagementAccess(
+        reqWith({ actorType: 'human', roles: ['human'], identityIss: 'https://idp', identitySub: 'sub-1' }) as never,
+      ),
+    ).toBe(false)
   })
 
   it('legacy string role claim still works (unchanged precedence)', () => {
