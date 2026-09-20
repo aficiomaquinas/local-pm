@@ -66,7 +66,17 @@ export default buildConfig({
     // runtime reconnects on the compose-internal network (mongodb health
     // gate in docker-compose.yml ensures the app starts against a live DB).
     connectOptions: {
-      serverSelectionTimeoutMS: 3000,
+      // Bound mongoose's server selection so an unreachable mongodb fails fast
+      // and deterministically (30s default). Default 3s stays under the 5s
+      // vitest testTimeout — a stale DATABASE_URI in any test environment
+      // errors inside the test instead of hanging it — while comfortably
+      // covering runtime reconnects on the compose-internal network (mongodb
+      // health gate in docker-compose.yml ensures the app starts against a
+      // live DB). Upstream d7747b6 port: env-overridable for hosted clusters,
+      // where 3s is too short — set MONGO_SERVER_SELECTION_TIMEOUT_MS.
+      serverSelectionTimeoutMS: Number(
+        process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS ?? 3000,
+      ),
     },
   }),
   plugins: [
