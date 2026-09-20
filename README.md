@@ -1,48 +1,37 @@
-# Local PM
+# Local PM — Production Fork
 
-A lightweight, self-hosted project management tool with a built-in MCP (Model Context Protocol) server that enables AI assistants to manage your projects, tickets, and teams directly.
+A lightweight, self-hosted project management tool with a built-in MCP (Model Context
+Protocol) server that enables AI assistants to manage your projects, tickets, and teams
+directly.
+
+This repository is the **production fork** of
+[anaskasmi/local-pm](https://github.com/anaskasmi/local-pm), extended with OIDC
+authentication, audit history with actor attribution, and a full E2E testing stack.
+Everything below marked **fork addition** is production-proven here and documented under
+`docs/`.
 
 ## Features
 
-- **Kanban Board** - Drag-and-drop ticket management with Todo, In Progress, and Done columns
-- **Projects** - Organize work with customizable projects (icons, colors, prefixes)
-- **Teams** - Assign tickets to teams for better organization
-- **Tickets** - Full-featured tickets with:
-  - Priority levels (Urgent, High, Medium, Low)
-  - Due dates
-  - Custom labels with colors
-  - Subtasks with completion tracking
-  - Ticket dependencies (blocked by)
-  - Rich text descriptions
-- **MCP Server** - AI-native project management via Model Context Protocol
-- **Self-Hosted** - Your data stays on your machine
-- **Docker Ready** - One command deployment
+- **Kanban Board** — Drag-and-drop ticket management with Todo, In Progress, and Done columns
+- **Projects** — Organize work with customizable projects (icons, colors, prefixes)
+- **Teams** — Assign tickets to teams for better organization
+- **Tickets** — Full-featured tickets with priority levels, due dates, colored labels,
+  subtasks, dependencies (blocked-by), and rich text descriptions
+- **MCP Server** — AI-native project management via Model Context Protocol
+- **Self-Hosted** — Your data stays on your machine
+- **Docker Ready** — One command deployment
 
-## Screenshots
+### Fork additions
 
-### Kanban Board
-<p>
-  <img width="400" alt="Kanban Board" src="https://github.com/user-attachments/assets/d8f271ca-2503-41ea-9d7c-11aef09a9119" />
-  <img width="400" alt="Ticket Details" src="https://github.com/user-attachments/assets/de2b062a-ec17-43b1-8bbb-31b208100cbc" />
-</p>
-
-### Tickets
-<p>
-  <img width="400" alt="Ticket View" src="https://github.com/user-attachments/assets/b2265f8f-8358-42d2-9b81-df8798bf4be2" />
-  <img width="400" alt="Ticket Edit" src="https://github.com/user-attachments/assets/e04a0c77-6d74-477b-9ca1-a055ea9b0d47" />
-</p>
-
-### Projects
-<p>
-  <img width="400" alt="Projects List" src="https://github.com/user-attachments/assets/38bd0867-ed7e-43aa-bec2-c2ae469be01e" />
-  <img width="400" alt="Project Details" src="https://github.com/user-attachments/assets/2970d1ea-eeba-49a5-91de-5a9a538a6857" />
-</p>
-
-### Teams
-<p>
-  <img width="400" alt="Teams List" src="https://github.com/user-attachments/assets/3db9dcd7-d7f9-4117-a82c-308eaff1ced3" />
-  <img width="400" alt="Team Details" src="https://github.com/user-attachments/assets/20102c8e-c6e2-4bcb-bfcb-e1449914e275" />
-</p>
+| Feature | What it does | Docs |
+|---|---|---|
+| **OIDC authentication** (env-gated) | Dual-IdP: Dex (+PKCE) for humans, node-oidc-provider (`client_credentials`, RFC 8707 JWTs) for machines. Unset `OIDC_ISSUER` → local auth unchanged. Identity = `(iss, sub)` pair; Dex `groups` → superadmin mapping | [SPC-006](docs/specs/) |
+| **Audit history** | `/history` page + `/api/history` endpoint; every mutation attributed to `user:<email>` or `agent:<client-id>` with `actorType` | [SPC-005](docs/specs/) |
+| **Distinguished actors** | human / superadmin / agent actor types enforced end-to-end (UI, API, audit) | [REQ-002](docs/requirements/) |
+| **Auth visibility UI** | Anonymous: read-only banner that nudges (soft alarm pulse) when a mutation fails. Authenticated: sidebar user block with Admin / Log out menu | [REQ-005](docs/requirements/), [SPC-007](docs/specs/) |
+| **Hardened access control** | Soft-delete ACLs enforced on REST *and* server-rendered reads (`overrideAccess` parity) | [SPC-004](docs/specs/) |
+| **E2E testing stack** | Dedicated compose project with dual-IdP; 12-check smoke + 6-check OIDC suites; deployment compose untouched | [INV-E2E-STACK](docs/investigations/) |
+| **Reliability fixes** | Drag persistence under React concurrent; optimistic revert + explicit mutation errors (no silent failures) | [INV-AUTH-VIS](docs/investigations/) |
 
 ## Repository structure (pnpm workspace)
 
@@ -60,7 +49,7 @@ local-pm/
 ├── packages/
 │   └── mcp-server/            # @local-pm/mcp-server — MCP server package
 ├── Dockerfile                 # multi-stage build consuming the workspace
-└── docs/                      # specs, requirements, ADRs
+└── docs/                      # requirements, specs, investigations
 ```
 
 The two packages declare **no dependency on each other** — the only interface
@@ -79,7 +68,7 @@ pnpm mcp:build                        # same, via the root orchestrator script
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/local-pm.git
+git clone https://github.com/aficiomaquinas/local-pm.git
 cd local-pm
 ```
 
@@ -94,7 +83,7 @@ docker compose up -d --build
 
 1. Clone the repository and install dependencies (from the repo root):
 ```bash
-git clone https://github.com/your-username/local-pm.git
+git clone https://github.com/aficiomaquinas/local-pm.git
 cd local-pm
 pnpm install
 ```
@@ -103,6 +92,7 @@ pnpm install
 ```bash
 cp .env.example .env
 # Edit .env with your MongoDB connection string
+# Optional OIDC: OIDC_ISSUER, OIDC_AUDIENCE, OIDC_AGENT_CLIENT_IDS, OIDC_SCOPE
 ```
 
 3. Run the development server:
@@ -110,19 +100,21 @@ cp .env.example .env
 pnpm dev
 ```
 
-## MCP Server Setup
+## MCP Server
 
-The MCP (Model Context Protocol) server allows AI assistants like Claude to interact with your project management data directly.
+The MCP server exposes 18 tools for complete project management (projects, teams,
+tickets, board, subtasks — full table in the
+[upstream README](https://github.com/anaskasmi/local-pm#mcp-tools-reference)). With the
+fork's OIDC machine leg, agent mutations land in the audit history as first-class
+`agent` actors.
 
-### Building the MCP Server
+### Building
 
-From the repository root:
 ```bash
 pnpm install
 pnpm mcp:build
+# → packages/mcp-server/dist/index.js
 ```
-
-The compiled server lands in `packages/mcp-server/dist/index.js`.
 
 ### Adding to Claude Code (Global)
 
@@ -148,109 +140,60 @@ Add to your Claude Desktop config (`~/.claude/claude_desktop_config.json`):
 }
 ```
 
-## MCP Tools Reference
+## E2E Testing
 
-The MCP server exposes 18 tools for complete project management:
+A dedicated compose **project** (`-p local-pm-e2e`) spins up an isolated stack via an
+overlay chain — the deployment `docker-compose.yml` stays untouched:
 
-### Project Tools
-| Tool | Description |
-|------|-------------|
-| `list_projects` | List all projects with optional status filter |
-| `get_project` | Get detailed project information by ID |
-| `create_project` | Create a new project with name, prefix, icon, color |
-| `update_project` | Update project properties |
-| `delete_project` | Delete a project and optionally all its tickets |
-
-### Team Tools
-| Tool | Description |
-|------|-------------|
-| `list_teams` | List all teams |
-| `get_team` | Get detailed team information by ID |
-| `create_team` | Create a new team |
-| `update_team` | Update team properties |
-| `delete_team` | Delete a team |
-
-### Ticket Tools
-| Tool | Description |
-|------|-------------|
-| `list_tickets` | List tickets with filters (project, team, status, priority) |
-| `get_ticket` | Get detailed ticket information by ID |
-| `create_ticket` | Create a new ticket with full properties |
-| `update_ticket` | Update ticket properties |
-| `move_ticket` | Move ticket to different status column |
-| `delete_ticket` | Delete a ticket |
-
-### Board & Subtask Tools
-| Tool | Description |
-|------|-------------|
-| `get_board` | Get full Kanban board grouped by status |
-| `toggle_subtask` | Toggle subtask completion status |
-| `add_subtask` | Add a subtask to a ticket |
-
-## How MCP Enhances AI Development
-
-### What is MCP?
-
-Model Context Protocol (MCP) is an open standard that enables AI assistants to interact with external tools and data sources. Instead of just chatting, AI can take actions in the real world through well-defined tool interfaces.
-
-### Benefits for AI-Assisted Development
-
-1. **Persistent Task Tracking**
-   - AI can create tickets for features it's implementing
-   - Track progress across coding sessions
-   - Never lose context on what was done or what's pending
-
-2. **Structured Workflow**
-   - AI breaks down complex features into subtasks
-   - Sets priorities and due dates
-   - Manages dependencies between tickets
-
-3. **Project Organization**
-   - AI can organize work into logical projects
-   - Assign tasks to teams
-   - Maintain a clear overview of all work
-
-4. **Seamless Integration**
-   - Works directly in your AI coding workflow
-   - No context switching to external tools
-   - AI reads and updates tickets as it works
-
-### Example Workflow
-
-```
-You: "Create a project for our new authentication system"
-
-AI: [Creates project AUTH with relevant description]
-
-You: "Break down the login feature into tickets"
-
-AI: [Creates tickets for:
-  - AUTH-1: Implement login form UI
-  - AUTH-2: Create authentication API endpoint
-  - AUTH-3: Add JWT token handling
-  - AUTH-4: Implement session management
-  Sets AUTH-2 as blocking AUTH-3 and AUTH-4]
-
-You: "Start working on the login form"
-
-AI: [Moves AUTH-1 to In Progress, implements the feature,
-     then moves to Done when complete]
+```bash
+make e2e-up      # app (human leg :3012) + app-mcp (machine leg :3013) + dex-e2e (:5557) + oidc-dev (:5558) + mongo
+make e2e-test    # 12-check smoke suite + 6-check OIDC suite
+make e2e-down    # ⚠️ destructive: removes volumes (disposable DB by design)
+make e2e-logs    # tail the stack
 ```
 
-### Why Local & Self-Hosted?
+The OIDC suite validates discovery/JWKS for both issuers, the full PKCE login flow,
+`client_credentials` for the machine leg, and a real 403 for unauthenticated history
+access.
 
-- **Privacy**: Your project data stays on your machine
-- **Speed**: No network latency for AI tool calls
-- **Control**: Customize and extend as needed
-- **Offline**: Works without internet connection
+## Documentation conventions
+
+Requirements and specifications are first-class documents, kept separate:
+
+| Directory | Contents | Naming |
+|---|---|---|
+| `docs/requirements/` | Product requirements (what must be fulfilled) | `YYYY-MM-DD_REQ-NNN_slug.md` |
+| `docs/specs/` | Implementation specs (how it is fulfilled) | `YYYY-MM-DD_SPC-NNN_slug.md` |
+| `docs/investigations/` | Triage/root-cause reports with evidence | `YYYY-MM-DD_INV_slug.md` |
+
+Traceability chain: **REQ → SPC → code → investigation**, cross-linked.
+
+## Relationship with upstream
+
+- **Merged upstream**: PR [#1](https://github.com/anaskasmi/local-pm/pull/1)
+  (tsconfig build fix), PR [#5](https://github.com/anaskasmi/local-pm/pull/5)
+  (keyboard drag a11y).
+- **Open upstream**: PR [#12](https://github.com/anaskasmi/local-pm/pull/12) (missing
+  `(payload)/layout.tsx`), PR [#13](https://github.com/anaskasmi/local-pm/pull/13)
+  (read-ACL parity in RSC), RFC
+  [#15](https://github.com/anaskasmi/local-pm/issues/15) — fleet-level enhancements:
+  audit history (flagship), identity actors, OIDC + E2E stack (one package), MCP server.
+- **Sync policy**: upstream uses root `src/` + npm; this fork is a pnpm workspace. The
+  trees cannot be merged, so changes are **ported commit-wise** with full gates
+  (`pnpm verify` + browser verification) on both sides.
+- **Pending**: distinguished-actors feature PR sequenced after upstream PR #14
+  (assignees/people model) merges.
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15, React, Tailwind CSS
-- **Backend**: Payload CMS 3.0
+- **Frontend**: Next.js 15, React 19, Tailwind CSS
+- **Backend**: Payload CMS 3.x
 - **Database**: MongoDB
+- **Auth**: Payload local auth + OIDC (Dex, node-oidc-provider)
 - **MCP Server**: TypeScript, @modelcontextprotocol/sdk
+- **E2E**: Docker Compose overlay project + bash test suites
 
 ## Special Thanks
 
-Built with [Payload CMS](https://payloadcms.com/)
+Built with [Payload CMS](https://payloadcms.com/) — upstream project by
+[anaskasmi](https://github.com/anaskasmi/local-pm).
