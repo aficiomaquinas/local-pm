@@ -39,6 +39,12 @@ requirement is the **standing product behavior** that the fixes plus the UI must
   minimum separating *authentication required* (401/403) from *server error* — and, where
   an optimistic UI change was applied, must revert that change so the view matches server
   state.
+  > **Amendment (2026-09-20, operator decision):** the failure-class MESSAGING requirement
+  > is relaxed. The board's failed-move surface is the generic upstream-parity toast
+  > ("Couldn't move that ticket", PR#7 parity) plus the `localpm:auth-nudge` pulse on the
+  > anonymous banner for 401/403 — toast + nudge are judged sufficient by the operator,
+  > and the class-specific red error bar (which carried the explicit class text) was
+  > removed. Revert-to-origin on failure is unchanged. See SPC-007 §7.
 - **REQ-005.3 (No silent failures):** No mutation path may terminate with only a
   `console.error`. Early-return branches (e.g. drop colliders resolving to no-ops) must
   either reflect the outcome to the user or provably restore the pre-action state.

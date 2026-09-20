@@ -137,10 +137,6 @@ export function KanbanBoard({
     [TicketStatus.DONE]: false,
   })
   const [refreshing, setRefreshing] = useState(false)
-  // REQ-VIS-2/REQ-005.3: a failed move must not fail silently. The toast
-  // (upstream shell) names the failure transiently; this dismissible banner
-  // keeps it on screen until dismissed or the next successful move.
-  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const fetchedFor = useRef(
     JSON.stringify({
@@ -350,7 +346,6 @@ export function KanbanBoard({
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`)
       }
-      setMutationError(null)
       flash(ticketId)
     } catch (error) {
       revertTicket(ticketId, origin)
@@ -362,14 +357,10 @@ export function KanbanBoard({
       const httpStatus = Number(message.split(' ')[0])
       if (httpStatus === 401 || httpStatus === 403) {
         window.dispatchEvent(new CustomEvent(AUTH_NUDGE_EVENT))
-        setMutationError(
-          'Your session is not active — the move was not saved. Log in and try again.',
-        )
-      } else {
-        setMutationError(
-          `The move could not be saved${message ? ` (${message})` : ''}. The card was returned to its column.`,
-        )
       }
+      // Failure surface is the upstream PR#7 toast (v2.1 amendment: the
+      // class-specific red banner was judged redundant and removed). The
+      // optimistic move has already been reverted to the drag origin above.
       toast({
         tone: 'error',
         title: "Couldn't move that ticket",
@@ -596,27 +587,6 @@ export function KanbanBoard({
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
-
-      {/* REQ-VIS-2/REQ-005.3: explicit, dismissible failure notice for a
-          rejected move. Auth failures (401/403) also pulse the anonymous
-          banner via `localpm:auth-nudge`. */}
-      {mutationError && (
-        <div
-          role="alert"
-          data-testid="mutation-error"
-          className="flex items-start gap-2 border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-200"
-        >
-          <span className="min-w-0 flex-1">{mutationError}</span>
-          <button
-            type="button"
-            aria-label="Dismiss error"
-            onClick={() => setMutationError(null)}
-            className="flex-none text-red-200/70 transition-colors duration-micro hover:text-red-100"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       <ErrorBoundary region="The board">
         {!hasProjects ? (
