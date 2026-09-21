@@ -1,8 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-
-/** Drafts belong to this tab, so two concurrent compose sessions never overwrite each other. */
 export function useTicketDraft<T>(
   key: string | null,
   value: T,

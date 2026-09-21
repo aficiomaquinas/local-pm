@@ -17,7 +17,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { MousePointerSensor } from './sensors'
-import { statusMeta } from '@/lib/status'
+import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { statusIdOf } from '@/lib/workflow'
 import { appendTicketSearch } from '@/lib/ticket-search'
 import { useEntityDoc } from '@/hooks/useEntityDoc'
@@ -89,7 +89,13 @@ function createInitialColumnPagination(
   } else {
     for (const id of columnIds) {
       const count = initialTickets.filter((t) => statusIdOf(t) === id).length
-      state[id] = { page: 1, totalPages: 1, hasNextPage: false, totalDocs: count, loadedCount: count }
+      state[id] = {
+        page: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        totalDocs: count,
+        loadedCount: count,
+      }
     }
   }
   return state
@@ -112,15 +118,6 @@ export function KanbanBoard({
   hasProjects,
   initialColumnPagination,
 }: KanbanBoardProps) {
-  const columnIds = useMemo(() => statuses.map((entry) => entry.id), [statuses])
-  const statusById = useMemo(
-    () => new Map(statuses.map((entry) => [entry.id, entry])),
-    [statuses],
-  )
-  const labelFor = useCallback(
-    (id: string | null | undefined) => (id ? (statusById.get(id)?.name ?? 'Unknown') : 'Unknown'),
-    [statusById],
-  )
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -136,6 +133,23 @@ export function KanbanBoard({
     assigneeId: searchParams.get('assignee'),
     query: searchParams.get('q') ?? '',
   })
+  const { statusesForProject } = useWorkflow()
+  const activeStatuses = useMemo(
+    () => statusesForProject(filters.projectId),
+    [statusesForProject, filters.projectId],
+  )
+  const columnIds = useMemo(() => activeStatuses.map((entry) => entry.id), [activeStatuses])
+  const statusById = useMemo(
+    () => new Map(activeStatuses.map((entry) => [entry.id, entry])),
+    [activeStatuses],
+  )
+  const labelFor = useCallback(
+    (id: string | null | undefined) => (id ? (statusById.get(id)?.name ?? 'Unknown') : 'Unknown'),
+    [statusById],
+  )
+  const filterSignature = JSON.stringify(filters)
+  const activeFilterSignature = useRef(filterSignature)
+  activeFilterSignature.current = filterSignature
   const [openTicketId, setOpenTicketId] = useState<string | null>(searchParams.get('ticket'))
   const [updatedPanelTicket, setUpdatedPanelTicket] = useState<Ticket | null>(null)
 
@@ -159,6 +173,7 @@ export function KanbanBoard({
       teamId: searchParams.get('team'),
       assigneeId: searchParams.get('assignee'),
       query: searchParams.get('q') ?? '',
+      columns: columnIds,
     }),
   )
   const dragOriginRef = useRef<{ status: string; sortOrder: number } | null>(null)
@@ -248,6 +263,7 @@ export function KanbanBoard({
       teamId: filters.teamId,
       assigneeId: filters.assigneeId,
       query: filters.query,
+      columns: columnIds,
     })
     if (signature === fetchedFor.current && retry === 0) return
     fetchedFor.current = signature
@@ -320,7 +336,15 @@ export function KanbanBoard({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [filters.projectId, filters.teamId, filters.assigneeId, filters.query, toast, retry])
+  }, [
+    filters.projectId,
+    filters.teamId,
+    filters.assigneeId,
+    filters.query,
+    toast,
+    retry,
+    columnIds,
+  ])
 
   const sensors = useSensors(
     useSensor(MousePointerSensor, { activationConstraint: { distance: 8 } }),
@@ -363,10 +387,7 @@ export function KanbanBoard({
     setTimeout(() => setLandedTicketId((id) => (id === ticketId ? null : id)), 700)
   }
 
-  const revertTicket = (
-    ticketId: string,
-    origin: { status: string; sortOrder: number } | null,
-  ) => {
+  const revertTicket = (ticketId: string, origin: { status: string; sortOrder: number } | null) => {
     if (!origin) return
     const reverted = ticketsRef.current.map((ticket) =>
       ticket.id === ticketId
@@ -383,6 +404,7 @@ export function KanbanBoard({
     sortOrder: number,
     origin: { status: string; sortOrder: number } | null,
   ) => {
+    const startedFor = activeFilterSignature.current
     try {
       const response = await fetch(`/api/tickets/${ticketId}`, {
         method: 'PATCH',
@@ -393,7 +415,7 @@ export function KanbanBoard({
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`)
       }
-      if (origin && origin.status !== status) {
+      if (origin && origin.status !== status && startedFor === activeFilterSignature.current) {
         setColumnPagination((previous) => ({
           ...previous,
           [origin.status]: {
@@ -415,9 +437,9 @@ export function KanbanBoard({
       toast({
         tone: 'error',
         title: "Couldn't move that ticket",
-        description: `${ticket?.ticketId ?? 'The ticket'} is back in ${
-          labelFor(origin?.status)
-        }. ${error instanceof Error ? error.message : ''}`.trim(),
+        description: `${ticket?.ticketId ?? 'The ticket'} is back in ${labelFor(
+          origin?.status,
+        )}. ${error instanceof Error ? error.message : ''}`.trim(),
       })
     }
   }
@@ -427,7 +449,7 @@ export function KanbanBoard({
     setActiveTicket(ticket ?? null)
 
     dragOriginRef.current = ticket
-      ? { status: (statusIdOf(ticket) as string), sortOrder: ticket.sortOrder ?? 0 }
+      ? { status: statusIdOf(ticket) as string, sortOrder: ticket.sortOrder ?? 0 }
       : null
   }
 
@@ -435,7 +457,12 @@ export function KanbanBoard({
     const { active, over } = event
     if (!over) return
 
-    const next = applyDrop(ticketsRef.current, active.id as string, over.id as string, columnIds).tickets
+    const next = applyDrop(
+      ticketsRef.current,
+      active.id as string,
+      over.id as string,
+      columnIds,
+    ).tickets
     ticketsRef.current = next
     setTickets(next)
   }
@@ -463,47 +490,48 @@ export function KanbanBoard({
 
     if (!isRealMove(result, origin)) return
 
-    await persistMove(activeId, (result.status as string), result.sortOrder as number, origin)
+    await persistMove(activeId, result.status as string, result.sortOrder as number, origin)
   }
 
   const moveToColumn = async (ticket: Ticket, status: string) => {
-    const origin = { status: (statusIdOf(ticket) as string), sortOrder: ticket.sortOrder ?? 0 }
+    const origin = { status: statusIdOf(ticket) as string, sortOrder: ticket.sortOrder ?? 0 }
     const result = applyDrop(ticketsRef.current, ticket.id, status, columnIds)
     if (!isRealMove(result, origin)) return
 
     ticketsRef.current = result.tickets
     setTickets(result.tickets)
     setAnnouncement(
-      `${ticket.ticketId ?? ticket.title} moved to ${labelFor(status)} from ${
-        labelFor(origin.status)
-      }.`,
+      `${ticket.ticketId ?? ticket.title} moved to ${labelFor(status)} from ${labelFor(
+        origin.status,
+      )}.`,
     )
-    await persistMove(ticket.id, (result.status as string), result.sortOrder as number, origin)
+    await persistMove(ticket.id, result.status as string, result.sortOrder as number, origin)
   }
 
   const reorder = async (ticket: Ticket, direction: -1 | 1) => {
-    const column = ticketsByStatus((statusIdOf(ticket) as string))
+    const column = ticketsByStatus(statusIdOf(ticket) as string)
     const index = column.findIndex((t) => t.id === ticket.id)
     const neighbour = column[index + direction]
     if (!neighbour) return
 
-    const origin = { status: (statusIdOf(ticket) as string), sortOrder: ticket.sortOrder ?? 0 }
+    const origin = { status: statusIdOf(ticket) as string, sortOrder: ticket.sortOrder ?? 0 }
     const result = applyDrop(ticketsRef.current, ticket.id, neighbour.id, columnIds)
     if (!isRealMove(result, origin)) return
 
     ticketsRef.current = result.tickets
     setTickets(result.tickets)
     setAnnouncement(
-      `${ticket.ticketId ?? ticket.title} moved to position ${index + direction + 1} in ${
-        labelFor(origin.status)
-      }.`,
+      `${ticket.ticketId ?? ticket.title} moved to position ${index + direction + 1} in ${labelFor(
+        origin.status,
+      )}.`,
     )
-    await persistMove(ticket.id, (result.status as string), result.sortOrder as number, origin)
+    await persistMove(ticket.id, result.status as string, result.sortOrder as number, origin)
   }
 
   const loadMore = async (status: string) => {
     const column = columnPagination[status]
-    if (!column.hasNextPage || loadingColumns[status]) return
+    if (!column?.hasNextPage || loadingColumns[status]) return
+    const startedFor = activeFilterSignature.current
 
     setLoadingColumns((prev) => ({ ...prev, [status]: true }))
     try {
@@ -523,6 +551,7 @@ export function KanbanBoard({
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
       const data = await response.json()
 
+      if (startedFor !== activeFilterSignature.current) return
       if (data.docs?.length) {
         const existing = new Set(ticketsRef.current.map((t) => t.id))
         const fresh = (data.docs as Ticket[]).filter((t) => !existing.has(t.id))
@@ -605,22 +634,20 @@ export function KanbanBoard({
     onDragStart: ({ active }) => {
       const ticket = ticketsRef.current.find((t) => t.id === active.id)
       if (!ticket) return
-      return `Picked up ${ticket.ticketId ?? ticket.title}, "${ticket.title}", from list ${
-        statusMeta(ticket.status).label
-      }. Use the arrow keys to move it, Space to drop, Escape to cancel.`
+      return `Picked up ${ticket.ticketId ?? ticket.title}, "${ticket.title}", from list ${labelFor(
+        statusIdOf(ticket),
+      )}. Use the arrow keys to move it, Space to drop, Escape to cancel.`
     },
     onDragOver: ({ active, over }) => {
       const ticket = ticketsRef.current.find((t) => t.id === active.id)
       if (!ticket || !over) return
-      return `${ticket.ticketId ?? ticket.title} is over list ${
-        statusMeta(ticket.status).label
-      }.`
+      return `${ticket.ticketId ?? ticket.title} is over list ${labelFor(statusIdOf(ticket))}.`
     },
     onDragEnd: ({ active }) => {
       const ticket = ticketsRef.current.find((t) => t.id === active.id)
       const origin = dragOriginRef.current
       if (!ticket) return
-      return `Task "${ticket.title}" moved to list "${statusMeta(ticket.status).label}"${
+      return `Task "${ticket.title}" moved to list "${labelFor(statusIdOf(ticket))}"${
         origin ? ` from "${labelFor(origin.status)}"` : ''
       }.`
     },
@@ -635,7 +662,10 @@ export function KanbanBoard({
       <BoardToolbar
         filters={filters}
         onChange={updateFilters}
-        resultCount={columnIds.reduce((count, status) => count + (columnPagination[status]?.totalDocs ?? 0), 0)}
+        resultCount={columnIds.reduce(
+          (count, status) => count + (columnPagination[status]?.totalDocs ?? 0),
+          0,
+        )}
         hasProjects={hasProjects}
         refreshing={refreshing}
         onCreateTicket={() => columnIds[0] && createTicket(columnIds[0])}

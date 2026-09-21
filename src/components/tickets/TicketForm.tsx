@@ -116,10 +116,11 @@ export function TicketForm({
   returnTo?: string
 }) {
   const { statusesForProject } = useWorkflow()
-  const workflow = statusesForProject(
-    defaultProjectId ?? (typeof ticket?.project === 'string' ? ticket.project : ticket?.project?.id),
+  const initialWorkflow = statusesForProject(
+    defaultProjectId ??
+      (typeof ticket?.project === 'string' ? ticket.project : ticket?.project?.id),
   )
-  const fallbackStatusId = workflow[0]?.id ?? ''
+  const fallbackStatusId = initialWorkflow[0]?.id ?? ''
 
   const router = useRouter()
   const { toast } = useToast()
@@ -133,6 +134,7 @@ export function TicketForm({
       }
 
   const [form, setForm] = useState<FormState>(initialState)
+  const workflow = statusesForProject(form.projectId)
   const [initial] = useState<FormState>(initialState)
   const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({})
   const [submitAttempted, setSubmitAttempted] = useState(false)
@@ -408,14 +410,7 @@ export function TicketForm({
 
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-text-muted">Description</span>
-            <div
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault()
-                  ;(e.currentTarget.closest('form') as HTMLFormElement | null)?.requestSubmit()
-                }
-              }}
-            >
+            <div>
               <RichTextEditor
                 value={form.description}
                 onChange={(value) => set('description', value)}
@@ -437,7 +432,14 @@ export function TicketForm({
                   aria-label="Project"
                   aria-describedby={describedBy}
                   onChange={(next, doc) => {
-                    set('projectId', next)
+                    const nextWorkflow = statusesForProject(next)
+                    setForm((current) => ({
+                      ...current,
+                      projectId: next,
+                      status: nextWorkflow.some((entry) => entry.id === current.status)
+                        ? current.status
+                        : (nextWorkflow[0]?.id ?? ''),
+                    }))
                     setSelectedProject(doc)
                     setTouched((t) => ({ ...t, projectId: true }))
                   }}

@@ -1,6 +1,4 @@
 import type { Where } from 'payload'
-
-/** Keep searches by title or human-readable key identical on server and client. */
 export function ticketSearchWhere(query: string): Where {
   const value = query.trim()
   return value ? { or: [{ title: { like: value } }, { ticketId: { like: value } }] } : {}

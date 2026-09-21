@@ -3,11 +3,71 @@ import { seedProject, createTicket, type SeedRefs } from './helpers'
 
 let refs: SeedRefs
 let ticket: { id: string; ticketId: string; title: string }
+let customStatusId: string
 test.beforeAll(async ({ request }) => {
   refs = await seedProject(request, 'UX')
   const response = await createTicket(request, refs, { title: 'A clear next step' })
   expect(response.ok(), 'The test ticket must be created successfully').toBe(true)
   ticket = (await response.json()).doc
+  const customStatus = await request.post('/api/statuses', {
+    data: { name: 'UX Review', type: 'STARTED', order: 2500, project: refs.projectId },
+  })
+  expect(customStatus.ok()).toBe(true)
+  customStatusId = (await customStatus.json()).doc.id
+})
+
+test('saved project views restore custom workflow columns without reloading', async ({ page }) => {
+  await page.goto('/board?project=' + refs.projectId)
+  await expect(page.getByRole('heading', { name: 'UX Review', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Saved views', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Save or manage views' }).click()
+  await page.getByRole('textbox', { name: 'View name' }).fill('Review workflow')
+  await page.getByRole('button', { name: 'Save current view' }).click()
+  await page.getByRole('button', { name: 'Clear all' }).click()
+  await expect(page.getByRole('heading', { name: 'UX Review', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Saved views', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Review workflow' }).click()
+  await expect(page.getByRole('heading', { name: 'UX Review', exact: true })).toBeVisible()
+})
+
+test('a draft restores its custom status and submitting from the editor creates one ticket', async ({
+  page,
+  request,
+}) => {
+  const title = 'Review draft ' + refs.prefix
+  await page.goto('/tickets/new?project=' + refs.projectId + '&status=' + customStatusId)
+  await page.getByRole('textbox', { name: 'Title' }).fill(title)
+  await expect(page.getByText('Draft saved in this tab')).toBeVisible()
+  await page
+    .getByRole('navigation', { name: 'Main', exact: true })
+    .getByRole('link', { name: /Board/ })
+    .click()
+  await page.goto('/tickets/new?project=' + refs.projectId)
+  await page.getByRole('button', { name: 'Restore draft' }).click()
+  await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toContainText(
+    'UX Review',
+  )
+  await page.locator('.ql-editor').fill('Ready for another look.')
+  await page.locator('.ql-editor').press('Control+Enter')
+  await expect(page).toHaveURL(/\/board/)
+  const result = await request.get('/api/tickets', {
+    params: { 'where[title][equals]': title, depth: 0 },
+  })
+  const data = await result.json()
+  expect(data.totalDocs).toBe(1)
+  expect(data.docs[0].status).toBe(customStatusId)
+})
+
+test('ticket-list custom status filters survive reload and Back', async ({ page }) => {
+  await page.goto('/projects/' + refs.projectId + '?tab=tickets')
+  await page.getByRole('combobox', { name: 'Filter by status' }).click()
+  await page.getByRole('option', { name: 'UX Review', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp('ticketStatus=' + customStatusId))
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Filter by status' })).toContainText('UX Review')
+  await page.getByRole('button', { name: 'Remove status filter' }).click()
+  await page.goBack()
+  await expect(page.getByRole('combobox', { name: 'Filter by status' })).toContainText('UX Review')
 })
 
 test('ticket keys work in board search, reloads, and global search', async ({ page }) => {
