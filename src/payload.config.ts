@@ -18,6 +18,9 @@ import { Tickets } from './collections/Tickets'
 import { Users } from './collections/Users'
 import { CYCLE_CRON, CYCLE_QUEUE, cycleCronEnabled, cycleRolloverTask } from './jobs/cycle-rollover'
 
+const optionalNumber = (value: string | undefined): number | undefined =>
+  value === undefined || value.trim() === '' ? undefined : Number(value)
+
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
@@ -57,6 +60,8 @@ export default buildConfig({
     url: process.env.DATABASE_URI || '',
     connectOptions: {
       serverSelectionTimeoutMS: Number(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS ?? 10000),
+      minPoolSize: optionalNumber(process.env.MONGO_MIN_POOL_SIZE),
+      maxPoolSize: optionalNumber(process.env.MONGO_MAX_POOL_SIZE),
     },
   }),
 })

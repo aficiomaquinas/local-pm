@@ -1,25 +1,39 @@
+import type { FullConfig } from '@playwright/test'
+import type { Payload } from 'payload'
 import dotenv from 'dotenv'
+import { resolveRunContext, type RunContext } from './run-context'
 
 dotenv.config()
 
-function withDatabase(uri: string, dbName: string): string {
-  const [base, query] = uri.split('?')
-  const trimmed = base.replace(/\/[^/]*$/, '')
-  return `${trimmed}/${dbName}${query ? `?${query}` : ''}`
+function runContextOf(config?: FullConfig): RunContext {
+  const fromMetadata = config?.metadata?.run as RunContext | undefined
+  return fromMetadata ?? resolveRunContext()
 }
 
-export default async function globalSetup() {
-  const sourceUri = process.env.DATABASE_URI ?? 'mongodb://localhost:27018/local-pm'
-  const e2eUri =
-    process.env.E2E_DATABASE_URI ??
-    withDatabase(sourceUri, 'local-pm-e2e-' + (process.env.E2E_PORT ?? 3020))
+async function resetDatabase(payload: Payload): Promise<number> {
+  const db = payload.db.connection.db
+  if (!db) throw new Error('E2E reset could not reach the Mongo connection.')
 
-  if (e2eUri === sourceUri) {
+  const collections = await db.collections()
+  let cleared = 0
+
+  for (const collection of collections) {
+    const { deletedCount } = await collection.deleteMany({})
+    cleared += deletedCount ?? 0
+  }
+
+  return cleared
+}
+
+export default async function globalSetup(config?: FullConfig) {
+  const run = runContextOf(config)
+
+  if (run.databaseUri === run.sourceUri) {
     throw new Error('Refusing to migrate the working database from the e2e setup.')
   }
 
   const originalUri = process.env.DATABASE_URI
-  process.env.DATABASE_URI = e2eUri
+  process.env.DATABASE_URI = run.databaseUri
 
   try {
     const { getPayload } = await import('payload')
@@ -28,6 +42,12 @@ export default async function globalSetup() {
     const { migrateInlineLabels } = await import('../src/migrations/shared-labels')
 
     const payload = await getPayload({ config })
+
+    if (process.env.E2E_KEEP_DATABASE !== 'true') {
+      const cleared = await resetDatabase(payload)
+      console.log(`[e2e] port ${run.port} · ${run.databaseName} · cleared ${cleared} documents`)
+    }
+
     const report = await migrateTicketStatuses(payload)
 
     if (report.ticketsUnresolved.length > 0) {

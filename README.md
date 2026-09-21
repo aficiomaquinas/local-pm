@@ -311,10 +311,24 @@ npm run verify      # all three
 ```
 
 E2E tests run against their **own database** (`local-pm-e2e-<port>`, derived from
-`DATABASE_URI`). Set `E2E_PORT` to choose a port (default 3020). The build directory
-and test artifacts also include the port, and the suite refuses to attach to an
-already-running server. Use separate worktrees and different ports for concurrent
-sessions. First run needs browsers:
+`DATABASE_URI`), never your working one. Everything a run touches is keyed to its
+port — database, build directory (`.next-e2e-<port>`) and artifacts
+(`test-results-<port>`) — and the port is claimed by scanning upward from 3020 for
+a free one. Concurrent runs therefore isolate themselves with no setup, and the
+suite never attaches to an already-running server.
+
+Each run starts from an empty database: `global-setup` clears every collection
+before the migrations seed it, so test data cannot accumulate between runs.
+
+| Variable | Default | Use |
+|---|---|---|
+| `E2E_PORT` | first free from 3020 | Pin the port, and with it the database, build dir and artifacts |
+| `E2E_PORT_BASE` | `3020` | Where the scan starts |
+| `E2E_PORT_SCAN_LIMIT` | `20` | How many ports the scan tries |
+| `E2E_DATABASE_URI` | derived from `DATABASE_URI` | Point the suite at a specific database |
+| `E2E_KEEP_DATABASE` | unset | Set to `true` to keep the previous run's data |
+
+First run needs browsers:
 
 ```bash
 npx playwright install chromium
