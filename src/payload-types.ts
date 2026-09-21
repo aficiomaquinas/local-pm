@@ -72,6 +72,8 @@ export interface Config {
     teams: Team;
     members: Member;
     statuses: Status;
+    'label-groups': LabelGroup;
+    labels: Label;
     tickets: Ticket;
     comments: Comment;
     attachments: Attachment;
@@ -88,6 +90,8 @@ export interface Config {
     teams: TeamsSelect<false> | TeamsSelect<true>;
     members: MembersSelect<false> | MembersSelect<true>;
     statuses: StatusesSelect<false> | StatusesSelect<true>;
+    'label-groups': LabelGroupsSelect<false> | LabelGroupsSelect<true>;
+    labels: LabelsSelect<false> | LabelsSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     comments: CommentsSelect<false> | CommentsSelect<true>;
     attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
@@ -358,6 +362,64 @@ export interface Status {
   createdAt: string;
 }
 /**
+ * Optional clusters that labels can belong to, such as Area or Kind
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "label-groups".
+ */
+export interface LabelGroup {
+  id: string;
+  /**
+   * The heading this group gets in the label picker
+   */
+  name: string;
+  /**
+   * Stable identifier used by the API and the MCP server. Derived from the name.
+   */
+  key: string;
+  /**
+   * Position in the picker, ascending. Gaps are intentional.
+   */
+  order: number;
+  /**
+   * Optional hint shown beside the group heading
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Shared labels that any ticket in the workspace can carry
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "labels".
+ */
+export interface Label {
+  id: string;
+  /**
+   * What the label reads as on a card. One or two words.
+   */
+  name: string;
+  /**
+   * Stable identifier used by the API and the MCP server. Derived from the name.
+   */
+  key: string;
+  /**
+   * The swatch shown beside the name. The palette is fixed so colour stays mappable to meaning.
+   */
+  color: 'SLATE' | 'INDIGO' | 'BLUE' | 'GREEN' | 'AMBER' | 'RED';
+  /**
+   * Optional. Groups cluster related labels in the picker.
+   */
+  group?: (string | null) | LabelGroup;
+  /**
+   * Optional hint shown when picking this label
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Individual work items within projects
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -416,15 +478,9 @@ export interface Ticket {
    */
   blockedBy?: (string | Ticket)[] | null;
   /**
-   * Labels for categorization
+   * Shared labels drawn from the workspace label set
    */
-  labels?:
-    | {
-        name: string;
-        color?: string | null;
-        id?: string | null;
-      }[]
-    | null;
+  labels?: (string | Label)[] | null;
   /**
    * When this ticket should be completed
    */
@@ -589,6 +645,14 @@ export interface PayloadLockedDocument {
         value: string | Status;
       } | null)
     | ({
+        relationTo: 'label-groups';
+        value: string | LabelGroup;
+      } | null)
+    | ({
+        relationTo: 'labels';
+        value: string | Label;
+      } | null)
+    | ({
         relationTo: 'tickets';
         value: string | Ticket;
       } | null)
@@ -728,6 +792,31 @@ export interface StatusesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "label-groups_select".
+ */
+export interface LabelGroupsSelect<T extends boolean = true> {
+  name?: T;
+  key?: T;
+  order?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "labels_select".
+ */
+export interface LabelsSelect<T extends boolean = true> {
+  name?: T;
+  key?: T;
+  color?: T;
+  group?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "tickets_select".
  */
 export interface TicketsSelect<T extends boolean = true> {
@@ -740,13 +829,7 @@ export interface TicketsSelect<T extends boolean = true> {
   team?: T;
   assignee?: T;
   blockedBy?: T;
-  labels?:
-    | T
-    | {
-        name?: T;
-        color?: T;
-        id?: T;
-      };
+  labels?: T;
   dueDate?: T;
   subtasks?:
     | T

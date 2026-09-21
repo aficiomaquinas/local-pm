@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url'
 import { Activity } from './collections/Activity'
 import { Attachments } from './collections/Attachments'
 import { Comments } from './collections/Comments'
+import { LabelGroups } from './collections/LabelGroups'
+import { Labels } from './collections/Labels'
 import { Members } from './collections/Members'
 import { Projects } from './collections/Projects'
 import { Statuses } from './collections/Statuses'
@@ -29,6 +31,8 @@ export default buildConfig({
     Teams,
     Members,
     Statuses,
+    LabelGroups,
+    Labels,
     Tickets,
     Comments,
     Attachments,
