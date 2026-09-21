@@ -45,11 +45,18 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
         },
       })
 
-    const [total, todo, inProgress, done] = await Promise.all([
+    const [total, todo, inProgress, done, initiatives] = await Promise.all([
       countFor(),
       countFor(idsOfType(StatusType.BACKLOG, StatusType.UNSTARTED)),
       countFor(idsOfType(StatusType.STARTED)),
       countFor(idsOfType(StatusType.COMPLETED, StatusType.CANCELLED)),
+      payload.find({
+        collection: 'initiatives',
+        where: { projects: { in: [id] } },
+        limit: 20,
+        depth: 0,
+        sort: 'name',
+      }),
     ])
 
     return (
@@ -61,6 +68,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
           inProgress: inProgress.totalDocs,
           done: done.totalDocs,
         }}
+        initiatives={initiatives.docs}
         initialTab={tab === 'tickets' || tab === 'cycles' ? tab : 'overview'}
       />
     )

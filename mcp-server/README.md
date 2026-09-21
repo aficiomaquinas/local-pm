@@ -13,6 +13,15 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `update_project` - Update an existing project
 - `delete_project` - Delete a project
 
+### Initiatives
+- `list_initiatives` - List initiatives, optionally filtered by status or by a project they contain
+- `get_initiative` - Get an initiative with its projects and rolled-up ticket progress
+- `create_initiative` - Create an initiative
+- `update_initiative` - Update an initiative
+- `delete_initiative` - Delete an initiative, keeping its projects
+- `add_project_to_initiative` - Add one project without touching the rest
+- `remove_project_from_initiative` - Remove one project without touching the rest
+
 ### Teams
 - `list_teams` - List all teams with pagination
 - `get_team` - Get team details by ID
@@ -348,6 +357,50 @@ from the percentage. Fails if the ticket is not marked as an epic.
 
 **Parameters:**
 - `id` (string, required): Ticket ID of the epic
+
+### list_initiatives
+Lists initiatives — the layer above projects. Returns `projectCount` on every row.
+
+**Parameters:**
+- `status` (string, optional): planned, active, completed, cancelled
+- `project` (string, optional): only initiatives containing this project id
+- `limit` (number, optional), `page` (number, optional)
+- `include` (array, optional): description, lead, projects, createdAt, updatedAt
+
+### get_initiative
+Gets an initiative with its projects and rolled-up ticket progress. Cancelled tickets stay in
+the total but leave the denominator, so the percentage reflects work that can still be finished.
+
+**Parameters:**
+- `id` (string, required): Initiative ID
+
+### create_initiative
+Creates an initiative.
+
+**Parameters:**
+- `name` (string, required)
+- `description` (string, optional), `status` (string, optional), `projects` (array, optional)
+- `lead` (string, optional), `targetDate` (string, optional), `icon` (string, optional), `color` (string, optional)
+
+### update_initiative
+Updates an initiative. Passing `projects` replaces the whole list.
+
+**Parameters:**
+- `id` (string, required), plus any field accepted by `create_initiative`
+
+### delete_initiative
+Deletes an initiative. The projects inside it are kept.
+
+**Parameters:**
+- `id` (string, required): Initiative ID
+
+### add_project_to_initiative / remove_project_from_initiative
+Changes one membership, leaving the initiative's other projects alone. A project can belong to
+several initiatives.
+
+**Parameters:**
+- `id` (string, required): Initiative ID
+- `project` (string, required): Project ID
 
 ### move_ticket
 Moves a ticket to a different status.

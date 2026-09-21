@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     projects: Project;
+    initiatives: Initiative;
     teams: Team;
     members: Member;
     statuses: Status;
@@ -89,6 +90,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
+    initiatives: InitiativesSelect<false> | InitiativesSelect<true>;
     teams: TeamsSelect<false> | TeamsSelect<true>;
     members: MembersSelect<false> | MembersSelect<true>;
     statuses: StatusesSelect<false> | StatusesSelect<true>;
@@ -302,6 +304,112 @@ export interface Project {
   createdAt: string;
 }
 /**
+ * A layer above projects that rolls several of them up into one objective
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiatives".
+ */
+export interface Initiative {
+  id: string;
+  /**
+   * What this initiative is trying to achieve
+   */
+  name: string;
+  /**
+   * The objective, its scope, and how success is judged
+   */
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Where this initiative sits in its life
+   */
+  status: 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  /**
+   * The projects this initiative rolls up. A project can belong to several initiatives.
+   */
+  projects?: (string | Project)[] | null;
+  /**
+   * The person accountable for this initiative
+   */
+  lead?: (string | null) | Member;
+  /**
+   * The date this initiative is aiming at
+   */
+  targetDate?: string | null;
+  /**
+   * Icon to represent the initiative
+   */
+  icon?:
+    | ('target' | 'rocket' | 'flag' | 'star' | 'zap' | 'layers' | 'briefcase' | 'megaphone' | 'heart' | 'cloud')
+    | null;
+  /**
+   * Colour theme for the initiative
+   */
+  color?:
+    | (
+        | '#6366f1'
+        | '#8b5cf6'
+        | '#a855f7'
+        | '#d946ef'
+        | '#ec4899'
+        | '#ef4444'
+        | '#f97316'
+        | '#f59e0b'
+        | '#eab308'
+        | '#22c55e'
+        | '#14b8a6'
+        | '#06b6d4'
+        | '#3b82f6'
+      )
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * People that tickets can be assigned to.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: string;
+  /**
+   * Display name — what shows on cards and in pickers
+   */
+  name: string;
+  /**
+   * Optional. Used to tell two people with the same name apart.
+   */
+  email?: string | null;
+  /**
+   * The team this person belongs to
+   */
+  team?: (string | null) | Team;
+  /**
+   * Inactive people keep their existing assignments but drop out of the assignee pickers.
+   */
+  active?: boolean | null;
+  /**
+   * The login account this person signs in with. Set it and "My tickets" works for them.
+   */
+  user?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Teams group related work within a project
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -335,37 +443,6 @@ export interface Team {
    * Color for team identification
    */
   color?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * People that tickets can be assigned to.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "members".
- */
-export interface Member {
-  id: string;
-  /**
-   * Display name — what shows on cards and in pickers
-   */
-  name: string;
-  /**
-   * Optional. Used to tell two people with the same name apart.
-   */
-  email?: string | null;
-  /**
-   * The team this person belongs to
-   */
-  team?: (string | null) | Team;
-  /**
-   * Inactive people keep their existing assignments but drop out of the assignee pickers.
-   */
-  active?: boolean | null;
-  /**
-   * The login account this person signs in with. Set it and "My tickets" works for them.
-   */
-  user?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -832,6 +909,10 @@ export interface PayloadLockedDocument {
         value: string | Project;
       } | null)
     | ({
+        relationTo: 'initiatives';
+        value: string | Initiative;
+      } | null)
+    | ({
         relationTo: 'teams';
         value: string | Team;
       } | null)
@@ -962,6 +1043,22 @@ export interface ProjectsSelect<T extends boolean = true> {
         upcomingCount?: T;
       };
   ticketCounter?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiatives_select".
+ */
+export interface InitiativesSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  status?: T;
+  projects?: T;
+  lead?: T;
+  targetDate?: T;
+  icon?: T;
+  color?: T;
   updatedAt?: T;
   createdAt?: T;
 }

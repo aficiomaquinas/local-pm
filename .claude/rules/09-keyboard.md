@@ -29,6 +29,7 @@ Do not invent alternatives.
 | `G` `B` | Backlog |
 | `G` `C` | Cycles |
 | `G` `M` | My tickets |
+| `G` `N` | Initiatives |
 | `G` `I` | Inbox / notifications |
 | `G` `P` | Projects |
 | `G` `T` | Teams |

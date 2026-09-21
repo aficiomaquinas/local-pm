@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, FileText, LayoutDashboard, ListChecks, Pencil, Repeat, Trash2 } from 'lucide-react'
+import { initiativeStatusMeta } from '@/lib/status'
+import { EntityMark, initiativeIcon } from '@/components/ui/EntityMark'
 import { cn } from '@/lib/cn'
 import { ProjectStatus, TicketStatus } from '@/types/enums'
 import { projectStatusOptions } from '@/lib/status'
@@ -14,7 +16,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Expandable } from '@/components/ui/Expandable'
 import { Field } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
-import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
+import { projectIcon } from '@/components/ui/EntityMark'
 import { InlineEdit } from '@/components/ui/InlineEdit'
 import { StatusTypeBadge } from '@/components/ui/StateIndicator'
 import { StatusType } from '@/types/enums'
@@ -23,7 +25,7 @@ import { useToast } from '@/components/ui/Toast'
 import { RichTextDisplay } from '@/components/ui/RichTextEditor'
 import { TicketsTable } from '@/components/tickets/TicketsTable'
 import { CycleSettings } from '@/components/cycles/CycleSettings'
-import type { Project } from '@/payload-types'
+import type { Initiative, Project } from '@/payload-types'
 
 export interface ProjectStats {
   total: number
@@ -38,10 +40,12 @@ type TabId = (typeof TAB_IDS)[number]
 export function ProjectDetail({
   project: initialProject,
   stats,
+  initiatives = [],
   initialTab = 'overview',
 }: {
   project: Project
   stats: ProjectStats
+  initiatives?: Initiative[]
   initialTab?: TabId
 }) {
   const router = useRouter()
@@ -250,6 +254,42 @@ export function ProjectDetail({
                   ))}
                 </dl>
               </section>
+
+              {initiatives.length > 0 && (
+                <section className="flex flex-col gap-2">
+                  <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                    Initiatives
+                  </h2>
+                  <ul className="flex flex-col gap-1">
+                    {initiatives.map((initiative) => {
+                      const meta = initiativeStatusMeta(initiative.status)
+                      const StatusIcon = meta.icon
+                      return (
+                        <li key={initiative.id}>
+                          <Link
+                            href={`/initiatives/${initiative.id}`}
+                            className="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-base text-text transition-colors duration-micro hover:bg-surface-hover"
+                          >
+                            <EntityMark
+                              icon={initiativeIcon(initiative.icon)}
+                              color={initiative.color}
+                              size="sm"
+                            />
+                            <span className="min-w-0 truncate" title={initiative.name}>
+                              {initiative.name}
+                            </span>
+                            <StatusIcon
+                              className="ml-auto size-4 shrink-0 text-text-muted"
+                              aria-hidden
+                            />
+                            <span className="sr-only">{meta.label}</span>
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
 
               <dl className="flex flex-col gap-2 border-t border-border-subtle pt-4 text-xs text-text-muted">
                 <div className="flex justify-between gap-2">

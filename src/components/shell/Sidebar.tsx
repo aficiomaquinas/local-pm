@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   Plus,
   Repeat,
+  Target,
   UserRound,
   Users,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ export const NAV_ITEMS = [
   { href: '/my-tickets', label: 'My tickets', icon: UserRound, chord: 'g m' },
   { href: '/cycles', label: 'Cycles', icon: Repeat, chord: 'g c' },
   { href: '/projects', label: 'Projects', icon: FolderKanban, chord: 'g p' },
+  { href: '/initiatives', label: 'Initiatives', icon: Target, chord: 'g n' },
   { href: '/teams', label: 'Teams', icon: Users, chord: 'g t' },
 ]
 
