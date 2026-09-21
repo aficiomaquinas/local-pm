@@ -203,3 +203,30 @@ export const LEGACY_LABEL_COLORS: Record<string, LabelColor> = {
   '#06b6d4': LabelColor.BLUE,
   '#3b82f6': LabelColor.BLUE,
 }
+
+export enum InitiativeStatus {
+  PLANNED = 'PLANNED',
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export const INITIATIVE_STATUS_OPTIONS = [
+  { label: 'Planned', value: InitiativeStatus.PLANNED },
+  { label: 'Active', value: InitiativeStatus.ACTIVE },
+  { label: 'Completed', value: InitiativeStatus.COMPLETED },
+  { label: 'Cancelled', value: InitiativeStatus.CANCELLED },
+]
+
+export const INITIATIVE_ICONS = [
+  'target',
+  'rocket',
+  'flag',
+  'star',
+  'zap',
+  'layers',
+  'briefcase',
+  'megaphone',
+  'heart',
+  'cloud',
+]

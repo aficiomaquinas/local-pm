@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, PayloadRequest } from 'payload'
 import {
   ProjectStatus,
   PROJECT_STATUS_OPTIONS,
@@ -21,6 +21,33 @@ import {
   MIN_CYCLE_LENGTH_WEEKS,
 } from '@/lib/cycles'
 
+async function detachFromInitiatives(req: PayloadRequest, id: string | number): Promise<void> {
+  const target = String(id)
+
+  const holders = await req.payload.find({
+    req,
+    collection: 'initiatives',
+    where: { projects: { in: [target] } },
+    limit: 500,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  for (const initiative of holders.docs) {
+    const remaining = (initiative.projects ?? [])
+      .map((entry) => (typeof entry === 'object' ? String(entry.id) : String(entry)))
+      .filter((projectId) => projectId !== target)
+
+    await req.payload.update({
+      collection: 'initiatives',
+      id: initiative.id,
+      data: { projects: remaining },
+      depth: 0,
+      overrideAccess: true,
+    })
+  }
+}
+
 export const Projects: CollectionConfig = {
   slug: 'projects',
   admin: {
@@ -29,6 +56,13 @@ export const Projects: CollectionConfig = {
     description: 'Projects organize related tickets together',
   },
   access: collectionAccess,
+  hooks: {
+    afterDelete: [
+      async ({ req, id }) => {
+        await detachFromInitiatives(req, id)
+      },
+    ],
+  },
   fields: [
     {
       name: 'name',

@@ -8,6 +8,7 @@ import { Activity } from './collections/Activity'
 import { Attachments } from './collections/Attachments'
 import { Comments } from './collections/Comments'
 import { Cycles } from './collections/Cycles'
+import { Initiatives } from './collections/Initiatives'
 import { LabelGroups } from './collections/LabelGroups'
 import { Labels } from './collections/Labels'
 import { Members } from './collections/Members'
@@ -33,6 +34,7 @@ export default buildConfig({
   collections: [
     Users,
     Projects,
+    Initiatives,
     Teams,
     Members,
     Statuses,

@@ -330,7 +330,7 @@
       "slug": "initiatives-portfolios",
       "title": "Initiatives / portfolios",
       "tier": 1,
-      "status": "todo",
+      "status": "done",
       "effort": "M",
       "summary": "A layer above projects that rolls up progress across several of them.",
       "rationale": "Asana portfolios, Linear initiatives, Plane initiatives. The planning layer that spans from an objective down to an issue.",
@@ -344,9 +344,9 @@
         "src/collections/",
         "src/app/(frontend)/"
       ],
-      "startedAt": null,
-      "completedAt": null,
-      "notes": ""
+      "startedAt": "2026-09-21",
+      "completedAt": "2026-09-21",
+      "notes": "PR #32 (8cd3f3e). Shipped as a standalone `initiatives` collection that owns the link: `projects` is a hasMany relationship on the initiative, so a project can belong to several initiatives at once — the shape Linear and Asana portfolios both landed on. Projects were left untouched, so there is no migration: existing installs simply have no initiatives until one is created. Schema: name, richText description, status (PLANNED/ACTIVE/COMPLETED/CANCELLED), projects (hasMany, indexed), lead (-> members), targetDate, icon, color. beforeChange trims the name, dedupes the project list (a duplicate id would double-count in the rollup) and rejects project ids that do not exist, capped at 100 per initiative. Projects gained an afterDelete hook that pulls the deleted id out of every initiative holding it — issued without the delete req, repeating the lesson recorded on task 9, since a write carrying the delete request reports success but never persists. Rollup lives in src/lib/initiative.ts (pure, 15 unit tests) and follows the epic scoring rule: cancelled tickets stay in the total but leave the denominator. src/lib/initiative-stats.ts does the server-side counting, resolving each project's own workflow first so project-scoped statuses are counted under the right type. UI: /initiatives list (search, status filter and sort all in the URL, four states, load-more), /initiatives/new, /initiatives/[id] with an overview tab (rollup bar, lead, target date, status) and a projects tab (per-project progress, add via picker, remove with a 10s undo), /initiatives/[id]/edit. Sidebar entry plus a new g n chord registered centrally so ? stays truthful — 09-keyboard.md section 9.2 gained the row. Command palette gained both the navigation entry and initiative search. The project detail page now lists the initiatives a project belongs to, fetched on the server and passed down. MCP: list_initiatives (status and project filters, projectCount on every row), get_initiative (initiative + per-project rollups + aggregate progress), create/update/delete_initiative, and add_project_to_initiative / remove_project_from_initiative for single-membership changes that do not clobber the rest of the list; mcp-server/README.md documents all seven. Deliberately left out: initiative-level filtering on the board and the ticket list (no evidence yet that it beats filtering by project), a Gantt or timeline view of initiatives (that is task 20 territory), and nesting initiatives inside one another — one level, like epics."
     },
     {
       "id": 11,
