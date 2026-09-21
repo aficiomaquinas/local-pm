@@ -15,7 +15,6 @@ import {
 
 const BASE_URL = process.env.LOCAL_PM_URL || 'http://localhost:3010';
 
-// Status mapping (MCP uses lowercase for readability, Payload uses uppercase)
 const STATUS_MAP: Record<string, string> = {
   active: 'ACTIVE',
   on_hold: 'ON_HOLD',
@@ -36,7 +35,6 @@ function toPayloadValue(value: string | undefined): string | undefined {
   return STATUS_MAP[value] || value;
 }
 
-// Pagination response interface for AI-friendly output
 interface PaginatedResponse<T> {
   items: T[];
   pagination: {
@@ -51,7 +49,6 @@ interface PaginatedResponse<T> {
   };
 }
 
-// Helper to format paginated responses in an AI-friendly way
 function formatPaginatedResponse<T>(
   response: {
     docs: T[];
@@ -80,9 +77,6 @@ function formatPaginatedResponse<T>(
   };
 }
 
-// Helper functions to slim down nested relationship objects for list responses
-// These prevent bloated responses when relationships are expanded with depth=1
-
 interface SlimProject {
   id: string;
   prefix: string;
@@ -93,10 +87,9 @@ interface SlimTeam {
   name: string;
 }
 
-// Extract slim project info (just id and prefix) from expanded project object
 function slimProject(project: unknown): SlimProject | string | null {
   if (!project) return null;
-  if (typeof project === 'string') return project; // Already just an ID
+  if (typeof project === 'string') return project;
   if (typeof project === 'object' && project !== null) {
     const p = project as Record<string, unknown>;
     return {
@@ -107,10 +100,9 @@ function slimProject(project: unknown): SlimProject | string | null {
   return null;
 }
 
-// Extract slim team info (just id and name) from expanded team object
 function slimTeam(team: unknown): SlimTeam | string | null {
   if (!team) return null;
-  if (typeof team === 'string') return team; // Already just an ID
+  if (typeof team === 'string') return team;
   if (typeof team === 'object' && team !== null) {
     const t = team as Record<string, unknown>;
     return {
@@ -121,12 +113,38 @@ function slimTeam(team: unknown): SlimTeam | string | null {
   return null;
 }
 
-// Extract just IDs from blockedBy array (which may contain full ticket objects)
+function slimComment(comment: unknown): string | null {
+  if (!comment) return null;
+  if (typeof comment === 'string') return comment;
+  if (typeof comment === 'object' && comment !== null) {
+    return (comment as Record<string, unknown>).id as string;
+  }
+  return null;
+}
+
+interface SlimMember {
+  id: string;
+  name: string;
+}
+
+function slimMember(member: unknown): SlimMember | string | null {
+  if (!member) return null;
+  if (typeof member === 'string') return member;
+  if (typeof member === 'object' && member !== null) {
+    const m = member as Record<string, unknown>;
+    return {
+      id: m.id as string,
+      name: m.name as string,
+    };
+  }
+  return null;
+}
+
 function slimBlockedBy(blockedBy: unknown): string[] | null {
   if (!blockedBy) return null;
   if (!Array.isArray(blockedBy)) return null;
   return blockedBy.map(item => {
-    if (typeof item === 'string') return item; // Already just an ID
+    if (typeof item === 'string') return item;
     if (typeof item === 'object' && item !== null) {
       return (item as Record<string, unknown>).id as string;
     }
@@ -134,7 +152,6 @@ function slimBlockedBy(blockedBy: unknown): string[] | null {
   }).filter(Boolean) as string[];
 }
 
-// Apply slimming to a ticket object for list responses
 function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string>): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
 
@@ -143,11 +160,12 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
 
     const value = ticket[field];
 
-    // Slim down relationship fields
     if (field === 'project') {
       filtered[field] = slimProject(value);
     } else if (field === 'team') {
       filtered[field] = slimTeam(value);
+    } else if (field === 'assignee') {
+      filtered[field] = slimMember(value);
     } else if (field === 'blockedBy') {
       filtered[field] = slimBlockedBy(value);
     } else {
@@ -158,7 +176,6 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
   return filtered;
 }
 
-// Helper function to make API requests
 //
 // SPC-006 §10 (D-6): every request carries `Authorization: Bearer <token>`
 // (the agent's OWN client-credentials token — never a relayed user token)
@@ -222,9 +239,7 @@ async function apiRequest(
   return response.json();
 }
 
-// Define all tools
 const tools: Tool[] = [
-  // ============== PROJECTS ==============
   {
     name: 'list_projects',
     description: 'List all projects in Local PM. By default returns only basic fields (id, name, prefix, status, color, icon). Use "include" to request additional fields like description.',
@@ -362,7 +377,6 @@ const tools: Tool[] = [
     },
   },
 
-  // ============== TEAMS ==============
   {
     name: 'list_teams',
     description: 'List all teams in Local PM. By default returns only basic fields (id, name, color). Use "include" to request additional fields like description.',
@@ -466,10 +480,131 @@ const tools: Tool[] = [
     },
   },
 
-  // ============== TICKETS ==============
+  {
+    name: 'list_members',
+    description: 'List the people tickets can be assigned to. By default returns only basic fields (id, name, active). Use "include" to request email, team or timestamps. Members are distinct from login accounts: a member is a person work is assigned to.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        teamId: {
+          type: 'string',
+          description: 'Filter by team ID',
+        },
+        activeOnly: {
+          type: 'boolean',
+          description: 'Only return people who are still active (default: true)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of members to return (default: 20)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1). Use with limit to paginate through results.',
+        },
+        include: {
+          type: 'array',
+          description: 'Additional fields to include in the response. By default only id, name, active are returned.',
+          items: {
+            type: 'string',
+            enum: ['email', 'team', 'user', 'createdAt', 'updatedAt'],
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'get_member',
+    description: 'Get detailed information about a specific member by ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The member ID',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'create_member',
+    description: 'Create a person that tickets can be assigned to',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Display name',
+        },
+        email: {
+          type: 'string',
+          description: 'Email address (optional)',
+        },
+        team: {
+          type: 'string',
+          description: 'Team ID this person belongs to (optional)',
+        },
+        user: {
+          type: 'string',
+          description: 'Login account ID to link this person to (optional). One account maps to at most one member.',
+        },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'update_member',
+    description: 'Update an existing member',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The member ID to update',
+        },
+        name: {
+          type: 'string',
+          description: 'New display name',
+        },
+        email: {
+          type: 'string',
+          description: 'New email address',
+        },
+        team: {
+          type: 'string',
+          description: 'New team ID (use null to remove from the team)',
+        },
+        active: {
+          type: 'boolean',
+          description: 'Set false when someone leaves. They keep existing assignments but drop out of the pickers.',
+        },
+        user: {
+          type: 'string',
+          description: 'Login account ID to link (use null to unlink)',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_member',
+    description: 'Delete a member (tickets assigned to this person become unassigned). Prefer setting active to false, which preserves history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The member ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
+
   {
     name: 'list_tickets',
-    description: 'List tickets in Local PM with optional filters. By default returns only basic fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team returns {id, name}, blockedBy returns array of ticket IDs.',
+    description: 'List tickets in Local PM with optional filters. By default returns only basic fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team and assignee return {id, name}, blockedBy returns array of ticket IDs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -480,6 +615,10 @@ const tools: Tool[] = [
         teamId: {
           type: 'string',
           description: 'Filter by team ID',
+        },
+        assigneeId: {
+          type: 'string',
+          description: 'Filter by assignee (member) ID',
         },
         status: {
           type: 'string',
@@ -504,7 +643,7 @@ const tools: Tool[] = [
           description: 'Additional fields to include in the response. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -545,6 +684,10 @@ const tools: Tool[] = [
         team: {
           type: 'string',
           description: 'Team ID (optional)',
+        },
+        assignee: {
+          type: 'string',
+          description: 'Assignee member ID (optional). Use list_members to find one.',
         },
         status: {
           type: 'string',
@@ -618,6 +761,10 @@ const tools: Tool[] = [
         team: {
           type: 'string',
           description: 'New team ID (use null to unassign)',
+        },
+        assignee: {
+          type: 'string',
+          description: 'New assignee member ID (use null to unassign)',
         },
         status: {
           type: 'string',
@@ -702,10 +849,9 @@ const tools: Tool[] = [
     },
   },
 
-  // ============== BOARD ==============
   {
     name: 'get_board',
-    description: 'Get the full Kanban board with tickets grouped by status. Optionally filter by project or team. By default returns only basic ticket fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team returns {id, name}, blockedBy returns array of ticket IDs.',
+    description: 'Get the full Kanban board with tickets grouped by status. Optionally filter by project or team. By default returns only basic ticket fields (id, title, status, project). Use "include" to request additional fields. Note: Relationship fields are returned in slim format - project returns {id, prefix}, team and assignee return {id, name}, blockedBy returns array of ticket IDs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -717,19 +863,22 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Filter by team ID',
         },
+        assigneeId: {
+          type: 'string',
+          description: 'Filter by assignee (member) ID',
+        },
         include: {
           type: 'array',
           description: 'Additional ticket fields to include. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
     },
   },
 
-  // ============== SUBTASKS ==============
   {
     name: 'toggle_subtask',
     description: 'Toggle a subtask completion status',
@@ -766,15 +915,137 @@ const tools: Tool[] = [
       required: ['ticketId', 'title'],
     },
   },
+
+  {
+    name: 'list_activity',
+    description: 'Read the change history of a ticket, oldest first. Entries cover field changes (action "changed", with the field and the values before and after as they read at the time) and the comment thread (actions "commented", "replied", "edited", "resolved", "reopened", "deleted", carrying the comment text). The text of a deleted comment is kept here after the comment itself is gone. The history is written automatically and cannot be edited or deleted. Board reordering is not recorded.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket whose history to read',
+        },
+        field: {
+          type: 'string',
+          description: 'Only return changes to this field, e.g. "status", "assignee", "priority", "title", "dueDate", "labels", "blockedBy", "subtasks", "project", "team", "description"',
+        },
+        action: {
+          type: 'string',
+          description: 'Only return entries with this action: "created", "changed", "commented", "replied", "edited", "resolved", "reopened" or "deleted"',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of entries to return (default: 50)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
+
+  {
+    name: 'list_comments',
+    description: 'List the comments on a ticket, oldest first. Threads are one level deep: a comment with a "parent" is a reply to the comment that opened that thread. Mentions appear in the body as @[Name](member:ID) and are also resolved into the "mentions" array.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket whose comments to list',
+        },
+        parentId: {
+          type: 'string',
+          description: 'Only return the replies in this thread. Omit for every comment on the ticket.',
+        },
+        includeResolved: {
+          type: 'boolean',
+          description: 'Include threads that have been marked resolved (default: true)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of comments to return (default: 50)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
+  {
+    name: 'add_comment',
+    description: 'Post a comment on a ticket, or a reply in an existing thread. The body is markdown. To mention someone write @[Their Name](member:THEIR_ID); use list_members to find the ID. Replies go on the comment that opened the thread, never on another reply.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket to comment on',
+        },
+        body: {
+          type: 'string',
+          description: 'Markdown body. Mentions use @[Name](member:ID).',
+        },
+        parentId: {
+          type: 'string',
+          description: 'The comment that opened the thread, to post this as a reply (optional)',
+        },
+        authorId: {
+          type: 'string',
+          description: 'Member ID to attribute this comment to (optional). Without it the comment is attributed to the signed-in account, or to nobody.',
+        },
+      },
+      required: ['ticketId', 'body'],
+    },
+  },
+  {
+    name: 'update_comment',
+    description: 'Edit a comment body, or resolve/reopen a thread. Only the comment that opened a thread can be resolved.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The comment ID',
+        },
+        body: {
+          type: 'string',
+          description: 'New markdown body',
+        },
+        resolved: {
+          type: 'boolean',
+          description: 'Mark the thread resolved (true) or reopen it (false)',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_comment',
+    description: 'Delete a comment. Deleting the comment that opened a thread deletes its replies too. This cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The comment ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
 ];
 
-// Tool handlers
 async function handleToolCall(
   name: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
   switch (name) {
-    // Projects
     case 'list_projects': {
       const limit = (args.limit as number) || 20;
       const page = (args.page as number) || 1;
@@ -795,15 +1066,11 @@ async function handleToolCall(
         prevPage?: number | null;
       };
 
-      // Default fields always included (excludes heavy description by default)
       const defaultFields = ['id', 'name', 'prefix', 'status', 'color', 'icon'];
-      // All optional fields that can be included
       const optionalFields = ['description', 'createdAt', 'updatedAt'];
 
-      // Build the set of fields to include
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
-      // Filter each project to only include requested fields
       const filteredDocs = response.docs.map(project => {
         const filtered: Record<string, unknown> = {};
         for (const field of fieldsToInclude) {
@@ -845,11 +1112,9 @@ async function handleToolCall(
     case 'delete_project': {
       const { id, deleteTickets = true } = args;
       if (deleteTickets) {
-        // First get all tickets for this project
         const ticketsResponse = await apiRequest(
           `/tickets?where[project][equals]=${id}&limit=1000`
         ) as { docs: Array<{ id: string }> };
-        // Delete each ticket
         for (const ticket of ticketsResponse.docs || []) {
           await apiRequest(`/tickets/${ticket.id}`, 'DELETE');
         }
@@ -857,7 +1122,6 @@ async function handleToolCall(
       return apiRequest(`/projects/${id}`, 'DELETE');
     }
 
-    // Teams
     case 'list_teams': {
       const limit = (args.limit as number) || 20;
       const page = (args.page as number) || 1;
@@ -875,15 +1139,11 @@ async function handleToolCall(
         prevPage?: number | null;
       };
 
-      // Default fields always included (excludes heavy description by default)
       const defaultFields = ['id', 'name', 'color'];
-      // All optional fields that can be included
       const optionalFields = ['description', 'createdAt', 'updatedAt'];
 
-      // Build the set of fields to include
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
-      // Filter each team to only include requested fields
       const filteredDocs = response.docs.map(team => {
         const filtered: Record<string, unknown> = {};
         for (const field of fieldsToInclude) {
@@ -917,7 +1177,75 @@ async function handleToolCall(
       return apiRequest(`/teams/${args.id}`, 'DELETE');
     }
 
-    // Tickets
+    case 'list_members': {
+      const limit = (args.limit as number) || 20;
+      const page = (args.page as number) || 1;
+      const includeFields = (args.include as string[]) || [];
+      const activeOnly = args.activeOnly === undefined ? true : Boolean(args.activeOnly);
+
+      let query = `?limit=${limit}&page=${page}&depth=1&sort=name`;
+      if (args.teamId) {
+        query += `&where[team][equals]=${args.teamId}`;
+      }
+      if (activeOnly) {
+        query += '&where[active][equals]=true';
+      }
+
+      const response = await apiRequest(`/members${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const defaultFields = ['id', 'name', 'active'];
+      const optionalFields = ['email', 'team', 'user', 'createdAt', 'updatedAt'];
+      const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
+
+      const filteredDocs = response.docs.map(member => {
+        const filtered: Record<string, unknown> = {};
+        for (const field of fieldsToInclude) {
+          if (!(field in member)) continue;
+          filtered[field] = field === 'team' ? slimTeam(member[field]) : member[field];
+        }
+        return filtered;
+      });
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: filteredDocs,
+      });
+    }
+    case 'get_member': {
+      return apiRequest(`/members/${args.id}?depth=1`);
+    }
+    case 'create_member': {
+      return apiRequest('/members', 'POST', {
+        name: args.name,
+        email: args.email || null,
+        team: args.team || null,
+        user: args.user || null,
+      });
+    }
+    case 'update_member': {
+      const id = args.id;
+      const updates: Record<string, unknown> = {};
+      if (args.name) updates.name = args.name;
+      if (args.email !== undefined) updates.email = args.email;
+      if (args.team !== undefined) updates.team = args.team;
+      if (args.active !== undefined) updates.active = args.active;
+      if (args.user !== undefined) updates.user = args.user;
+      return apiRequest(`/members/${id}`, 'PATCH', updates);
+    }
+    case 'delete_member': {
+      return apiRequest(`/members/${args.id}`, 'DELETE');
+    }
+
     case 'list_tickets': {
       const limit = (args.limit as number) || 20;
       const page = (args.page as number) || 1;
@@ -929,6 +1257,9 @@ async function handleToolCall(
       }
       if (args.teamId) {
         query += `&where[team][equals]=${args.teamId}`;
+      }
+      if (args.assigneeId) {
+        query += `&where[assignee][equals]=${args.assigneeId}`;
       }
       if (args.status) {
         query += `&where[status][equals]=${toPayloadValue(args.status as string)}`;
@@ -948,15 +1279,11 @@ async function handleToolCall(
         prevPage?: number | null;
       };
 
-      // Default fields always included (slim versions of relationships)
       const defaultFields = ['id', 'title', 'status', 'project'];
-      // All optional fields that can be included
-      const optionalFields = ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
 
-      // Build the set of fields to include
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
-      // Filter each ticket to only include requested fields, with slimmed relationships
       const filteredDocs = response.docs.map(ticket => slimTicket(ticket, fieldsToInclude));
 
       return formatPaginatedResponse({
@@ -973,6 +1300,7 @@ async function handleToolCall(
         description: args.description || null,
         project: args.project,
         team: args.team || null,
+        assignee: args.assignee || null,
         status: toPayloadValue(args.status as string) || 'TODO',
         priority: toPayloadValue(args.priority as string) || 'NO_PRIORITY',
         dueDate: args.dueDate || null,
@@ -987,6 +1315,7 @@ async function handleToolCall(
       if (args.title) updates.title = args.title;
       if (args.description !== undefined) updates.description = args.description;
       if (args.team !== undefined) updates.team = args.team;
+      if (args.assignee !== undefined) updates.assignee = args.assignee;
       if (args.status) updates.status = toPayloadValue(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
@@ -1004,7 +1333,6 @@ async function handleToolCall(
       return apiRequest(`/tickets/${args.id}`, 'DELETE');
     }
 
-    // Board
     case 'get_board': {
       const includeFields = (args.include as string[]) || [];
 
@@ -1015,18 +1343,17 @@ async function handleToolCall(
       if (args.teamId) {
         query += `&where[team][equals]=${args.teamId}`;
       }
+      if (args.assigneeId) {
+        query += `&where[assignee][equals]=${args.assigneeId}`;
+      }
       const response = await apiRequest(`/tickets${query}`) as { docs: Array<Record<string, unknown>> };
       const tickets = response.docs || [];
 
-      // Default fields always included (slim versions of relationships)
       const defaultFields = ['id', 'title', 'status', 'project'];
-      // All optional fields that can be included
-      const optionalFields = ['description', 'team', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
 
-      // Build the set of fields to include
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
-      // Group by status with filtered and slimmed fields
       const board = {
         todo: tickets.filter((t) => t.status === 'TODO').map(t => slimTicket(t, fieldsToInclude)),
         in_progress: tickets.filter((t) => t.status === 'IN_PROGRESS').map(t => slimTicket(t, fieldsToInclude)),
@@ -1041,7 +1368,6 @@ async function handleToolCall(
       return board;
     }
 
-    // Subtasks
     case 'toggle_subtask': {
       const ticket = await apiRequest(`/tickets/${args.ticketId}`) as {
         subtasks?: Array<{ title: string; completed: boolean }>
@@ -1065,12 +1391,114 @@ async function handleToolCall(
       return apiRequest(`/tickets/${args.ticketId}`, 'PATCH', { subtasks });
     }
 
+    case 'list_activity': {
+      const limit = (args.limit as number) || 50;
+      const page = (args.page as number) || 1;
+
+      let query = `?limit=${limit}&page=${page}&depth=1&sort=createdAt`;
+      query += `&where[ticket][equals]=${args.ticketId}`;
+      if (args.field) {
+        query += `&where[field][equals]=${args.field}`;
+      }
+      if (args.action) {
+        query += `&where[action][equals]=${args.action}`;
+      }
+
+      const response = await apiRequest(`/activity${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const slimmed = response.docs.map(entry => ({
+        id: entry.id,
+        action: entry.action,
+        field: entry.field ?? null,
+        comment: slimComment(entry.comment),
+        from: entry.from ?? null,
+        to: entry.to ?? null,
+        actor: slimMember(entry.actor),
+        at: entry.createdAt,
+      }));
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: slimmed,
+      });
+    }
+
+    case 'list_comments': {
+      const limit = (args.limit as number) || 50;
+      const page = (args.page as number) || 1;
+
+      let query = `?limit=${limit}&page=${page}&depth=1&sort=createdAt`;
+      query += `&where[ticket][equals]=${args.ticketId}`;
+      if (args.parentId) {
+        query += `&where[parent][equals]=${args.parentId}`;
+      }
+      if (args.includeResolved === false) {
+        query += '&where[resolved][not_equals]=true';
+      }
+
+      const response = await apiRequest(`/comments${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const slimmed = response.docs.map(comment => ({
+        id: comment.id,
+        parent: slimComment(comment.parent),
+        body: comment.body,
+        author: slimMember(comment.author),
+        mentions: Array.isArray(comment.mentions)
+          ? comment.mentions.map(m => slimMember(m)).filter(Boolean)
+          : [],
+        resolved: Boolean(comment.resolved),
+        createdAt: comment.createdAt,
+        editedAt: comment.editedAt ?? null,
+      }));
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: slimmed,
+      });
+    }
+    case 'add_comment': {
+      return apiRequest('/comments', 'POST', {
+        ticket: args.ticketId,
+        body: args.body,
+        parent: args.parentId || null,
+        author: args.authorId || undefined,
+      });
+    }
+    case 'update_comment': {
+      const updates: Record<string, unknown> = {};
+      if (args.body !== undefined) updates.body = args.body;
+      if (args.resolved !== undefined) updates.resolved = args.resolved;
+      return apiRequest(`/comments/${args.id}`, 'PATCH', updates);
+    }
+    case 'delete_comment': {
+      return apiRequest(`/comments/${args.id}`, 'DELETE');
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
 }
 
-// Create and run server
 const server = new Server(
   {
     name: 'local-pm-mcp',
@@ -1083,7 +1511,6 @@ const server = new Server(
   }
 );
 
-// Register handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools,
 }));
@@ -1115,7 +1542,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

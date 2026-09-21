@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 
 export const dynamic = 'force-dynamic'
+export const metadata = { title: 'Teams · local-pm' }
 
 const PAGE_SIZE = 20
 
@@ -23,6 +24,7 @@ export default async function TeamsPage() {
         page: teamsResult.page ?? 1,
         totalPages: teamsResult.totalPages,
         hasNextPage: teamsResult.hasNextPage,
+        totalDocs: teamsResult.totalDocs,
       }}
     />
   )

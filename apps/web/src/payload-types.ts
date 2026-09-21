@@ -69,8 +69,12 @@ export interface Config {
   collections: {
     projects: Project;
     teams: Team;
+    members: Member;
     tickets: Ticket;
     users: User;
+    comments: Comment;
+    attachments: Attachment;
+    activity: Activity;
     exports: Export;
     imports: Import;
     'payload-kv': PayloadKv;
@@ -83,8 +87,12 @@ export interface Config {
   collectionsSelect: {
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
     teams: TeamsSelect<false> | TeamsSelect<true>;
+    members: MembersSelect<false> | MembersSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    comments: CommentsSelect<false> | CommentsSelect<true>;
+    attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
+    activity: ActivitySelect<false> | ActivitySelect<true>;
     exports: ExportsSelect<false> | ExportsSelect<true>;
     imports: ImportsSelect<false> | ImportsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
@@ -352,6 +360,53 @@ export interface Team {
   createdAt: string;
 }
 /**
+ * People that tickets can be assigned to.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: string;
+  /**
+   * Display name — what shows on cards and in pickers
+   */
+  name: string;
+  /**
+   * Optional. Used to tell two people with the same name apart.
+   */
+  email?: string | null;
+  /**
+   * The team this person belongs to
+   */
+  team?: (string | null) | Team;
+  /**
+   * Inactive people keep their existing assignments but drop out of the assignee pickers.
+   */
+  active?: boolean | null;
+  /**
+   * The login account this person signs in with. Set it and "My tickets" works for them.
+   */
+  user?: (string | null) | User;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Individual work items within projects
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -402,6 +457,10 @@ export interface Ticket {
    */
   team?: (string | null) | Team;
   /**
+   * The person responsible for this ticket
+   */
+  assignee?: (string | null) | Member;
+  /**
    * Tickets that must be completed before this ticket can be worked on
    */
   blockedBy?: (string | Ticket)[] | null;
@@ -449,6 +508,120 @@ export interface Ticket {
    * SPC-005: denormalized display label; snapshots stay readable after user deletion
    */
   actorLabel?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Discussion on tickets. A reply points at the comment that opened the thread.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "comments".
+ */
+export interface Comment {
+  id: string;
+  /**
+   * The ticket this comment belongs to
+   */
+  ticket: string | Ticket;
+  /**
+   * The comment that opened this thread. Empty for a top-level comment. Threads are one level deep.
+   */
+  parent?: (string | null) | Comment;
+  /**
+   * Markdown. Mentions are stored as @[Name](member:ID) and render as a chip.
+   */
+  body: string;
+  /**
+   * Who wrote this. Filled from the signed-in account when the caller does not set it.
+   */
+  author?: (string | null) | Member;
+  /**
+   * Derived from the body on every save. Do not edit by hand.
+   */
+  mentions?: (string | Member)[] | null;
+  /**
+   * A resolved thread collapses. Only the first comment in a thread carries it.
+   */
+  resolved?: boolean | null;
+  resolvedAt?: string | null;
+  resolvedBy?: (string | null) | Member;
+  editedAt?: string | null;
+  /**
+   * Soft delete — hidden from the board, trail preserved
+   */
+  deleted?: boolean | null;
+  /**
+   * SPC-005: identity class that produced this state (set by the attribution hook)
+   */
+  actorType?: ('user' | 'agent' | 'anonymous') | null;
+  /**
+   * SPC-005: the acting user document, if any
+   */
+  actorId?: (string | null) | User;
+  /**
+   * SPC-005: denormalized display label; snapshots stay readable after user deletion
+   */
+  actorLabel?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Files dropped, pasted, or picked inside a comment or a description.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments".
+ */
+export interface Attachment {
+  id: string;
+  /**
+   * What the image shows, for anyone who cannot see it.
+   */
+  alt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
+ * Append-only record of what changed on a ticket, and who changed it.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity".
+ */
+export interface Activity {
+  id: string;
+  /**
+   * The ticket this entry belongs to
+   */
+  ticket: string | Ticket;
+  action: 'created' | 'changed' | 'commented' | 'replied' | 'edited' | 'resolved' | 'reopened' | 'deleted';
+  /**
+   * The comment this entry is about. Empty once that comment is deleted.
+   */
+  comment?: (string | null) | Comment;
+  /**
+   * Which field changed. Empty when the ticket was created.
+   */
+  field?: string | null;
+  /**
+   * The value, or comment text, as it read before the change
+   */
+  from?: string | null;
+  /**
+   * The value, or comment text, as it read after the change
+   */
+  to?: string | null;
+  /**
+   * Who made the change. Empty when nobody was signed in.
+   */
+  actor?: (string | null) | Member;
   updatedAt: string;
   createdAt: string;
 }
@@ -651,12 +824,28 @@ export interface PayloadLockedDocument {
         value: string | Team;
       } | null)
     | ({
+        relationTo: 'members';
+        value: string | Member;
+      } | null)
+    | ({
         relationTo: 'tickets';
         value: string | Ticket;
       } | null)
     | ({
         relationTo: 'users';
         value: string | User;
+      } | null)
+    | ({
+        relationTo: 'comments';
+        value: string | Comment;
+      } | null)
+    | ({
+        relationTo: 'attachments';
+        value: string | Attachment;
+      } | null)
+    | ({
+        relationTo: 'activity';
+        value: string | Activity;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -736,6 +925,23 @@ export interface TeamsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members_select".
+ */
+export interface MembersSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
+  team?: T;
+  active?: T;
+  user?: T;
+  deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "tickets_select".
  */
 export interface TicketsSelect<T extends boolean = true> {
@@ -746,6 +952,7 @@ export interface TicketsSelect<T extends boolean = true> {
   priority?: T;
   project?: T;
   team?: T;
+  assignee?: T;
   blockedBy?: T;
   labels?:
     | T
@@ -801,6 +1008,60 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "comments_select".
+ */
+export interface CommentsSelect<T extends boolean = true> {
+  ticket?: T;
+  parent?: T;
+  body?: T;
+  author?: T;
+  mentions?: T;
+  resolved?: T;
+  resolvedAt?: T;
+  resolvedBy?: T;
+  editedAt?: T;
+  deleted?: T;
+  actorType?: T;
+  actorId?: T;
+  actorLabel?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments_select".
+ */
+export interface AttachmentsSelect<T extends boolean = true> {
+  alt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "activity_select".
+ */
+export interface ActivitySelect<T extends boolean = true> {
+  ticket?: T;
+  action?: T;
+  comment?: T;
+  field?: T;
+  from?: T;
+  to?: T;
+  actor?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -950,7 +1211,17 @@ export interface TaskCreateCollectionExport {
     id: string;
     name: string;
     batchSize?: number | null;
-    collectionSlug: 'projects' | 'teams' | 'tickets' | 'users' | 'exports' | 'imports';
+    collectionSlug:
+      | 'projects'
+      | 'teams'
+      | 'members'
+      | 'tickets'
+      | 'users'
+      | 'comments'
+      | 'attachments'
+      | 'activity'
+      | 'exports'
+      | 'imports';
     drafts?: ('yes' | 'no') | null;
     exportCollection: string;
     fields?: string[] | null;

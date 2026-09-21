@@ -61,6 +61,9 @@ function enableOidc(overrides: Record<string, string> = {}): void {
   process.env['OIDC_ISSUER'] = 'https://idp.local.test'
   process.env['OIDC_CLIENT_ID'] = 'local-pm-web'
   process.env['OIDC_CLIENT_SECRET'] = 'web-secret'
+  // REQ-006 (deny-by-default): jwks mode REQUIRES an audience — default the
+  // harness to what the stub IdP would mint; cases override explicitly.
+  process.env['OIDC_AUDIENCE'] = 'local-pm-api'
   for (const [k, v] of Object.entries(overrides)) process.env[k] = v
 }
 
@@ -201,16 +204,18 @@ describe('SPC-006 §4/§17: verification matrix (real jose crypto, stubbed JWKS 
     const now = Math.floor(Date.now() / 1000)
     const beyond = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: now - 120 })
     expect((await verifyAccessToken(beyond)).ok).toBe(false)
-    const within = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: now - 30 })
+    const within = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: now - 30, aud: 'local-pm-api' })
     expect((await verifyAccessToken(within)).ok).toBe(true)
   })
 
   it('audience mismatch → rejected; match → accepted', async () => {
-    enableOidc({ OIDC_AUDIENCE: 'local-pm-api' })
+    // REQ-006: the aud check can no longer be skipped by leaving the env
+    // unset — an explicit audience exercises mismatch (reject) / match (accept).
+    enableOidc({ OIDC_AUDIENCE: 'urn:explicit:api' })
     useDiscoveryFetch()
     const wrong = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, aud: 'other-api' })
     expect((await verifyAccessToken(wrong)).ok).toBe(false)
-    const right = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, aud: 'local-pm-api' })
+    const right = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, aud: 'urn:explicit:api' })
     expect((await verifyAccessToken(right)).ok).toBe(true)
   })
 
@@ -219,12 +224,12 @@ describe('SPC-006 §4/§17: verification matrix (real jose crypto, stubbed JWKS 
     useDiscoveryFetch()
     // First verification primes the JWKS cache with the key WITHOUT kid.
     const kp = await ensureKeyPair()
-    const t1 = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999 })
+    const t1 = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, aud: 'local-pm-api' })
     expect((await verifyAccessToken(t1)).ok).toBe(true)
     // Now the token carries an unknown kid → jose refetches; the refetched
     // JWKS now includes the same key under that kid → verify succeeds.
     jwksKeys = [{ ...(await exportJWK(kp.publicKey)), kid: 'rotated' }]
-    const t2 = await new SignJWT({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999 })
+    const t2 = await new SignJWT({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, aud: 'local-pm-api' })
       .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: 'rotated' })
       .setIssuedAt()
       .sign(kp.privateKey)
@@ -239,7 +244,7 @@ describe('SPC-006 §6: agent/human classification', () => {
   it('client-id claim in OIDC_AGENT_CLIENT_IDS → isAgent', async () => {
     enableOidc({ OIDC_AGENT_CLIENT_IDS: '["local-pm-agent-rover"]' })
     useDiscoveryFetch()
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, azp: 'local-pm-agent-rover' })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, aud: 'local-pm-api', azp: 'local-pm-agent-rover' })
     const r = await verifyAccessToken(token)
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.claims.isAgent).toBe(true)
@@ -248,7 +253,7 @@ describe('SPC-006 §6: agent/human classification', () => {
   it('OIDC_AGENT_CLIENT_ID_CLAIM=client_id overrides the azp precedence', async () => {
     enableOidc({ OIDC_AGENT_CLIENT_IDS: '["agent-x"]', OIDC_AGENT_CLIENT_ID_CLAIM: 'client_id' })
     useDiscoveryFetch()
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'agent-x', exp: 9999999999, client_id: 'agent-x' })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'agent-x', exp: 9999999999, aud: 'local-pm-api', client_id: 'agent-x' })
     const r = await verifyAccessToken(token)
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.claims.isAgent).toBe(true)
@@ -258,7 +263,7 @@ describe('SPC-006 §6: agent/human classification', () => {
     enableOidc({ OIDC_AGENT_CLIENT_IDS: '["local-pm-agent-rover"]' })
     useDiscoveryFetch()
     // azp belongs to a NON-registered client → human path.
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, azp: 'some-other-client' })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'u', exp: 9999999999, aud: 'local-pm-api', azp: 'some-other-client' })
     const r = await verifyAccessToken(token)
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.claims.isAgent).toBe(false)
@@ -421,7 +426,7 @@ describe('SPC-006 §4: resolveOidcActor (strategy entry)', () => {
     const store = stubPayloadStore([
       { id: 'a1', identityIss: DISCOVERY.issuer, identitySub: 'rover', active: false, actorType: 'agent' },
     ])
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, azp: 'rover' })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, aud: 'local-pm-api', azp: 'rover' })
     expect(await resolveOidcActor(store as never, token)).toBeNull()
   })
 
@@ -429,7 +434,7 @@ describe('SPC-006 §4: resolveOidcActor (strategy entry)', () => {
     enableOidc({ OIDC_AGENT_CLIENT_IDS: '["rover"]' })
     useDiscoveryFetch()
     const store = stubPayloadStore()
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, azp: 'rover' })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, aud: 'local-pm-api', azp: 'rover' })
     const actor = await resolveOidcActor(store as never, token)
     expect(actor).not.toBeNull()
     expect(actor!['collection']).toBe('users')
@@ -441,7 +446,7 @@ describe('SPC-006 §4: resolveOidcActor (strategy entry)', () => {
     enableOidc({ OIDC_ROLE_MAP: '{"idp-admins":"superadmin"}' })
     useDiscoveryFetch()
     const store = stubPayloadStore()
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'user-1', exp: 9999999999, groups: ['idp-admins'] })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'user-1', exp: 9999999999, aud: 'local-pm-api', groups: ['idp-admins'] })
     const actor = await resolveOidcActor(store as never, token)
     expect(actor).not.toBeNull()
     expect(actor!['actorType']).toBe('superadmin')
@@ -452,7 +457,7 @@ describe('SPC-006 §4: resolveOidcActor (strategy entry)', () => {
     enableOidc({ OIDC_AGENT_CLIENT_IDS: '["rover"]' })
     useDiscoveryFetch()
     const store = stubPayloadStore()
-    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, azp: 'rover' })
+    const token = await signToken({ iss: DISCOVERY.issuer, sub: 'rover', exp: 9999999999, aud: 'local-pm-api', azp: 'rover' })
     const actor = await resolveOidcActor(store as never, token, new Headers({ 'X-LocalPM-Channel': 'mcp' }))
     expect(actor!['lastChannel']).toBe('mcp')
   })

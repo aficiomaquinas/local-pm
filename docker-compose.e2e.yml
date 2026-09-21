@@ -58,6 +58,9 @@ services:
       OIDC_SCOPE: openid profile email groups
       OIDC_SUPERADMIN_GROUP: local-pm-admins
       OIDC_AGENT_CLIENT_IDS: '["local-pm-mcp"]'
+      # REQ-006 deny-by-default: jwks mode requires OIDC_AUDIENCE (aud is
+      # always validated). Dex mints id_tokens with aud = client_id.
+      OIDC_AUDIENCE: local-pm-web
       # ── E2E harness handles (consumed by scripts/e2e-oidc.sh) ───────────
       E2E_HUMAN_BASE_URL: http://app-e2e:3010
       E2E_MCP_BASE_URL: http://app-e2e-mcp:3010
@@ -88,8 +91,11 @@ services:
       OIDC_ISSUER: http://oidc-dev:5558
       OIDC_CLIENT_ID: local-pm-mcp
       OIDC_CLIENT_SECRET: mcp-secret-dev-only
-      # jwks mode needs an audience only when OIDC_AUDIENCE is set (§13:
-      # empty = skip aud check) — the dev IdP mints aud=sub, skip is right.
+      # REQ-006 deny-by-default: jwks mode requires OIDC_AUDIENCE (aud is
+      # always validated). The dev IdP mints resource-indicator JWTs —
+      # getResourceServerInfo pins audience = the RFC 8707 indicator
+      # (config/oidc-dev/server.mjs defaultResource = 'urn:local-pm:api').
+      OIDC_AUDIENCE: urn:local-pm:api
       OIDC_AGENT_CLIENT_IDS: '["local-pm-mcp"]'
       E2E_HUMAN_BASE_URL: http://app-e2e:3010
       E2E_MCP_BASE_URL: http://app-e2e-mcp:3010

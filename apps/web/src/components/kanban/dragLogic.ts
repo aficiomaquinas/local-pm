@@ -162,6 +162,24 @@ export function isRealMove(
 }
 
 /**
+ * Result when the drop CONFIRMS the live preview (over === active): the card
+ * is already where the preview put it, so the tickets array passes through
+ * unchanged and the result describes the preview's position for the PATCH.
+ * (Upstream c750012: handleDragEnd uses this when overId === activeId.)
+ */
+export function resultFromPreview(tickets: Ticket[], activeId: string): DragResult {
+  const active = tickets.find((t) => t.id === activeId)
+  if (!active) return { activeId: null, status: null, sortOrder: null, tickets }
+
+  return {
+    activeId,
+    status: active.status as TicketStatus,
+    sortOrder: active.sortOrder ?? 0,
+    tickets,
+  }
+}
+
+/**
  * Resolve the outcome of a drop. `tickets` must be the CURRENT state (the
  * caller passes it from inside the state updater). A no-op (dropped on
  * itself, same column same slot, unknown ids) comes back with

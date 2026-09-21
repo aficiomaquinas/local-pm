@@ -5,117 +5,74 @@ import { TicketStatus } from '@/types/enums'
 import type { Where } from 'payload'
 
 export const dynamic = 'force-dynamic'
+export const metadata = { title: 'Board · local-pm' }
 
 const TICKETS_PER_COLUMN = 20
+const MIN_SEARCH = 3
 
 interface BoardPageProps {
-  searchParams: Promise<{ project?: string; team?: string }>
+  searchParams: Promise<{ project?: string; team?: string; assignee?: string; q?: string }>
 }
 
 export default async function BoardPage({ searchParams }: BoardPageProps) {
   const params = await searchParams
   const projectFilter = params.project || null
   const teamFilter = params.team || null
+  const assigneeFilter = params.assignee || null
+  const query = (params.q || '').trim()
 
   const payload = await getPayload({ config })
 
-  // Build where clause for each status with optional project/team filters
   const buildWhere = (status: TicketStatus): Where => {
     const conditions: Where = { status: { equals: status } }
-    if (projectFilter) {
-      conditions.project = { equals: projectFilter }
-    }
-    if (teamFilter) {
-      conditions.team = { equals: teamFilter }
-    }
+    if (projectFilter) conditions.project = { equals: projectFilter }
+    if (teamFilter) conditions.team = { equals: teamFilter }
+    if (assigneeFilter) conditions.assignee = { equals: assigneeFilter }
+    if (query.length >= MIN_SEARCH) conditions.title = { like: query }
     return conditions
   }
 
-  // Fetch tickets per status column in parallel
-  const [todoResult, inProgressResult, doneResult, projectsResult, teamsResult] = await Promise.all([
+  const findColumn = (status: TicketStatus) =>
     payload.find({
       collection: 'tickets',
       limit: TICKETS_PER_COLUMN,
       page: 1,
       sort: 'sortOrder',
       depth: 2,
-      where: buildWhere(TicketStatus.TODO),
-      // Local API defaults to overrideAccess:true — the soft-delete read ACL
-      // (readExcludingDeleted) would never run and deleted tickets would
-      // render as draggable ghosts whose PATCH 404s silently. REQ-VIS-3.
+      where: buildWhere(status),
+      // Fork invariant (SPC-004 ghost-card fix; upstream PR #13 parity): the
+      // local API DEFAULTS to overrideAccess:true, silently bypassing read
+      // access rules (readExcludingDeleted) — deleted tickets would render
+      // as draggable ghost cards. Every RSC read of a collection with access
+      // rules must pass overrideAccess:false explicitly.
       overrideAccess: false,
-    }),
-    payload.find({
-      collection: 'tickets',
-      limit: TICKETS_PER_COLUMN,
-      page: 1,
-      sort: 'sortOrder',
-      depth: 2,
-      where: buildWhere(TicketStatus.IN_PROGRESS),
-      // Local API defaults to overrideAccess:true — the soft-delete read ACL
-      // (readExcludingDeleted) would never run and deleted tickets would
-      // render as draggable ghosts whose PATCH 404s silently. REQ-VIS-3.
-      overrideAccess: false,
-    }),
-    payload.find({
-      collection: 'tickets',
-      limit: TICKETS_PER_COLUMN,
-      page: 1,
-      sort: 'sortOrder',
-      depth: 2,
-      where: buildWhere(TicketStatus.DONE),
-      // Local API defaults to overrideAccess:true — the soft-delete read ACL
-      // (readExcludingDeleted) would never run and deleted tickets would
-      // render as draggable ghosts whose PATCH 404s silently. REQ-VIS-3.
-      overrideAccess: false,
-    }),
-    payload.find({
-      collection: 'projects',
-      limit: 100,
-    }),
-    payload.find({
-      collection: 'teams',
-      limit: 100,
-    }),
+    })
+
+  const [todoResult, inProgressResult, doneResult, projectsResult] = await Promise.all([
+    findColumn(TicketStatus.TODO),
+    findColumn(TicketStatus.IN_PROGRESS),
+    findColumn(TicketStatus.DONE),
+    payload.find({ collection: 'projects', limit: 0, depth: 0, overrideAccess: false }),
   ])
 
-  // Combine all tickets
-  const initialTickets = [
-    ...todoResult.docs,
-    ...inProgressResult.docs,
-    ...doneResult.docs,
-  ]
+  const initialTickets = [...todoResult.docs, ...inProgressResult.docs, ...doneResult.docs]
 
-  // Build per-column pagination info
   const initialColumnPagination = [
-    {
-      status: TicketStatus.TODO,
-      page: todoResult.page ?? 1,
-      totalPages: todoResult.totalPages,
-      hasNextPage: todoResult.hasNextPage,
-      totalDocs: todoResult.totalDocs,
-    },
-    {
-      status: TicketStatus.IN_PROGRESS,
-      page: inProgressResult.page ?? 1,
-      totalPages: inProgressResult.totalPages,
-      hasNextPage: inProgressResult.hasNextPage,
-      totalDocs: inProgressResult.totalDocs,
-    },
-    {
-      status: TicketStatus.DONE,
-      page: doneResult.page ?? 1,
-      totalPages: doneResult.totalPages,
-      hasNextPage: doneResult.hasNextPage,
-      totalDocs: doneResult.totalDocs,
-    },
-  ]
+    { status: TicketStatus.TODO, result: todoResult },
+    { status: TicketStatus.IN_PROGRESS, result: inProgressResult },
+    { status: TicketStatus.DONE, result: doneResult },
+  ].map(({ status, result }) => ({
+    status,
+    page: result.page ?? 1,
+    totalPages: result.totalPages,
+    hasNextPage: result.hasNextPage,
+    totalDocs: result.totalDocs,
+  }))
 
   return (
     <KanbanBoard
       initialTickets={initialTickets}
-      projects={projectsResult.docs}
-      teams={teamsResult.docs}
+      hasProjects={projectsResult.totalDocs > 0}
       initialColumnPagination={initialColumnPagination}
     />
   )

@@ -79,17 +79,49 @@ function extractClientIdClaim(payload: Record<string, unknown>): string | null {
 }
 
 /**
+ * REQ-006 deny-by-default — the JWKS-mode audience contract (SPC-006 §13
+ * amendment): `OIDC_AUDIENCE` is REQUIRED in jwks mode. Skipping the `aud`
+ * check when unconfigured (the pre-REQ-006 `...(audience ? { audience } : {})`
+ * spread) let any token signed by the right issuer key but minted for ANOTHER
+ * audience pass verification — jose only validates `aud` when an audience
+ * option is supplied. Config errors must be loud, not silent security skips:
+ * this throws at first verification, before any network call, and the catch
+ * below fail-closes (`{ ok: false }`, §4) after logging the actionable error.
+ *
+ * Introspection mode is NOT affected (RFC 7662: the AS itself decides `aud`
+ * truth server-side, `active` gates acceptance).
+ */
+class MissingAudienceConfigError extends Error {}
+
+function requireJwksAudience(): string {
+  const audience = getAudience()
+  if (!audience) {
+    throw new MissingAudienceConfigError(
+      'OIDC_AUDIENCE is required in jwks verify mode (REQ-006 deny-by-default): ' +
+        'without it token `aud` claims are not validated and any audience is accepted. ' +
+        'Set OIDC_AUDIENCE (for dex/static clients: the client_id, e.g. local-pm-web; ' +
+        'for RFC 8707 resource-indicator IdPs: the resource/audience URI minted into the token). ' +
+        'Alternatively set OIDC_VERIFY_MODE=introspection.',
+    )
+  }
+  return audience
+}
+
+/**
  * Verify an access token in `jwks` mode: signature via issuer JWKS + claims
- * iss/aud/exp/nbf with clock-skew tolerance. Any failure → `{ ok: false }`.
+ * iss/aud/exp/nbf with clock-skew tolerance — `aud` is ALWAYS validated
+ * (OIDC_AUDIENCE required, REQ-006). Any failure → `{ ok: false }`.
  */
 async function verifyJwks(token: string): Promise<VerifyResult> {
   try {
+    // Config validation FIRST (REQ-006): a missing audience must fail fast
+    // without touching the network.
+    const audience = requireJwksAudience()
     const discovery = await fetchDiscovery()
     const jwks = getJwkSet(discovery.jwks_uri)
-    const audience = getAudience()
     const options = {
       issuer: discovery.issuer,
-      ...(audience ? { audience } : {}),
+      audience,
       clockTolerance: getClockSkewSeconds(),
     }
     const { payload } = await jwtVerify(token, jwks, options)
@@ -102,7 +134,12 @@ async function verifyJwks(token: string): Promise<VerifyResult> {
       ok: true,
       claims: { sub, iss, payload: payload as Record<string, unknown>, clientIdClaim, isAgent },
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof MissingAudienceConfigError) {
+      // A configuration error is not a bad token: surface the actionable
+      // fix instead of blending in with per-request verification noise.
+      console.error('[oidc] verify:', (err as Error).message)
+    }
     // Fail-closed: bad signature, wrong iss/aud, expired beyond skew, ...
     return { ok: false }
   }

@@ -2,12 +2,14 @@
 
 import dynamic from 'next/dynamic'
 import { useMemo } from 'react'
+import { sanitizeHtml } from '@/lib/sanitize'
+import { cn } from '@/lib/cn'
 import 'react-quill-new/dist/quill.snow.css'
 
 const ReactQuill = dynamic(() => import('react-quill-new'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[150px] bg-secondary/30 border border-border/50 rounded-md animate-pulse" />
+    <div className="h-[150px] w-full animate-pulse-soft rounded-sm bg-surface-hover" aria-hidden />
   ),
 })
 
@@ -53,7 +55,9 @@ export function RichTextEditor({
       <ReactQuill
         theme="snow"
         value={value}
-        onChange={onChange}
+        onChange={(next, _delta, source) => {
+          if (source === 'user') onChange(next)
+        }}
         modules={editorModules}
         formats={formats}
         placeholder={placeholder}
@@ -63,16 +67,28 @@ export function RichTextEditor({
   )
 }
 
-// Component for displaying rich text content (read-only)
-export function RichTextDisplay({ content }: { content: string }) {
-  if (!content || content === '<p><br></p>') {
-    return <p className="text-sm text-muted-foreground italic">No description</p>
+// Sanitize config moved to @/lib/sanitize (upstream #19 port): the markdown
+// comment renderer and RichTextDisplay share one allowlist. The
+// serverExternalPackages pin for isomorphic-dompurify/jsdom in next.config.ts
+// keeps covering this module (same import chain, still server-bundled).
+
+export function RichTextDisplay({
+  content,
+  wide = false,
+}: {
+  content: string
+  wide?: boolean
+}) {
+  const sanitized = useMemo(() => sanitizeHtml(content), [content])
+
+  if (!content || content === '<p><br></p>' || !sanitized.trim()) {
+    return <p className="text-base text-text-muted">No description yet.</p>
   }
 
   return (
     <div
-      className="rich-text-content"
-      dangerouslySetInnerHTML={{ __html: content }}
+      className={cn('rich-text-content', wide && 'max-w-none')}
+      dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   )
 }

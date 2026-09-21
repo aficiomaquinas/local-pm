@@ -539,3 +539,70 @@ implementation design) · [REQ-002](../requirements/2026-09-05_REQ-002_distingui
 Code: `apps/web/src/collections/Users.ts`, `apps/web/src/access/actorPolicy.ts`,
 `apps/web/src/access/dataManagementPolicy.ts`, `apps/web/src/payload.config.ts`,
 `packages/mcp-server/src/index.ts` (`apiRequest`), `.env.example`.
+
+---
+
+## 20. Amendment (2026-09-20) — REQ-006 deny-by-default: audience REQUIRED in jwks mode
+
+| | |
+|---|---|
+| **Type** | Amendment (append-only; §6/§13 behavior amended as described, everything else untouched) |
+| **Driver** | [REQ-006 — OIDC security boundaries deny by default](../requirements/2026-09-20_REQ-006_oidc-deny-by-default.md) |
+| **Status** | IMPLEMENTED on `fix/oidc-deny-by-default` — gate green; pending operator review/merge |
+
+### 20.1 Provenance
+
+The upstream maintainer's roadmap (anaskasmi/local-pm, **roadmap task 42**) lists three
+defects in this fork's OIDC code as pre-conditions for adoption: *"invert all three to
+deny-by-default"*. Fork audit of 2026-09-20 (base: master `fba7286`):
+
+| # | Upstream defect | Verdict | Evidence |
+|---|---|---|---|
+| 1 | `resolveActorType` privileged-for-unmarked | **NOT PRESENT** | `apps/web/src/access/actorPolicy.ts:35-43` — an unmarked principal falls through to a plain `'user'`; privilege requires an explicit marker (`roles:['superadmin']` groups claim) or the master-user identity. No code change. |
+| 2 | `dataManagementAccess` role-less blanket grant | **CONFIRMED** | `apps/web/src/access/dataManagementPolicy.ts:39` — chain ended `return true` for any authenticated principal with NO role marker ("master user, pre-claims"). Any role-less principal got full import/export. |
+| 3 | JWKS audience skip when unconfigured | **CONFIRMED** | `apps/web/src/lib/oidc/verify.ts:89-94` — `...(audience ? { audience } : {})`: with `OIDC_AUDIENCE` unset, `jwtVerify` received no audience option, jose skipped `aud` validation, and the post-verify client-id/azp checks did not restore it. A right-issuer/right-key token minted for ANOTHER audience passed. |
+
+### 20.2 Amended behavior
+
+1. **§9 ACL delta, extended.** The role-less tail of `dataManagementAccess` no longer
+   returns an unconditional `true`; it resolves `isMasterUser(user)` (SPC-001 §6
+   identity). The one-shot first-register master (E-7) keeps access — its grant now
+   derives from the master identity instead of a blanket default, so any future
+   tightening of the identity model propagates to this boundary. Agent-marked
+   principals remain barred upstream in the chain (REQ-002/ADR-002).
+   **Live-verified extension (E2E stack, 2026-09-20):** first-register stamps the
+   local master doc with the schema defaults `actorType:'human'`,
+   `roles:['human']` — so the pre-amendment roles-array branch
+   (`return roles.includes('superadmin')`) had been denying the OPERATOR Data
+   Management outright (REST-verified: master `GET /api/exports` → 403 on
+   master fba7286 code; never caught before because no gate exercised
+   `/api/exports` as master). Amended ACL: inside the roles-array branch, a doc
+   carrying an OIDC identity pair (`identitySub`, always stamped by the §8
+   upsert on mirrors) is claims-only — denied without a superadmin marker; a
+   doc without an identity pair is the LOCAL master and resolves through the
+   master-user identity. A roles-array-carrying role-less leak therefore
+   remains structurally impossible.
+2. **§6 jwks mode — audience REQUIRED (amends §13).** `OIDC_AUDIENCE` is no longer
+   "empty = skip aud check". In jwks mode an unset audience is a configuration ERROR:
+   verification fail-fasts at first use (`requireJwksAudience()`), BEFORE any
+   discovery/JWKS network I/O, returning the §4 fail-closed `{ ok: false }` and
+   logging one actionable `console.error` (the message names the env var and both
+   remediation paths). `aud` is therefore always validated; tokens with a missing or
+   mismatched `aud` are rejected. **Introspection mode is intentionally unchanged**
+   (RFC 7662: the AS decides `aud` truth server-side; `active` gates acceptance).
+   Deployment note: set `OIDC_AUDIENCE` to what the issuer actually mints — for
+   dex/static clients the `client_id` (e.g. `local-pm-web`); for RFC 8707
+   resource-indicator IdPs the resource URI carried as `aud` (the E2E oidc-dev
+   service mints `urn:local-pm:api` via `getResourceServerInfo`).
+
+### 20.3 Code & test mapping
+
+- `apps/web/src/access/dataManagementPolicy.ts` — role-less branch → `isMasterUser`.
+- `apps/web/src/lib/oidc/verify.ts` — `requireJwksAudience()` fail-fast; audience
+  always passed to `jwtVerify`; config errors logged, token errors stay silent.
+- `apps/web/src/lib/oidc/env.ts` — `getAudience()` doc contract updated.
+- Tests: `apps/web/tests/o4.req006-data-management.test.ts` (AC-a),
+  `apps/web/tests/o5.req006-verify-audience.test.ts` (AC-b/c/d),
+  `apps/web/tests/o1.oidc-core.test.ts` harness default (`OIDC_AUDIENCE` set).
+- E2E stack: `docker-compose.e2e.yml` pins `OIDC_AUDIENCE=local-pm-web` (dex leg) and
+  `OIDC_AUDIENCE=urn:local-pm:api` (oidc-dev leg) — AC-e verified live.

@@ -1,451 +1,297 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import {
-  ArrowLeft,
-  Pencil,
-  Save,
-  X,
-  Calendar,
-  Hash,
-  FolderKanban,
-} from 'lucide-react'
-import { RichTextEditor } from '@/components/ui/RichTextEditor'
-import { ProjectStatus, PROJECT_STATUS_OPTIONS, PROJECT_COLORS, PROJECT_ICONS, TicketStatus } from '@/types/enums'
-import type { Project, Ticket, Team } from '@/payload-types'
-import * as Icons from 'lucide-react'
+import { ArrowLeft, FileText, LayoutDashboard, ListChecks, Pencil, Trash2 } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import { ProjectStatus, TicketStatus } from '@/types/enums'
+import { projectStatusOptions } from '@/lib/status'
+import { formatDateTimeRelative } from '@/lib/format'
+import { useOptimisticPatch, saveStateLabel } from '@/hooks/useOptimisticPatch'
+import { Button, LinkButton } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Expandable } from '@/components/ui/Expandable'
+import { Field } from '@/components/ui/Field'
+import { Select } from '@/components/ui/Select'
+import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
+import { InlineEdit } from '@/components/ui/InlineEdit'
+import { TicketStatusBadge } from '@/components/ui/StateIndicator'
+import { TabList, TabPanel } from '@/components/ui/Tabs'
+import { useToast } from '@/components/ui/Toast'
+import { RichTextDisplay } from '@/components/ui/RichTextEditor'
+import { TicketsTable } from '@/components/tickets/TicketsTable'
+import type { Project } from '@/payload-types'
 
-interface ProjectDetailProps {
+export interface ProjectStats {
+  total: number
+  todo: number
+  inProgress: number
+  done: number
+}
+
+const TAB_IDS = ['overview', 'tickets'] as const
+type TabId = (typeof TAB_IDS)[number]
+
+export function ProjectDetail({
+  project: initialProject,
+  stats,
+  initialTab = 'overview',
+}: {
   project: Project
-  tickets: Ticket[]
-  teams: Team[]
-}
-
-const iconMap: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  folder: Icons.Folder,
-  rocket: Icons.Rocket,
-  zap: Icons.Zap,
-  star: Icons.Star,
-  heart: Icons.Heart,
-  flag: Icons.Flag,
-  target: Icons.Target,
-  briefcase: Icons.Briefcase,
-  code: Icons.Code,
-  box: Icons.Box,
-  layers: Icons.Layers,
-  database: Icons.Database,
-}
-
-export function ProjectDetail({ project: initialProject, tickets, teams }: ProjectDetailProps) {
+  stats: ProjectStats
+  initialTab?: TabId
+}) {
   const router = useRouter()
+  const { toast } = useToast()
   const [project, setProject] = useState(initialProject)
-  const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
+  const [tab, setTab] = useState<TabId>(initialTab)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  // Edit form state
-  const [name, setName] = useState(project.name)
-  const [status, setStatus] = useState(project.status)
-  const [icon, setIcon] = useState<string>(project.icon as string || 'folder')
-  const [color, setColor] = useState<string>(project.color as string || '#6366f1')
-  const [description, setDescription] = useState(project.description as unknown as string || '')
+  const apply = useCallback((next: Project) => setProject(next), [])
+  const { patch, state } = useOptimisticPatch<Project>({
+    collection: 'projects',
+    record: project,
+    onApply: apply,
+  })
 
-  const IconComponent = iconMap[project.icon as string] || Icons.Folder
+  const description = (project.description as unknown as string) || ''
+  const savingLabel = saveStateLabel(state)
+  const percent = stats.total ? Math.round((stats.done / stats.total) * 100) : 0
 
-  // Calculate ticket stats
-  const ticketStats = {
-    total: tickets.length,
-    todo: tickets.filter(t => t.status === TicketStatus.TODO).length,
-    inProgress: tickets.filter(t => t.status === TicketStatus.IN_PROGRESS).length,
-    done: tickets.filter(t => t.status === TicketStatus.DONE).length,
+  const selectTab = (next: string) => {
+    setTab(next as TabId)
+    const url = next === 'overview' ? window.location.pathname : `?tab=${next}`
+    window.history.pushState(null, '', url)
   }
 
-  const handleSave = async () => {
-    setIsSaving(true)
+  useEffect(() => {
+    const onPopState = () => {
+      const next = new URLSearchParams(window.location.search).get('tab')
+      setTab(TAB_IDS.includes(next as TabId) ? (next as TabId) : 'overview')
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  const deleteProject = async () => {
+    setDeleting(true)
     try {
-      const response = await fetch(`/api/projects/${project.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          status,
-          icon,
-          color,
-          description,
-        }),
-      })
+      const ticketsResponse = await fetch(
+        `/api/tickets?where[project][equals]=${project.id}&limit=1000&depth=0`,
+      )
+      const ticketsData = await ticketsResponse.json()
+      await Promise.all(
+        ((ticketsData.docs ?? []) as { id: string }[]).map((t) =>
+          fetch(`/api/tickets/${t.id}`, { method: 'DELETE' }),
+        ),
+      )
 
-      if (!response.ok) throw new Error('Failed to update project')
-
-      const updated = await response.json()
-      setProject(updated.doc || updated)
-      setIsEditing(false)
+      const response = await fetch(`/api/projects/${project.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      toast({ title: `${project.name} deleted`, tone: 'info' })
+      router.push('/projects')
       router.refresh()
     } catch (error) {
-      console.error('Failed to save project:', error)
-    } finally {
-      setIsSaving(false)
+      toast({
+        tone: 'error',
+        title: "Couldn't delete that project",
+        description: error instanceof Error ? error.message : undefined,
+      })
+      setDeleting(false)
     }
-  }
-
-  const handleCancel = () => {
-    setName(project.name)
-    setStatus(project.status)
-    setIcon(project.icon || 'folder')
-    setColor(project.color || '#6366f1')
-    setDescription(project.description as unknown as string || '')
-    setIsEditing(false)
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }
-
-  const getStatusBadgeClass = (statusValue: string) => {
-    const classes: Record<string, string> = {
-      [ProjectStatus.ACTIVE]: 'bg-green-500/20 text-green-400',
-      [ProjectStatus.ON_HOLD]: 'bg-yellow-500/20 text-yellow-400',
-      [ProjectStatus.COMPLETED]: 'bg-blue-500/20 text-blue-400',
-      [ProjectStatus.CANCELLED]: 'bg-red-500/20 text-red-400',
-    }
-    return classes[statusValue] || 'bg-gray-500/20 text-gray-400'
   }
 
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <div className="border-b border-[#27272a] bg-[#0f0f0f]">
-        <div className="max-w-5xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-4 mb-4">
-            <Link
-              href="/projects"
-              className="p-2 text-gray-400 hover:text-white hover:bg-[#1f1f23] rounded-md transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
+    <div className="flex h-full flex-col">
+      <header className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 pt-4 max-md:px-4">
+        <nav aria-label="Breadcrumb">
+          <Link
+            href="/projects"
+            className="inline-flex items-center gap-1.5 rounded-sm text-xs text-text-muted transition-colors duration-micro hover:text-text"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden />
+            Projects
+          </Link>
+        </nav>
 
-            {isEditing ? (
-              <div className="flex items-center gap-3 flex-1">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="text-2xl font-bold bg-[#1f1f23] border border-[#27272a] rounded-md px-3 py-1 text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 flex-1">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: `${project.color}20` }}
-                >
-                  <IconComponent
-                    className="w-5 h-5"
-                    style={{ color: project.color as string }}
-                  />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-white">{project.name}</h1>
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <Hash className="w-3 h-3" />
-                    <span>{project.prefix}</span>
-                  </div>
-                </div>
-              </div>
-            )}
+        <div className="flex flex-wrap items-center gap-3">
+          <EntityMark icon={projectIcon(project.icon)} color={project.color} size="lg" />
 
-            <div className="flex items-center gap-2">
-              {isEditing ? (
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-semibold text-text">
+              <InlineEdit
+                label="Project name"
+                value={project.name}
+                validate={(next) => (next ? null : 'A name is required.')}
+                onCommit={(next) => patch({ name: next }, 'the name')}
+              />
+            </h1>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+              <span className="tabular">{project.prefix}</span>
+              <span aria-hidden>·</span>
+              <span className="tabular">
+                {stats.total} {stats.total === 1 ? 'ticket' : 'tickets'}
+              </span>
+              <span aria-hidden>·</span>
+              <span className="tabular">{percent}% complete</span>
+              {savingLabel && (
                 <>
-                  <button
-                    onClick={handleCancel}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                  <span aria-hidden>·</span>
+                  <span
+                    aria-live="polite"
+                    className={state === 'error' ? 'text-danger-text' : undefined}
                   >
-                    <X className="w-4 h-4" />
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    {isSaving ? 'Saving...' : 'Save'}
-                  </button>
+                    {savingLabel}
+                  </span>
                 </>
-              ) : (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#27272a] hover:bg-[#3f3f46] rounded-md transition-colors"
-                >
-                  <Pencil className="w-4 h-4" />
-                  Edit
-                </button>
               )}
-            </div>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <LinkButton variant="secondary" icon={Pencil} href={`/projects/${project.id}/edit`}>
+              Edit
+            </LinkButton>
+            <LinkButton
+              variant="secondary"
+              icon={LayoutDashboard}
+              href={`/board?project=${project.id}`}
+            >
+              Board
+            </LinkButton>
+            <Button variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(true)}>
+              Delete
+            </Button>
           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="col-span-2 space-y-6">
-            {/* Description */}
-            <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">Description</h2>
-              {isEditing ? (
-                <RichTextEditor
-                  value={description}
-                  onChange={setDescription}
-                  placeholder="Describe your project..."
-                />
-              ) : (
-                <div className="prose prose-invert max-w-none">
-                  {project.description ? (
-                    <RichTextRenderer content={project.description} />
-                  ) : (
-                    <p className="text-gray-500 italic">No description yet. Click Edit to add one.</p>
-                  )}
-                </div>
-              )}
-            </div>
+        <TabList
+          label="Project sections"
+          idPrefix="project"
+          value={tab}
+          onChange={selectTab}
+          tabs={[
+            { id: 'overview', label: 'Overview', icon: FileText },
+            { id: 'tickets', label: 'Tickets', icon: ListChecks, count: stats.total },
+          ]}
+        />
+      </header>
 
-            {/* Recent Tickets */}
-            <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-white">Recent Tickets</h2>
-                <Link
-                  href={`/board?project=${project.id}`}
-                  className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
-                  View all on board →
-                </Link>
-              </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 max-md:px-4">
+        <TabPanel id="overview" idPrefix="project" active={tab === 'overview'}>
+          <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-8 max-lg:grid-cols-1">
+            <section className="flex min-w-0 flex-col gap-3">
+              <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                Description
+              </h2>
+              <Expandable lines={10}>
+                <RichTextDisplay content={description} wide />
+              </Expandable>
+            </section>
 
-              {tickets.length === 0 ? (
-                <p className="text-gray-500">No tickets yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {tickets.slice(0, 5).map((ticket) => {
-                    const team = typeof ticket.team === 'object' ? ticket.team : null
-                    return (
-                      <div
-                        key={ticket.id}
-                        className="flex items-center gap-3 p-3 bg-[#1f1f23] rounded-md"
-                      >
-                        <span
-                          className="text-xs font-medium px-2 py-0.5 rounded"
-                          style={{
-                            backgroundColor: `${project.color}20`,
-                            color: project.color as string,
-                          }}
-                        >
-                          {ticket.ticketId}
-                        </span>
-                        <span className="flex-1 text-sm text-white truncate">
-                          {ticket.title}
-                        </span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          ticket.status === TicketStatus.TODO ? 'bg-gray-500/20 text-gray-400' :
-                          ticket.status === TicketStatus.IN_PROGRESS ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-green-500/20 text-green-400'
-                        }`}>
-                          {ticket.status === TicketStatus.TODO ? 'Todo' :
-                           ticket.status === TicketStatus.IN_PROGRESS ? 'In Progress' : 'Done'}
-                        </span>
-                        {team && (
-                          <span
-                            className="text-xs px-2 py-0.5 rounded"
-                            style={{
-                              backgroundColor: `${team.color}20`,
-                              color: team.color as string,
-                            }}
-                          >
-                            {team.name}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+            <aside className="flex flex-col gap-6">
+              <Field label="Status">
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={project.status}
+                    options={projectStatusOptions()}
+                    onValueChange={(next) => patch({ status: next as ProjectStatus }, 'the status')}
+                  />
+                )}
+              </Field>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Status & Settings */}
-            <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-6">
-              <h3 className="text-sm font-medium text-gray-400 mb-4">Details</h3>
+              <section className="flex flex-col gap-3">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Progress
+                </h2>
 
-              <div className="space-y-4">
-                {/* Status */}
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Status</label>
-                  {isEditing ? (
-                    <select
-                      value={status as string}
-                      onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-                      className="w-full bg-[#1f1f23] border border-[#27272a] rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  <div
+                    role="progressbar"
+                    aria-valuenow={percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Tickets complete"
+                    className="h-2 overflow-hidden rounded-full bg-surface-hover"
+                  >
+                    <div
+                      className="h-full rounded-full bg-success transition-[width] duration-standard ease-standard"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-text-muted tabular">
+                    {percent}% complete · {stats.done} of {stats.total} done
+                  </p>
+                </div>
+
+                <dl className="flex flex-col">
+                  {(
+                    [
+                      ['Todo', stats.todo, TicketStatus.TODO],
+                      ['In progress', stats.inProgress, TicketStatus.IN_PROGRESS],
+                      ['Done', stats.done, TicketStatus.DONE],
+                    ] as const
+                  ).map(([label, value, status]) => (
+                    <div
+                      key={label}
+                      className="flex h-9 items-center justify-between gap-2 border-b border-border-subtle last:border-b-0"
                     >
-                      {PROJECT_STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className={`inline-block text-xs px-2 py-1 rounded ${getStatusBadgeClass(project.status as string)}`}>
-                      {project.status}
-                    </span>
-                  )}
-                </div>
-
-                {/* Icon */}
-                {isEditing && (
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-2">Icon</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {PROJECT_ICONS.map((iconName) => {
-                        const Icon = iconMap[iconName] || Icons.Folder
-                        return (
-                          <button
-                            key={iconName}
-                            type="button"
-                            onClick={() => setIcon(iconName)}
-                            className={`p-2 rounded border transition-colors flex items-center justify-center ${
-                              icon === iconName
-                                ? 'border-indigo-500 bg-indigo-500/20'
-                                : 'border-[#27272a] hover:border-[#3f3f46]'
-                            }`}
-                          >
-                            <Icon className="w-4 h-4 text-gray-300" />
-                          </button>
-                        )
-                      })}
+                      <dt className="flex items-center gap-2 text-base text-text-muted">
+                        <TicketStatusBadge status={status} />
+                      </dt>
+                      <dd className={cn('text-base text-text tabular')}>{value}</dd>
                     </div>
-                  </div>
-                )}
+                  ))}
+                </dl>
+              </section>
 
-                {/* Color */}
-                {isEditing && (
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-2">Color</label>
-                    <div className="grid grid-cols-6 gap-2">
-                      {PROJECT_COLORS.map((colorOption) => (
-                        <button
-                          key={colorOption}
-                          type="button"
-                          onClick={() => setColor(colorOption)}
-                          className={`w-6 h-6 rounded-full border-2 transition-all ${
-                            color === colorOption ? 'border-white scale-110' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: colorOption }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Created */}
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Created</label>
-                  <div className="flex items-center gap-2 text-sm text-white">
-                    <Calendar className="w-4 h-4 text-gray-500" />
-                    {formatDate(project.createdAt)}
-                  </div>
+              <dl className="flex flex-col gap-2 border-t border-border-subtle pt-4 text-xs text-text-muted">
+                <div className="flex justify-between gap-2">
+                  <dt>Created</dt>
+                  <dd className="text-text tabular">{formatDateTimeRelative(project.createdAt)}</dd>
                 </div>
-
-                {/* Updated */}
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Last Updated</label>
-                  <div className="flex items-center gap-2 text-sm text-white">
-                    <Calendar className="w-4 h-4 text-gray-500" />
-                    {formatDate(project.updatedAt)}
-                  </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Updated</dt>
+                  <dd className="text-text tabular">{formatDateTimeRelative(project.updatedAt)}</dd>
                 </div>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-6">
-              <h3 className="text-sm font-medium text-gray-400 mb-4">Statistics</h3>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Total Tickets</span>
-                  <span className="text-sm font-medium text-white">{ticketStats.total}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Todo</span>
-                  <span className="text-sm font-medium text-gray-400">{ticketStats.todo}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">In Progress</span>
-                  <span className="text-sm font-medium text-blue-400">{ticketStats.inProgress}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-400">Done</span>
-                  <span className="text-sm font-medium text-green-400">{ticketStats.done}</span>
-                </div>
-
-                {/* Progress bar */}
-                {ticketStats.total > 0 && (
-                  <div className="pt-2">
-                    <div className="h-2 bg-[#27272a] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 transition-all"
-                        style={{ width: `${(ticketStats.done / ticketStats.total) * 100}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {Math.round((ticketStats.done / ticketStats.total) * 100)}% complete
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+              </dl>
+            </aside>
           </div>
-        </div>
+        </TabPanel>
+
+        <TabPanel id="tickets" idPrefix="project" active={tab === 'tickets'}>
+          <TicketsTable
+            where={{ project: project.id }}
+            caption={`Tickets in ${project.name}`}
+            keyColor={project.color}
+            relationColumn="team"
+            newTicketHref={`/tickets/new?project=${project.id}&returnTo=${encodeURIComponent(
+              `/projects/${project.id}?tab=tickets`,
+            )}`}
+            emptyTitle="No tickets in this project"
+            emptyDescription="Tickets created here get the key prefix and show up on the board."
+          />
+        </TabPanel>
       </div>
-    </div>
-  )
-}
 
-// Simple Rich Text Renderer for Lexical content
-function RichTextRenderer({ content }: { content: unknown }) {
-  if (!content || typeof content !== 'object') {
-    return <p className="text-gray-500 italic">No description</p>
-  }
-
-  const root = (content as { root?: { children?: unknown[] } }).root
-  if (!root?.children) {
-    return <p className="text-gray-500 italic">No description</p>
-  }
-
-  return (
-    <div className="text-gray-300 space-y-2">
-      {root.children.map((node: unknown, index: number) => {
-        const typedNode = node as { type?: string; children?: { text?: string }[]; tag?: string }
-        if (typedNode.type === 'paragraph') {
-          const text = typedNode.children?.map((c) => c.text || '').join('') || ''
-          if (!text) return null
-          return <p key={index}>{text}</p>
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={deleteProject}
+        loading={deleting}
+        title="Delete this project?"
+        message={`“${project.name}” (${project.prefix})`}
+        consequence={
+          stats.total > 0
+            ? `Permanently deletes ${stats.total} ticket${stats.total === 1 ? '' : 's'} and their history. This cannot be undone.`
+            : 'This project has no tickets. This cannot be undone.'
         }
-        if (typedNode.type === 'heading') {
-          const text = typedNode.children?.map((c) => c.text || '').join('') || ''
-          const Tag = (typedNode.tag || 'h2') as React.ElementType
-          return <Tag key={index} className="font-semibold text-white">{text}</Tag>
-        }
-        return null
-      })}
+        confirmPhrase={stats.total > 0 ? project.name : undefined}
+        confirmLabel="Delete project"
+      />
     </div>
   )
 }

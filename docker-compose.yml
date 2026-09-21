@@ -52,6 +52,9 @@ services:
       DATABASE_URI: mongodb://mongodb:27017/local-pm
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:-local-pm-secret-key-for-development-only}
       NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-http://localhost:3010}
+      # Upstream bfc8b57 port (PR #20 attachments): uploads write to the
+      # mounted volume so files survive container rebuilds.
+      LOCAL_PM_UPLOADS_DIR: /app/uploads
     depends_on:
       mongodb:
         condition: service_healthy
@@ -59,6 +62,8 @@ services:
       # SPC-004 §5.6 / D-3: named-snapshot files (plugin-import-export
       # `exports` uploads, staticDir /app/snapshots) persist across rebuilds.
       - local-pm-snapshots:/app/snapshots
+      # Upstream bfc8b57 port: comment-attachment uploads persist here.
+      - local-pm-uploads:/app/uploads
 
   # OIDC variant of `app` — profile `oidc` only. Same image build, same
   # port/volumes; differs ONLY in the OIDC_* env below. Never runs at the
@@ -94,6 +99,8 @@ services:
         condition: service_healthy
     volumes:
       - local-pm-snapshots:/app/snapshots
+      # Upstream bfc8b57 port: comment-attachment uploads persist here.
+      - local-pm-uploads:/app/uploads
     profiles:
       - oidc
 
@@ -138,3 +145,5 @@ services:
 volumes:
   local-pm-mongodb-data:
   local-pm-snapshots:
+  # Upstream bfc8b57 port (PR #20 attachments): uploaded attachment files.
+  local-pm-uploads:

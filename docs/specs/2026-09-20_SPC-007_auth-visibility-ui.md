@@ -4,7 +4,7 @@
 |---|---|
 | **ID** | SPC-007 |
 | **Date** | 2026-09-20 |
-| **Status** | v2 IMPLEMENTED (feat/auth-ui-v2 e08b9eb, pending merge): sidebar user block + anonymous banner + mutation nudge per §2 — operator decision 2026-09-20. Gate green: pnpm verify 287 (web 204, mcp 83) + live browser check on the e2e stack (banner, user block, popover, nudge pulse on 403, PATCH/revert wire). |
+| **Status** | v2.1 IMPLEMENTED (feat/sync-upstream-main-2026-09-20): upstream PR#7 move-failure toast adopted, class-specific error bar removed (§7); sidebar user block rebuilt on the PR#9-#11 Radix primitives (§8). Gate green: pnpm verify (web 221 + mcp 83) + live browser check on the e2e stack (toast bottom-right on 403 + revert + nudge pulse, user block, Radix popover, PATCH 200 + history actor row). |
 | **Type** | Spec (how REQ-005 is fulfilled) |
 | **Related** | [REQ-005](../requirements/2026-09-20_REQ-005_auth-session-visibility.md) · SPC-006 (OIDC) · SPC-005 (history) |
 
@@ -95,3 +95,41 @@ trigger on the failed action itself.
   React concurrent (see INV-AUTH-VIS §2.5).
 - dnd-kit sensors ignore untrusted events: browser verification of drags requires
   trusted CDP input (chrome-devtools-mcp `drag`), not synthetic `dispatchEvent`.
+
+---
+
+## 7. v2.1 amendment (2026-09-20, operator decision): upstream move-failure toast, class-specific bar removed
+
+Operator decision (2026-09-20): **ADOPT the upstream PR#7 failure UX (a1850cd) for
+failed board moves and REMOVE the fork's class-specific red error bar.** The bar
+(`data-testid="mutation-error"`, messages "Your session is not active — the move was not
+saved. Log in and try again." / "The move could not be saved (server error N)…") is
+judged redundant: the generic bottom-right toast "Couldn't move that ticket" suffices
+even though it is less informative about the failure class.
+
+- Failure surface for a rejected move: the upstream-parity toast (title
+  "Couldn't move that ticket", description "<TICKET-ID> is back in <Origin column>.") —
+  the card still returns to its origin via `useOptimisticPatch`/`resultFromPreview`
+  (unchanged, verified intact).
+- **The `localpm:auth-nudge` dispatch on 401/403 is CONSERVED.** With the bar gone,
+  the anonymous-banner pulse is now THE auth-specific signal: toast (what happened) +
+  nudge (why, standing explanation). The red bar's message classes are not replaced.
+- Spec sections superseded by this amendment: §2.4 (error surface) and the
+  `mutation-error` testids in §3/§4 are historical (v2.0). AC-3/AC-5 now read
+  "revert + toast" (+ nudge pulse when 401/403).
+
+## 8. v2.1 amendment (2026-09-20, operator decision): user block rebuilt on the design-system primitives
+
+The §2.1 sidebar user block's hand-rolled popover (own open state, document-level
+mousedown/keydown listeners, `.auth-menu-pop` animation class) was re-acarried markup.
+Per the operator's decision it is **rebuilt on the PR#9-#11 Radix primitives**:
+
+- The menu is `ui/Menu` (Radix `DropdownMenu`) with a new `href` item variant rendering
+  `DropdownMenu.Item asChild` → real anchor, so Admin (`/admin`) and Log out
+  (`/admin/logout`) keep native link semantics; click-outside/Escape/focus handling is
+  the primitive's. The trigger is the same avatar-initial + email block; the open state
+  is styled with `data-[state=open]` + design-system tokens (`animate-fade-in`,
+  `bg-overlay`, `shadow-e2`).
+- Behavior contract unchanged: `data-testid="user-menu"`, menu authenticated-only,
+  Payload owns the logout flow. The `.auth-menu-pop` CSS block in `globals.css` is now
+  dead and was removed with the markup that referenced it.

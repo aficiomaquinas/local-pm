@@ -5,12 +5,13 @@ import { denyAgents, isMasterUser } from '@/access/actorPolicy'
 import { readExcludingDeleted, blockHardDelete, DELETED_FIELD } from '@/access/softDelete'
 import { attributeActor, ACTOR_ATTRIBUTION_FIELDS } from '@/hooks/actorAttribution'
 import { TicketStatus, TicketPriority, TICKET_STATUS_OPTIONS, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
+import { diffTicket } from '@/lib/activity'
 
 export const Tickets: CollectionConfig = {
   slug: 'tickets',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['ticketId', 'title', 'status', 'priority', 'project', 'team'],
+    defaultColumns: ['ticketId', 'title', 'status', 'priority', 'project', 'assignee'],
     description: 'Individual work items within projects',
   },
   access: {
@@ -49,12 +50,32 @@ export const Tickets: CollectionConfig = {
       // every write (anonymous when there is no user); versions snapshot the
       // whole doc, so every version is attributed.
       attributeActor,
-      async ({ data, req, operation }) => {
+      async ({ data, req, operation, originalDoc }) => {
+        // Upstream d7747b6 port (Ars Nova, d488521): reject a blockedBy edge
+        // that would close a dependency cycle at write time — a cycle makes
+        // "what is ready to work on?" unanswerable and hangs layered graph
+        // layouts (DependencyGraph).
+        await assertNoDependencyCycle(req, data?.blockedBy, originalDoc?.id ?? null)
         if (operation === 'create' && data?.project) {
           const ticketId = await generateTicketId(req, data.project as string)
           data.ticketId = ticketId
         }
         return data
+      },
+    ],
+    // Upstream #19 port: deleting a ticket takes its comments with it.
+    // (This fork's request-path delete is soft — blockHardDelete below — so
+    // this cascade only ever runs for the operator's terminal purge script
+    // or a future explicit policy change; kept for parity.)
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        await recordActivity(req, doc, previousDoc, operation)
+      },
+    ],
+    afterDelete: [
+      async ({ req, id }) => {
+        await deleteCommentsFor(req, id)
+        await deleteActivityFor(req, id)
       },
     ],
     // SPC-001 §6: native restore (POST /api/tickets/versions/:id) runs the
@@ -135,6 +156,14 @@ export const Tickets: CollectionConfig = {
       },
     },
     {
+      name: 'assignee',
+      type: 'relationship',
+      relationTo: 'members',
+      admin: {
+        description: 'The person responsible for this ticket',
+      },
+    },
+    {
       name: 'blockedBy',
       type: 'relationship',
       relationTo: 'tickets',
@@ -210,25 +239,233 @@ export const Tickets: CollectionConfig = {
   timestamps: true,
 }
 
-async function generateTicketId(req: PayloadRequest, projectId: string): Promise<string> {
-  const project = await req.payload.findByID({
-    collection: 'projects',
-    id: projectId,
-  })
+/* ------------------------------------------------------------- dependencies -- */
 
-  if (!project) {
-    throw new Error('Project not found')
+/**
+ * A rejected dependency edge is USER error, not server error.
+ *
+ * Payload treats a bare `Error` thrown from a hook as internal and replaces the
+ * message with "Something went wrong." — so the caller cannot tell a cycle from
+ * an outage. `APIError` with `isPublic` keeps the explanation and returns 400
+ * rather than 500.
+ */
+async function deleteCommentsFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.delete({
+    req,
+    collection: 'comments',
+    where: { ticket: { equals: id } },
+    depth: 0,
+  })
+}
+
+async function deleteActivityFor(req: PayloadRequest, id: string | number): Promise<void> {
+  await req.payload.delete({
+    req,
+    collection: 'activity',
+    where: { ticket: { equals: id } },
+    depth: 0,
+    overrideAccess: true,
+  })
+}
+
+async function recordActivity(
+  req: PayloadRequest,
+  doc: Record<string, unknown>,
+  previousDoc: Record<string, unknown> | undefined,
+  operation: 'create' | 'update',
+): Promise<void> {
+  const events = diffTicket(operation === 'create' ? null : previousDoc, doc)
+  if (events.length === 0) return
+
+  const actor = await memberForRequest(req)
+
+  for (const event of events) {
+    await req.payload.create({
+      req,
+      collection: 'activity',
+      depth: 0,
+      overrideAccess: true,
+      data: {
+        ticket: doc.id as string,
+        action: event.action,
+        field: event.field,
+        from: event.from,
+        to: event.to,
+        actor,
+      },
+    })
+  }
+}
+
+async function memberForRequest(req: PayloadRequest): Promise<string | null> {
+  const userId = req.user?.id
+  if (!userId) return null
+
+  const found = await req.payload.find({
+    req,
+    collection: 'members',
+    where: { user: { equals: userId } },
+    limit: 1,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const member = found.docs[0]
+  return member ? String(member.id) : null
+}
+
+class CycleError extends APIError {
+  constructor(message: string) {
+    super(message, 400, null, true)
+  }
+}
+
+/**
+ * `blockedBy` is a self-referential graph with nothing stopping A → B → A.
+ *
+ * Upstream d7747b6 port (originally from Ars Nova Singers
+ * @ArsNovaSingers, ArsNovaSingers/local-pm-Ars commit d488521). Exported for
+ * tests.
+ */
+export async function assertNoDependencyCycle(
+  req: PayloadRequest,
+  blockedBy: unknown,
+  selfId: string | number | null,
+): Promise<void> {
+  const proposed = toIdArray(blockedBy)
+  if (!proposed.length) return
+
+  if (selfId !== null && proposed.includes(String(selfId))) {
+    throw new CycleError('A ticket cannot block itself.')
+  }
+  // A brand-new ticket has no id yet, so nothing can already depend on it.
+  if (selfId === null) return
+
+  const target = String(selfId)
+  const seen = new Set<string>(proposed)
+  let frontier = [...proposed]
+  let hops = 0
+
+  // Bounded walk: a pathological graph must not spin here.
+  while (frontier.length && hops < 64) {
+    hops += 1
+    const docs = await req.payload.find({
+      collection: 'tickets',
+      where: { id: { in: frontier } },
+      limit: 500,
+      depth: 0,
+    })
+
+    const next: string[] = []
+    for (const doc of docs.docs) {
+      for (const id of toIdArray((doc as { blockedBy?: unknown }).blockedBy)) {
+        if (id === target) {
+          throw new CycleError(
+            'That dependency would create a cycle: the ticket you are blocking on already depends on this one, directly or through other tickets.',
+          )
+        }
+        if (!seen.has(id)) {
+          seen.add(id)
+          next.push(id)
+        }
+      }
+    }
+    frontier = next
+  }
+}
+
+/** Normalize a relationship value (ids, numbers or populated docs) to string ids. */
+function toIdArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry) => {
+      if (entry === null || entry === undefined) return null
+      if (typeof entry === 'string' || typeof entry === 'number') return String(entry)
+      if (typeof entry === 'object' && 'id' in (entry as Record<string, unknown>)) {
+        return String((entry as { id: unknown }).id)
+      }
+      return null
+    })
+    .filter((v): v is string => Boolean(v))
+}
+
+/* ---------------------------------------------------------------- ticket ids -- */
+
+/**
+ * Allocate the next ticket number ATOMICALLY.
+ *
+ * Upstream d7747b6 port (originally from Ars Nova Singers
+ * @ArsNovaSingers, ArsNovaSingers/local-pm-Ars commit d488521).
+ *
+ * The read-then-write allocator handed concurrent creates the same number, and
+ * `ticketId` is declared unique: two tickets racing a bulk import (or an MCP
+ * agent creating a batch) both computed `PROJ-6` and one failed on a
+ * duplicate-key error. `findOneAndUpdate` with `$inc` performs the read and
+ * the increment as one document operation, so concurrent callers are handed
+ * distinct numbers by the database itself.
+ */
+async function generateTicketId(req: PayloadRequest, projectId: string): Promise<string> {
+  const model = getMongooseModel(req, 'projects')
+
+  if (model) {
+    const updated = await model.findOneAndUpdate(
+      { _id: projectId },
+      { $inc: { ticketCounter: 1 } },
+      { new: true, returnDocument: 'after' },
+    )
+    if (!updated) throw new Error('Project not found')
+    return `${updated.prefix}-${updated.ticketCounter}`
   }
 
-  const newCounter = (project.ticketCounter || 0) + 1
+  return generateTicketIdWithRetry(req, projectId)
+}
 
-  await req.payload.update({
-    collection: 'projects',
-    id: projectId,
-    data: {
-      ticketCounter: newCounter,
-    },
-  })
+type MinimalModel = {
+  findOneAndUpdate: (
+    filter: Record<string, unknown>,
+    update: Record<string, unknown>,
+    options: Record<string, unknown>,
+  ) => Promise<{ prefix: string; ticketCounter: number } | null>
+}
 
-  return `${project.prefix}-${newCounter}`
+/** Reach the underlying mongoose model, when the configured adapter exposes one. */
+function getMongooseModel(req: PayloadRequest, slug: string): MinimalModel | null {
+  const collections = (req.payload.db as unknown as { collections?: Record<string, MinimalModel> })
+    .collections
+  const model = collections?.[slug]
+  return model && typeof model.findOneAndUpdate === 'function' ? model : null
+}
+
+/**
+ * Fallback for a database adapter exposing no atomic primitive. Still not a
+ * true compare-and-set, so it verifies the ID is unused before claiming it and
+ * retries on collision — failing loudly rather than silently issuing a
+ * duplicate. Exported for tests.
+ */
+export async function generateTicketIdWithRetry(req: PayloadRequest, projectId: string): Promise<string> {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const project = await req.payload.findByID({ collection: 'projects', id: projectId })
+    if (!project) throw new Error('Project not found')
+
+    const candidateCounter = (project.ticketCounter || 0) + 1
+    const candidate = `${project.prefix}-${candidateCounter}`
+
+    const clash = await req.payload.find({
+      collection: 'tickets',
+      where: { ticketId: { equals: candidate } },
+      limit: 1,
+      depth: 0,
+    })
+
+    if (clash.totalDocs === 0) {
+      await req.payload.update({
+        collection: 'projects',
+        id: projectId,
+        data: { ticketCounter: candidateCounter },
+      })
+      return candidate
+    }
+  }
+  throw new Error(
+    'Could not allocate a unique ticket ID after 8 attempts — check the project ticketCounter.',
+  )
 }

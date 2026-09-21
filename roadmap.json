@@ -1,0 +1,1286 @@
+{
+  "$comment": "Committed to the repo on purpose: this is the public statement of where local-pm is going, so contributors can aim at it. Read agentInstructions before touching anything below.",
+  "version": 1,
+  "createdAt": "2026-09-19",
+  "lastUpdated": "2026-09-20",
+  "source": "Feature gap analysis of local-pm against Linear, Jira, Plane, Asana, Monday, Notion, and the self-hosted field (Huly, Taiga, OpenProject, Vikunja, Focalboard).",
+  "agentInstructions": {
+    "purpose": "This is the single source of truth for what is planned, what is in flight, and what is finished in this repo. Keep it accurate. A stale roadmap is worse than no roadmap.",
+    "committed": "roadmap.json is tracked in git. Keep it accurate in the same commit as the work it describes — a contributor reading main should be able to trust it. Planning lives here and nowhere else; do not fork it into TODO lists in other files.",
+    "beforeStartingWork": [
+      "Read this file and locate the task you are about to work on by `id` or `slug`.",
+      "If the task is not here, add it (see `addingTasks`) before writing code.",
+      "Check `dependsOn`. If any dependency is not `done`, either do that first or record in `notes` why you are proceeding anyway.",
+      "Set `status` to `in_progress` and `startedAt` to today's date in YYYY-MM-DD.",
+      "Set `lastUpdated` at the top of the file to today's date.",
+      "Only one task should be `in_progress` per agent session unless the tasks are genuinely independent."
+    ],
+    "markingDone": {
+      "rule": "Set `status` to `done` ONLY when every item in `definitionOfDone` is satisfied. Do not mark a task done because the code is written. Mark it done because it is verified.",
+      "definitionOfDone": [
+        "The feature works end to end in the running app, not just in isolation.",
+        "`npm run verify` passes (typecheck + Vitest + Playwright). This is already the standing rule in CLAUDE.md.",
+        "New behaviour has at least one test — a Vitest unit test for pure logic, a Playwright spec for anything user-visible.",
+        "If the task touched UI, the relevant `.claude/rules/` files were followed and `11-review-checklist.md` was walked.",
+        "If the task changed a Payload collection, `npm run generate:types` was run and `src/payload-types.ts` is current.",
+        "If the task added a user-facing capability, the MCP server exposes it too, or task 48 has a note saying why not.",
+        "If the task changed the data model, a migration path for existing installs exists or is recorded in `notes`."
+      ],
+      "thenAlso": [
+        "Set `completedAt` to today's date in YYYY-MM-DD.",
+        "Put the commit SHA or PR number in `notes`, plus anything a future reader needs (decisions made, things deliberately left out).",
+        "Leave `startedAt` as it is — it is the record of when work began.",
+        "Set `lastUpdated` at the top of the file.",
+        "If the work revealed new tasks, add them rather than silently expanding scope."
+      ]
+    },
+    "otherStatusTransitions": {
+      "blocked": "Use when work started and cannot continue. `notes` MUST say what is blocking and what would unblock it. Do not leave a task `in_progress` when it is actually stalled.",
+      "wont_do": "Use instead of deleting. `notes` MUST say why. Keeping the decision visible is the point — see CREDITS.md for the same pattern applied to upstream forks.",
+      "todo": "The default. Revert to this if `in_progress` work was abandoned with nothing left behind."
+    },
+    "addingTasks": {
+      "id": "Next unused integer. Never reuse an id, never renumber existing ones — ids are referenced from `dependsOn`, `unblocks`, commits and conversations.",
+      "requiredFields": [
+        "id",
+        "slug",
+        "title",
+        "tier",
+        "status",
+        "effort",
+        "summary",
+        "rationale",
+        "dependsOn",
+        "unblocks",
+        "touches",
+        "startedAt",
+        "completedAt",
+        "notes"
+      ],
+      "effort": "S = about a day. M = a few days. L = a week or more. Estimate honestly; a wrong estimate is information, a flattering one is not."
+    },
+    "fileHygiene": [
+      "Keep the JSON valid. Two-space indent. Trailing commas are a syntax error.",
+      "Do not reorder the `tasks` array. It is in id order and diffs are read by humans.",
+      "Do not rewrite `rationale` or `summary` to match what you built. If the built thing differs from the plan, say so in `notes`."
+    ],
+    "queries": {
+      "whatIsNext": "Lowest `tier`, then lowest `id`, among tasks where `status` is `todo` and every id in `dependsOn` has `status` of `done`.",
+      "whatIsInFlight": "Tasks where `status` is `in_progress` or `blocked`.",
+      "sequencingAdvice": "Tier 0 tasks 1, 5 and 6 are all schema changes. Batch them into one migration release rather than three. Tier 6 is the differentiator — cycles and Gantt charts are table stakes added so nobody rules the product out; agent identity, MCP resources, git write-back and session continuity are why someone picks this over Plane."
+    }
+  },
+  "statuses": [
+    "todo",
+    "in_progress",
+    "blocked",
+    "done",
+    "wont_do"
+  ],
+  "tiers": [
+    {
+      "id": 0,
+      "name": "Table stakes",
+      "goal": "Close the gaps that make the product unmodellable. Mostly schema. Do as one migration release."
+    },
+    {
+      "id": 1,
+      "name": "Planning layer",
+      "goal": "Cycles, estimates, hierarchy — the structure above a flat ticket list."
+    },
+    {
+      "id": 2,
+      "name": "Views",
+      "goal": "Same data, more renderings. Highest perceived value per hour of work."
+    },
+    {
+      "id": 3,
+      "name": "Automation and integration",
+      "goal": "Make the tool act on its own and talk to the rest of the toolchain."
+    },
+    {
+      "id": 4,
+      "name": "Content and collaboration",
+      "goal": "Docs, attachments, custom fields, real-time."
+    },
+    {
+      "id": 5,
+      "name": "Polish and platform",
+      "goal": "The things that decide whether people enjoy using it and can deploy it."
+    },
+    {
+      "id": 6,
+      "name": "AI-native differentiator",
+      "goal": "Where local-pm beats the incumbents rather than chases them. MCP-first, running next to the code."
+    }
+  ],
+  "tasks": [
+    {
+      "id": 1,
+      "slug": "assignees",
+      "title": "Assignees",
+      "tier": 0,
+      "status": "done",
+      "effort": "M",
+      "summary": "Add a people/members collection and an `assignee` relationship on tickets. Avatars on cards, a My Issues view, filter by assignee.",
+      "rationale": "Every competitor's primary axis. There is no assignee field anywhere in the repo today — a team is the only assignment axis, and teams have no member list. Unblocks comments with mentions, board group-by, workload, and agent identity.",
+      "dependsOn": [],
+      "unblocks": [
+        2,
+        14,
+        21,
+        41,
+        45
+      ],
+      "touches": [
+        "src/collections/",
+        "src/components/kanban/KanbanCard.tsx",
+        "src/components/kanban/TicketDetailModal.tsx",
+        "src/components/Sidebar.tsx"
+      ],
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "Shipped: new `members` collection (name, email, team, active, optional `user` link to a login account); `assignee` relationship on tickets. UI: Avatar/AvatarLabel primitive (initials on a deterministic tone from the six approved hue families); MemberSelect reusing EntitySelect with an explicit \"No assignee\" row; assignee avatar on every board card (the unassigned placeholder renders too, since unassigned is a triage signal); assignee filter on the board toolbar with a removable chip and ?assignee= in the URL; Assignee field in TicketBody (detail page + peek panel) and TicketForm; assignee column in TicketsTable; member list on the team detail page. My tickets: /my-tickets, nav item + G M chord + command palette row. Identity resolves through the signed-in Payload user to the member whose `user` points at it (the user chose this over a localStorage picker). With LOCAL_PM_REQUIRE_AUTH off and nobody signed in the view asks you to sign in rather than showing an empty list; a signed-in user with no member record gets a one-click Create my profile. MCP parity: list/get/create/update/delete_member, assigneeId filter on list_tickets and get_board, assignee on create_ticket/update_ticket, assignee as an include field, slimMember in the response slimming. README updated. Counts toward task 48. Guards: a login account can link to at most one member (hook, not a unique index — a unique index over a mostly-null relationship rejects the second unlinked member on Mongo). Deleting a member unassigns their tickets via afterDelete; without it Mongo left dangling ids that rendered as unassigned but still matched the assignee filter. E2E caught this. Migration: additive only. Existing tickets have no assignee and need no backfill; the members collection starts empty. Seed script creates 10 people and assigns tickets round-robin within their team, leaving every fourth unassigned. Left out: assign-from-card (Linear allows clicking the card avatar) — the card menu is already crowded and assignment is available in the peek panel, detail page and form. No A/I shortcuts from 09-keyboard.md: the board has no per-item focus model to scope them to yet. npm run verify: typecheck clean, 35 unit tests, 38 e2e passed / 1 skipped (the pre-existing admin-panel fixme). Commit 7124cae on branch feat/assignees."
+    },
+    {
+      "id": 2,
+      "slug": "comments-and-mentions",
+      "title": "Comments and @mentions",
+      "tier": 0,
+      "status": "done",
+      "effort": "M",
+      "summary": "Threaded comments on tickets with @mentions of people and agents.",
+      "rationale": "Linear, Jira, Asana and Monday all have it. Also the natural surface for agent-to-human dialogue, which is this product's reason to exist.",
+      "dependsOn": [
+        1
+      ],
+      "unblocks": [
+        27,
+        45,
+        52
+      ],
+      "touches": [
+        "src/collections/",
+        "src/components/kanban/TicketDetailModal.tsx"
+      ],
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "Shipped: new `comments` collection (ticket, parent, body, author, mentions, resolved/resolvedAt/resolvedBy, editedAt). Threading is one level, matching Linear: a reply points at the comment that opened the thread, and a beforeChange hook rejects a reply-to-a-reply and a reply on a different ticket. Only the thread root can be resolved; a resolved thread collapses to a \"Resolved / Show N comments\" strip. Composer: researched Linear, Jira, Asana and GitHub first. All four converge on markdown typed by the user, so the composer is a real textarea storing markdown (GitHub shape) with Write/Preview tabs reusing the TabList/TabPanel primitive, mod+B / mod+I / mod+K wrapping the selection, and mod+Enter posting. Quill was rejected: a mention blot plus caret measurement inside its contenteditable is far more surface for the same result, and a plain-text body is what the MCP tools and a future notifications inbox want to read. Mentions are stored in the body as @[Name](member:ID) and re-derived into a `mentions` relationship array on every save, filtered to people who still exist. That array is what task 27 (notifications) and task 45 (agent attribution) can query. The picker is caret-anchored per 03-forms-and-editing.md 3.6, with a mirror-div caret measurement (src/lib/caret.ts), arrow keys, Enter/Tab to insert and Escape to dismiss without inserting. Markdown rendering is a small in-repo subset (src/lib/markdown.ts): bold, italic, strike, inline and fenced code, lists, blockquote, h1-h3, links with a safe-href allowlist, autolinks, and mention chips. Output still goes through DOMPurify; the sanitize config moved out of RichTextEditor into src/lib/sanitize.ts so both surfaces share it. No new dependency. UI lands in TicketBody, so it appears on both the full ticket page and the board peek panel. Four states covered: delayed skeleton, empty, error-with-retry, populated. Posting is optimistic. Deleting is rung 2 on the friction ladder (a confirm naming the reply count), not undo: a deleted comment cannot be restored with its thread links intact, so a fake undo would have been dishonest. Submit is never disabled for invalidity (03-forms-and-editing.md 3.12): an empty post shows \"Write something before posting.\" inline instead. Cascades: deleting a ticket deletes its comments; deleting a thread root deletes its replies; deleting a person leaves their comments but clears author and re-derives mentions. Fixed while here: hook `payload.*` calls in Comments/Members now pass `req` so they join the delete transaction. Without it the member afterDelete still saw the member it had just deleted and mentions were never cleared. Tickets.ts keeps req only on the new comment cascade; its pre-existing call sites were left alone deliberately. MCP parity: list_comments, add_comment, update_comment, delete_comment, plus slimComment in the response slimming. Both READMEs updated; the root README tool count corrected from 18 to 29. Counts toward task 48. Seed: four threads (7 comments, one resolved, three with mentions) across the existing seed tickets. Verified by running the seeder against the e2e database, never the dev one. Migration: additive only. The comments collection starts empty; existing tickets need no backfill. Left out deliberately: a comment count on the board card (the card metadata budget in 05-board-and-dnd.md 5.2 is already at 4), emoji reactions, attachments, and inline comments on a description selection. Agent authorship beyond \"a member linked to an agent account\" belongs to task 45; notifying the people mentioned belongs to task 27. npm run verify: typecheck clean, 69 unit tests, 56 e2e passed / 1 skipped (the pre-existing admin-panel fixme). Note: this suite is flaky against the remote Atlas cluster, dropping one random test per full run; verified as pre-existing by stashing the change and reproducing the same behaviour on a clean tree, and every affected test passes in isolation."
+    },
+    {
+      "id": 3,
+      "slug": "activity-audit-trail",
+      "title": "Activity and audit trail",
+      "tier": 0,
+      "status": "done",
+      "effort": "M",
+      "summary": "Field-level change history on tickets, rendered as an activity feed in the detail view.",
+      "rationale": "Already scoped in CREDITS.md as 'not adopted, strong candidate for a future release'. Build on Payload versions/drafts rather than a hand-rolled log.",
+      "dependsOn": [],
+      "unblocks": [
+        20,
+        39,
+        45
+      ],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "src/components/kanban/TicketDetailModal.tsx"
+      ],
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "See the CREDITS.md note: the upstream soft-delete guard 403s the project's own seed-runner. Do not repeat that. 2026-09-20: shipped as an append-only `activity` collection, NOT on Payload versions as the rationale above suggested. Versions store whole-document snapshots meant for draft and restore: rendering \"changed status from Todo to In Progress\" from them means diffing adjacent snapshots on every read, storing a full copy of the ticket on every save, and there is still no per-field attribution. An event row is what an audit trail actually is, is O(1) to write, pages cheaply, and is the shape tasks 20, 39 and 45 will query. One row per changed field, carrying action, field, from, to and actor. The collection is genuinely append-only: create, update and delete are denied to every caller and the hooks write with overrideAccess, so the API cannot forge or rewrite history (covered by an e2e test). Because a blanket guard here is exactly what 403d the seed-runner last time, the seeder was run against the e2e database to prove it: 14 tickets produced 14 created rows and no permission error. Values are stored as the display strings they read at the time rather than as ids, so history stays truthful after a member is renamed or a referenced ticket is deleted. sortOrder is deliberately untracked or every board drag would bury the feed; description records that it changed without storing its contents. Tracked: title, status, priority, assignee, project, team, dueDate, description, labels, blockedBy, subtasks. Presentation follows where Linear and Jira have converged (researched first): one chronological feed interleaved with comments, filtered All / Comments / History, with consecutive changes by the same person collapsed into one entry inside a 5 minute window. The section heading moved from \"Comments\" to \"Activity\" and the filter is a ?feed= URL parameter, so a filtered feed is shareable and survives a reload. Two existing comment specs were updated as a result: a fresh ticket now always has a created entry, so the All feed is never empty and \"No comments yet.\" correctly belongs to the Comments tab. Cascade: deleting a ticket deletes its activity alongside its comments. MCP parity: list_activity, with field filtering and pagination, documented in both READMEs; root README tool count corrected from 29 to 30. Counts toward task 48. Extended on request before merge: the comment thread is tracked too, as six further actions (commented, replied, edited, resolved, reopened, deleted) each carrying the comment text, with an edit keeping both sides. Researched first: Jira does NOT log comment edits or deletions in its History tab (JRACLOUD-94821, JRASERVER-12400 are the standing requests) and a third-party market exists to fill that gap, whose recurring criticism is that it still never shows what the text said, so the text is kept here. A deleted comment leaves its text behind, which is the point: the record has to outlive what it describes. A reply is recorded distinctly from a comment that opens a thread, and a save that does not change the body records nothing. In the All view the commented and replied entries are suppressed because the comment itself is right there; edited, resolved, reopened and deleted stay visible because they are not self-evident from the thread, and History shows everything. MCP list_activity gained an action filter and returns the related comment. Left out deliberately: no activity for attachment events (task 27 owns notifications), no per-entry undo, no project-level or cross-ticket feed, and no retention or archiving policy for very old rows. Follow-on worth filing if the feed grows: pagination beyond the 200-row page. npm run verify on a quiet machine: typecheck clean, 118 unit tests, 74 e2e passed. Shipped as commit 0da7cc3 on feat/activity-audit-trail. PR #22 (stacked on #20)."
+    },
+    {
+      "id": 4,
+      "slug": "global-search-command-palette",
+      "title": "Global search and command palette",
+      "tier": 0,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Cmd-K palette: jump to any ticket, project or team; run actions without leaving the keyboard.",
+      "rationale": "Linear's signature interaction and the thing CLAUDE.md's 'keyboard-first' claim currently cannot back up. Absent entirely today.",
+      "dependsOn": [],
+      "unblocks": [
+        36
+      ],
+      "touches": [
+        "src/components/ui/",
+        "src/app/(frontend)/layout.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/04-data-views.md (search) and 09-keyboard.md."
+    },
+    {
+      "id": 5,
+      "slug": "configurable-statuses",
+      "title": "Configurable statuses",
+      "tier": 0,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Move status from a hard-coded three-value enum to a `statuses` collection with a type (backlog / unstarted / started / completed / cancelled) and per-project workflows.",
+      "rationale": "The single biggest model unlock — triage, automation rules and real dashboards all need more than three fixed columns. ArsNovaSingers has a reference implementation (see CREDITS.md). Needs a migration.",
+      "dependsOn": [],
+      "unblocks": [
+        12,
+        20,
+        22
+      ],
+      "touches": [
+        "src/types/enums.ts",
+        "src/collections/",
+        "src/components/kanban/",
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Breaking change. Ship with a migration and update the MCP STATUS_MAP in the same change."
+    },
+    {
+      "id": 6,
+      "slug": "shared-labels",
+      "title": "Shared labels",
+      "tier": 0,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Promote labels from a per-ticket array of free text to a first-class collection with optional groups.",
+      "rationale": "Today 'bug' on two tickets are unrelated strings. No cross-project filtering, no rename, no consistency.",
+      "dependsOn": [],
+      "unblocks": [
+        19
+      ],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "src/components/kanban/TicketDetailModal.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Migrate existing inline labels rather than dropping them."
+    },
+    {
+      "id": 7,
+      "slug": "cycles-sprints",
+      "title": "Cycles / sprints",
+      "tier": 1,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Time-boxed cycles with configurable length and start day, and automatic rollover of incomplete work into the next cycle.",
+      "rationale": "Linear, Plane and Taiga all treat this as core. Rollover is the part that removes admin overhead rather than adding it.",
+      "dependsOn": [],
+      "unblocks": [
+        8,
+        21
+      ],
+      "touches": [
+        "src/collections/",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 8,
+      "slug": "estimates-and-charts",
+      "title": "Estimates, burndown and velocity",
+      "tier": 1,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Point or t-shirt estimates on tickets, plus burndown and velocity charts per cycle.",
+      "rationale": "Taiga's whole pitch; Plane and Jira ship it as standard. Meaningless without cycles.",
+      "dependsOn": [
+        7
+      ],
+      "unblocks": [
+        20,
+        21
+      ],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Load the dataviz skill before writing chart code."
+    },
+    {
+      "id": 9,
+      "slug": "epics-milestones",
+      "title": "Epics / milestones",
+      "tier": 1,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Parent-child ticket hierarchy, or a milestones collection, with rollup progress on the parent.",
+      "rationale": "Plane calls them Modules, Jira calls them epics. Subtasks today are a flat array of strings on one ticket — not a hierarchy.",
+      "dependsOn": [],
+      "unblocks": [
+        10,
+        16
+      ],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "src/components/kanban/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Decide early: promote the existing `subtasks[]` array to real tickets, or keep both concepts."
+    },
+    {
+      "id": 10,
+      "slug": "initiatives-portfolios",
+      "title": "Initiatives / portfolios",
+      "tier": 1,
+      "status": "todo",
+      "effort": "M",
+      "summary": "A layer above projects that rolls up progress across several of them.",
+      "rationale": "Asana portfolios, Linear initiatives, Plane initiatives. The planning layer that spans from an objective down to an issue.",
+      "dependsOn": [
+        9
+      ],
+      "unblocks": [
+        20
+      ],
+      "touches": [
+        "src/collections/",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 11,
+      "slug": "start-and-target-dates",
+      "title": "Start date and target date",
+      "tier": 1,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Add start and target dates to tickets and projects alongside the existing `dueDate`.",
+      "rationale": "Prerequisite for any timeline view. Tickets currently have a single day-only due date and projects have no dates at all.",
+      "dependsOn": [],
+      "unblocks": [
+        16
+      ],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "src/collections/Projects.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 12,
+      "slug": "triage-intake",
+      "title": "Triage / intake inbox",
+      "tier": 1,
+      "status": "todo",
+      "effort": "M",
+      "summary": "A holding state for incoming work — accept, reject, merge into an existing ticket, or route to a project — before it reaches the backlog.",
+      "rationale": "Linear Triage, Plane Intake. Stops the backlog becoming a dumping ground, and is the natural place for agent-created tickets to await human review.",
+      "dependsOn": [
+        5
+      ],
+      "unblocks": [
+        25,
+        49,
+        51
+      ],
+      "touches": [
+        "src/collections/",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 13,
+      "slug": "list-view",
+      "title": "List view",
+      "tier": 2,
+      "status": "todo",
+      "effort": "S",
+      "summary": "A dense list rendering of tickets with inline editing and grouping.",
+      "rationale": "The cheapest new view — same data, different render — and the one most people reach for when the board gets long.",
+      "dependsOn": [],
+      "unblocks": [
+        38
+      ],
+      "touches": [
+        "src/app/(frontend)/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/04-data-views.md."
+    },
+    {
+      "id": 14,
+      "slug": "board-group-by",
+      "title": "Board group-by",
+      "tier": 2,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Let the board group by assignee, priority, project or label — not only by status.",
+      "rationale": "Very high value for a small change to the board that already exists. Grouping by assignee needs task 1; the other axes work today.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/components/kanban/KanbanBoard.tsx",
+        "src/components/kanban/KanbanHeader.tsx",
+        "src/components/kanban/dragLogic.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Drag semantics change per grouping — dropping into an assignee column reassigns. Update dragLogic.ts and extend its table tests."
+    },
+    {
+      "id": 15,
+      "slug": "calendar-view",
+      "title": "Calendar view",
+      "tier": 2,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Month and week calendar driven by due dates, with drag to reschedule.",
+      "rationale": "Standard in Plane, Monday, Notion and Asana. The data already exists.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/app/(frontend)/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 16,
+      "slug": "timeline-gantt",
+      "title": "Timeline / Gantt with dependency arrows",
+      "tier": 2,
+      "status": "todo",
+      "effort": "L",
+      "summary": "A horizontal timeline of tickets and projects with dependency arrows drawn between bars.",
+      "rationale": "Asana Timeline, Monday Gantt, Plane Gantt. This repo already has the dependency data and a hand-written SVG layered-graph layout in DependencyGraph.tsx to build on.",
+      "dependsOn": [
+        11
+      ],
+      "unblocks": [
+        35
+      ],
+      "touches": [
+        "src/components/kanban/DependencyGraph.tsx",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "The blockedBy cycle guard in Tickets.ts is what keeps this layout terminating. Do not weaken it."
+    },
+    {
+      "id": 17,
+      "slug": "spreadsheet-view",
+      "title": "Spreadsheet / table view",
+      "tier": 2,
+      "status": "todo",
+      "effort": "M",
+      "summary": "A sortable, resizable-column table over tickets with bulk inline editing.",
+      "rationale": "Plane ships five layouts over the same data; Monday's whole model is columns. Pairs with custom fields (33).",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/components/",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 18,
+      "slug": "saved-views",
+      "title": "Saved views and filters",
+      "tier": 2,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Named, shareable, per-user saved filter and sort combinations in the sidebar.",
+      "rationale": "Linear Views, Jira saved JQL filters, Asana saved views. Today filters live only in URL params and are not nameable.",
+      "dependsOn": [
+        19
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/components/Sidebar.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/04-data-views.md covers saved views specifically."
+    },
+    {
+      "id": 19,
+      "slug": "compound-filters",
+      "title": "Compound filters",
+      "tier": 2,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Multi-select, negation, date ranges and AND/OR grouping. Replaces the two single-select dropdowns in KanbanHeader.",
+      "rationale": "The current board can filter by exactly one project and one team. Every competitor has an expression-level filter builder.",
+      "dependsOn": [],
+      "unblocks": [
+        18
+      ],
+      "touches": [
+        "src/components/kanban/KanbanHeader.tsx",
+        "src/app/(frontend)/board/page.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Keep every filter state in the URL — CLAUDE.md rule 4, every view is a URL."
+    },
+    {
+      "id": 20,
+      "slug": "dashboard-analytics",
+      "title": "Dashboard and analytics",
+      "tier": 2,
+      "status": "todo",
+      "effort": "L",
+      "summary": "A dashboard page with widgets: throughput, cycle time, open vs closed over time, per-project health.",
+      "rationale": "Jira dashboards with burndown/velocity/statistics gadgets, Monday cross-board dashboards. Nothing resembling this exists today — project and team detail views show four counts and a progress bar.",
+      "dependsOn": [
+        3,
+        5
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/app/(frontend)/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Cycle time needs the activity history from task 3. Load the dataviz skill before writing any chart code."
+    },
+    {
+      "id": 21,
+      "slug": "workload-capacity",
+      "title": "Workload / capacity view",
+      "tier": 2,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Per-assignee capacity across a cycle, showing who is overloaded and where there is room.",
+      "rationale": "Jira added a Capacity view in its Summer 2026 release; Asana Workload is a headline feature. Needs people and estimates.",
+      "dependsOn": [
+        1,
+        8
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/app/(frontend)/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 22,
+      "slug": "rules-engine",
+      "title": "Automation rules engine",
+      "tier": 3,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Trigger / condition / action recipes: on status change assign someone, on due date approaching notify, on label added move project.",
+      "rationale": "Core to Monday, Asana and Jira. Payload collection hooks make the execution side tractable; the builder UI is the real work.",
+      "dependsOn": [
+        5
+      ],
+      "unblocks": [
+        24
+      ],
+      "touches": [
+        "src/collections/",
+        "src/lib/",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Guard against rule loops the way blockedBy guards against dependency cycles."
+    },
+    {
+      "id": 23,
+      "slug": "ticket-templates",
+      "title": "Ticket templates",
+      "tier": 3,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Reusable templates — bug report, user story, chore — prefilling title, description, labels and subtasks.",
+      "rationale": "Cheap and high leverage, for agents as much as humans: a template is a contract about what a well-formed ticket contains.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/components/kanban/TicketModal.tsx",
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 24,
+      "slug": "recurring-tickets",
+      "title": "Recurring tickets",
+      "tier": 3,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Tickets that regenerate on a schedule.",
+      "rationale": "Standard across Asana, Monday and Vikunja. Falls out of the rules engine cheaply if that lands first.",
+      "dependsOn": [
+        22
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/lib/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 25,
+      "slug": "webhooks-and-forms",
+      "title": "Outbound webhooks and inbound intake forms",
+      "tier": 3,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Fire webhooks on ticket events; accept work requests via a public form or inbound webhook endpoint.",
+      "rationale": "Asana Forms and Monday WorkForms are how non-members file work. Outbound webhooks are how this tool joins a wider toolchain.",
+      "dependsOn": [
+        12
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/app/(payload)/api/",
+        "src/collections/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "A public inbound endpoint is a real attack surface. Rate-limit it and keep it off by default, consistent with the LOCAL_PM_REQUIRE_AUTH posture."
+    },
+    {
+      "id": 26,
+      "slug": "git-integration",
+      "title": "Git integration",
+      "tier": 3,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Link branches and PRs to tickets, auto-transition status on merge, support a PROJ-123 branch naming convention.",
+      "rationale": "The single most natural fit for a dev-focused local tool, and the thing the README's pitch implies but does not deliver.",
+      "dependsOn": [],
+      "unblocks": [
+        50
+      ],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Works offline against the local repo first; a GitHub API layer is optional on top."
+    },
+    {
+      "id": 27,
+      "slug": "notifications",
+      "title": "Notifications and in-app inbox",
+      "tier": 3,
+      "status": "todo",
+      "effort": "M",
+      "summary": "An in-app inbox plus optional Slack, Discord or email delivery for mentions, assignments and due dates.",
+      "rationale": "Nothing notifies anyone of anything today. Mentions without notifications are a dead end.",
+      "dependsOn": [
+        2
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Keep external delivery opt-in — the product's premise is that data stays on the machine."
+    },
+    {
+      "id": 28,
+      "slug": "cli",
+      "title": "CLI",
+      "tier": 3,
+      "status": "todo",
+      "effort": "S",
+      "summary": "`lpm create`, `lpm board`, `lpm move` — a thin command-line client over the REST API.",
+      "rationale": "Fits the local-first, keyboard-first premise and is trivial atop the existing API. Vikunja's API-first posture is the model.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "scripts/",
+        "mcp-server/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Share the auth path with the MCP server: Authorization: users API-Key <key>."
+    },
+    {
+      "id": 29,
+      "slug": "import-export",
+      "title": "Import and export",
+      "tier": 3,
+      "status": "todo",
+      "effort": "M",
+      "summary": "CSV import/export plus importers for Jira, Linear and Plane exports.",
+      "rationale": "The adoption path off another tool. Also the backup story for a self-hosted product.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/app/(payload)/api/",
+        "scripts/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "CREDITS.md records that the upstream import/export surface was fail-open for authenticated users with no role. This endpoint streams the whole dataset — make it deny-by-default."
+    },
+    {
+      "id": 30,
+      "slug": "docs-wiki",
+      "title": "Docs / wiki pages",
+      "tier": 4,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Rich pages attached to a project or the workspace, linkable from tickets.",
+      "rationale": "Plane Pages, Monday Docs, Notion's entire product. The place specs live so they stop living in ticket descriptions.",
+      "dependsOn": [
+        32
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Do this after the Lexical migration, not before, or the editor gets built twice."
+    },
+    {
+      "id": 31,
+      "slug": "attachments",
+      "title": "File attachments",
+      "tier": 4,
+      "status": "done",
+      "effort": "S",
+      "summary": "Attach files and images to tickets via a Payload upload collection.",
+      "rationale": "`sharp` is already a dependency and Payload has uploads built in — this is close to configuration.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/collections/Attachments.ts",
+        "src/lib/attachments.ts",
+        "src/hooks/useUploads.ts",
+        "src/components/ui/MarkdownEditor.tsx",
+        "docker-compose.yml"
+      ],
+      "startedAt": "2026-09-20",
+      "completedAt": "2026-09-20",
+      "notes": "The storage path must be a named volume in docker-compose or uploads vanish on rebuild. 2026-09-20: shipped on the comment surface. Drop, paste or pick files in the comment editor; a placeholder holds the caret position while a determinate progress row runs, then it is replaced by markdown carrying the name the user dropped and the URL the server saved. Images render inline, everything else becomes a link. Oversized or unaccepted files are refused client-side without touching the draft. Descriptions are task 55. Shipped as commit bfc8b57 on feat/attachments, PR #20. Also carried in that commit, because they shared the editor rewrite: a formatting toolbar (Write/Preview tabs, bold/italic/link/lists/quote/code, one tab stop walked with the arrow keys) and comment permalinks (#comment-<id> scrolls, highlights, and expands a resolved thread). Verified green on a quiet machine: typecheck clean, 90 unit tests, 64 e2e passed. An earlier red run was concurrent-session contention, not this change; see task 54."
+    },
+    {
+      "id": 32,
+      "slug": "lexical-migration",
+      "title": "Migrate rich text to Lexical",
+      "tier": 4,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Replace react-quill-new with the Lexical editor already configured in payload.config.ts, and migrate stored HTML to Lexical JSON.",
+      "rationale": "`lexicalEditor()` is configured but the app UI writes raw HTML through Quill and renders it with dangerouslySetInnerHTML. Migrating removes the entire XSS surface that isomorphic-dompurify currently defends (see CREDITS.md, btafoya).",
+      "dependsOn": [],
+      "unblocks": [
+        30
+      ],
+      "touches": [
+        "src/components/ui/RichTextEditor.tsx",
+        "package.json"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Keep the sanitizer until every stored description is migrated. The e2e XSS regression specs must keep passing throughout."
+    },
+    {
+      "id": 33,
+      "slug": "custom-fields",
+      "title": "Custom fields",
+      "tier": 4,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Per-project user-defined fields — text, number, select, date, and eventually formula.",
+      "rationale": "Notion properties, Asana custom fields, Monday's 30+ column types, Jira's new formula fields. The highest-ceiling item on the list and the hardest to retrofit later.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/components/",
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "ArsNovaSingers has an implementation (see CREDITS.md). Decide the storage shape before writing any UI."
+    },
+    {
+      "id": 34,
+      "slug": "realtime-collaboration",
+      "title": "Real-time collaboration",
+      "tier": 4,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Websocket or SSE so two browsers and a running agent see the same board without a refetch.",
+      "rationale": "The board currently reconciles only on refetch, so an agent moving a ticket is invisible until something triggers a reload. Plane shipped real-time collaboration and version history in 0.23.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/components/kanban/KanbanBoard.tsx",
+        "src/app/(payload)/api/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/05-board-and-dnd.md covers the real-time board case."
+    },
+    {
+      "id": 35,
+      "slug": "public-share-links",
+      "title": "Public read-only share links",
+      "tier": 4,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Share a board, project or roadmap as a read-only URL that needs no account.",
+      "rationale": "Linear ships public roadmap URLs for stakeholders. Useful precisely because the rest of the install is locked down.",
+      "dependsOn": [
+        16
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/lib/access.ts",
+        "src/app/(frontend)/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Unguessable token, revocable, read-only enforced at the access layer and not just in the UI."
+    },
+    {
+      "id": 36,
+      "slug": "keyboard-shortcuts",
+      "title": "Keyboard shortcuts everywhere",
+      "tier": 5,
+      "status": "todo",
+      "effort": "S",
+      "summary": "A central shortcut registry plus the shortcuts themselves: c to create, / to search, 1/2/3 for status, j/k to navigate, ? for help.",
+      "rationale": "This is what makes Linear feel like Linear, and CLAUDE.md already calls the app keyboard-first and requires a central registry so `?` stays truthful. The registry does not exist yet.",
+      "dependsOn": [
+        4
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/lib/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/09-keyboard.md is the shortcut map and the rules for adding to it."
+    },
+    {
+      "id": 37,
+      "slug": "theme-tokens-and-toggle",
+      "title": "Theme tokens and light/dark toggle",
+      "tier": 5,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Replace hard-coded colors in components with theme tokens, then add a light/dark toggle.",
+      "rationale": "CLAUDE.md forbids raw values in components and puts the light/dark swap in the primitive token layer, but TicketDetailModal, ProjectDetail, TeamDetailModal and others are full of literal text-white and bg-gray-* classes. The rule is written; the code does not follow it.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/app/globals.css",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/01-foundations.md. Tailwind v4 is CSS-first — tokens live in @theme, there is no tailwind.config.js."
+    },
+    {
+      "id": 38,
+      "slug": "bulk-actions",
+      "title": "Multi-select and bulk actions",
+      "tier": 5,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Shift-click and cmd-click selection on the board and list, then act on the whole selection.",
+      "rationale": "Once a board has a few hundred tickets, one-at-a-time editing is the bottleneck.",
+      "dependsOn": [
+        13
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/components/kanban/",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 39,
+      "slug": "undo-and-soft-delete",
+      "title": "Undo and soft delete",
+      "tier": 5,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Soft-delete records with a restore path, and undo toasts on destructive actions.",
+      "rationale": "CLAUDE.md rule 6: undo beats confirm, dialogs are for the genuinely irreversible. Today deletes are hard deletes behind a ConfirmDialog.",
+      "dependsOn": [
+        3
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "src/components/ui/ConfirmDialog.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "CREDITS.md warns that the upstream soft-delete guard 403s src/seeds/seed-runner.ts, which calls payload.delete(). Fix that in the same change."
+    },
+    {
+      "id": 40,
+      "slug": "postgres-adapter",
+      "title": "Postgres adapter option",
+      "tier": 5,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Support @payloadcms/db-postgres as an alternative to MongoDB, selected by env var.",
+      "rationale": "Widens the self-hosting audience considerably. The groundwork exists: generateTicketId already falls back to a verify-and-retry path when the adapter exposes no mongoose model.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/payload.config.ts",
+        "src/collections/Tickets.ts",
+        "docker-compose.yml"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Prefer a real atomic increment on Postgres over the retry fallback."
+    },
+    {
+      "id": 41,
+      "slug": "workspace-scoping-rbac",
+      "title": "Workspace scoping and finer RBAC",
+      "tier": 5,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Per-project or per-workspace membership and permissions, rather than the three global roles.",
+      "rationale": "src/lib/access.ts has one global role check: admin may delete, anyone authenticated may write. Fine for one machine, insufficient for a shared install.",
+      "dependsOn": [
+        1
+      ],
+      "unblocks": [
+        42
+      ],
+      "touches": [
+        "src/lib/access.ts",
+        "src/collections/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 42,
+      "slug": "oidc-sso",
+      "title": "OIDC / SSO behind the auth flag",
+      "tier": 5,
+      "status": "todo",
+      "effort": "L",
+      "summary": "Optional OIDC/PKCE login layered behind LOCAL_PM_REQUIRE_AUTH.",
+      "rationale": "Deferred deliberately in CREDITS.md: an identity provider is a heavy dependency for a local tool, but it is the right optional layer for a shared deployment.",
+      "dependsOn": [
+        41
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/lib/access.ts",
+        "src/collections/Users.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "CREDITS.md names three defects to fix before adopting the upstream version: resolveActorType returns the privileged identity for any unmarked principal; dataManagementAccess ends in `return true` for a role-less authenticated user; and the JWKS path skips the audience check when no audience is configured. Invert all three to deny-by-default."
+    },
+    {
+      "id": 43,
+      "slug": "responsive-mobile",
+      "title": "Responsive and mobile board",
+      "tier": 5,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Make the board, lists and modals usable below 768px.",
+      "rationale": "The app shell is a fixed 220px sidebar plus a three-column board. There is no mobile story at all.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/components/",
+        "src/app/(frontend)/layout.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Rules: .claude/rules/06-layout-and-navigation.md and 05-board-and-dnd.md both cover the mobile case."
+    },
+    {
+      "id": 44,
+      "slug": "i18n",
+      "title": "Internationalization",
+      "tier": 5,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Extract UI strings and support locale switching.",
+      "rationale": "Every string is currently inline English. Payload has its own i18n; the frontend has none.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/components/",
+        "src/app/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 45,
+      "slug": "agent-as-first-class-actor",
+      "title": "Agent as a first-class actor",
+      "tier": 6,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Give agents real identity: assignable, comment authorship, activity attribution, visible in filters. The `agent` role already exists in Users.",
+      "rationale": "Linear Agent shipped in public beta in March 2026 as a bolt-on to a SaaS product. local-pm is MCP-first from birth and runs beside the code — this is the differentiator, not a feature.",
+      "dependsOn": [
+        1,
+        2,
+        3
+      ],
+      "unblocks": [
+        49,
+        50
+      ],
+      "touches": [
+        "src/collections/Users.ts",
+        "src/collections/",
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "'Who did this' must be answerable for every write. The API-key-per-agent identity already in Users.ts is the foundation."
+    },
+    {
+      "id": 46,
+      "slug": "mcp-resources-and-prompts",
+      "title": "MCP resources and prompts",
+      "tier": 6,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Expose board, project and ticket as readable MCP resources, and ship prompt templates such as 'plan this feature into tickets'.",
+      "rationale": "The server currently registers 18 tools and zero resources or prompts. Resources let a client pull context without burning a tool call; prompts encode how to use the tools well.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Keep the existing response-slimming discipline — the list endpoints were trimmed specifically to stay under token limits."
+    },
+    {
+      "id": 47,
+      "slug": "mcp-http-transport",
+      "title": "MCP HTTP/SSE transport",
+      "tier": 6,
+      "status": "todo",
+      "effort": "M",
+      "summary": "Offer a streamable HTTP transport alongside stdio so remote agents and multiple concurrent clients can connect.",
+      "rationale": "stdio binds the server to one local child process. CREDITS.md notes ArsNovaSingers built a Cloud Run variant; the portable version is a generic HTTP transport, not a deployment-specific one.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Requires auth to be real. Do not ship an HTTP transport that inherits the open-by-default posture."
+    },
+    {
+      "id": 48,
+      "slug": "mcp-tool-parity",
+      "title": "MCP tool parity with new surfaces",
+      "tier": 6,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Standing task: as comments, search, assignees, cycles and bulk create land, expose each through MCP.",
+      "rationale": "A feature that exists only in the UI is invisible to the agents this product is built for. Parity is an ongoing obligation, not a one-off.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "This task stays open permanently. Append a dated line here each time parity is extended; never set status to done. 2026-09-20: comments exposed through MCP as list_comments, add_comment, update_comment and delete_comment, with slimComment in the response slimming and both READMEs updated. Mention tokens are documented on add_comment so an agent can address a person by id. 2026-09-20: attachments (task 31) deliberately NOT exposed through MCP. Uploading a file over the tool channel means base64 in a JSON argument, which is the wrong shape for a stdio transport and would blow the token budget on any real file. An agent that needs to reference a file can already do so: attachments are plain markdown links in the comment body, so add_comment and update_comment can write and read them as they stand. Revisit if MCP grows a first-class binary resource channel."
+    },
+    {
+      "id": 49,
+      "slug": "agent-handoff-protocol",
+      "title": "Agent handoff protocol",
+      "tier": 6,
+      "status": "todo",
+      "effort": "M",
+      "summary": "A ticket state meaning 'agent finished, awaiting human review', wired into triage, with the diff and reasoning attached.",
+      "rationale": "Nobody does this well yet. It is the missing half of assigning work to an agent — knowing when it hands the work back, and on what terms.",
+      "dependsOn": [
+        12,
+        45
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/",
+        "mcp-server/src/index.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 50,
+      "slug": "auto-link-work-to-code",
+      "title": "Auto-link work to code",
+      "tier": 6,
+      "status": "todo",
+      "effort": "M",
+      "summary": "The agent writes commit, branch and PR references back onto the ticket as it works, without being asked.",
+      "rationale": "Git integration plus agent identity. The killer feature for the use case the README already claims: persistent task tracking across coding sessions.",
+      "dependsOn": [
+        26,
+        45
+      ],
+      "unblocks": [],
+      "touches": [
+        "mcp-server/src/index.ts",
+        "src/collections/Tickets.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 51,
+      "slug": "duplicate-detection-auto-triage",
+      "title": "Duplicate detection and auto-triage",
+      "tier": 6,
+      "status": "todo",
+      "effort": "M",
+      "summary": "On create, surface likely duplicates and suggest a project, team and priority.",
+      "rationale": "Linear Agent does duplicate suggestion and auto-assign by team area. Embeddings over titles and descriptions is the straightforward implementation.",
+      "dependsOn": [
+        12
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/collections/Tickets.ts",
+        "src/lib/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Suggest, never act silently. A wrong auto-merge is worse than a duplicate."
+    },
+    {
+      "id": 52,
+      "slug": "session-continuity",
+      "title": "Session continuity",
+      "tier": 6,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Agent-written progress notes on tickets, and a 'what was I working on' entry point that reconstructs context across coding sessions.",
+      "rationale": "Directly serves the pitch already in the README — never lose context on what was done or what is pending — which the product currently does not actually implement.",
+      "dependsOn": [
+        2
+      ],
+      "unblocks": [],
+      "touches": [
+        "mcp-server/src/index.ts",
+        "src/components/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": ""
+    },
+    {
+      "id": 53,
+      "slug": "fix-team-members-comment",
+      "title": "Fix the Team Members reference in Users.ts",
+      "tier": 0,
+      "status": "done",
+      "effort": "S",
+      "summary": "src/collections/Users.ts documents a 'Team Members' collection that does not exist in the repo. Either build it (task 1) or correct the comment.",
+      "rationale": "The doc comment and the admin panel description both tell a reader that assignable people live in Team Members. They do not live anywhere. Misleading documentation in the one file that explains the auth model.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/collections/Users.ts"
+      ],
+      "startedAt": "2026-09-19",
+      "completedAt": "2026-09-19",
+      "notes": "Task 1 (assignees) was not done, so the comment was corrected rather than pointed at a real collection. The doc block now states plainly that per-person assignment does not exist and that tickets are assigned to a team. The admin description was reworded too, and src/payload-types.ts regenerated because Payload mirrors that string into the generated types. Revisit when task 1 lands."
+    },
+    {
+      "id": 54,
+      "slug": "e2e-webserver-dies-mid-run",
+      "title": "The Playwright web server dies mid-run, cascading the suite into failures",
+      "tier": 0,
+      "status": "todo",
+      "effort": "M",
+      "summary": "npm run verify does not pass on main. Partway through the Playwright run the dev server on port 3020 stops answering and every remaining spec fails with ERR_CONNECTION_REFUSED or is skipped.",
+      "rationale": "Observed on 2026-09-20 on unmodified main (6 passed, 7 failed, 26 skipped) and again on a feature branch (12 passed, 10 failed, 17 skipped). The cut-off point moves between runs, so it is the server dying rather than any one spec. Two compounding factors to rule out: reuseExistingServer is true outside CI, so a stale server from a previous run silently serves the wrong code, and the suite talks to a remote Atlas database. Until this is fixed, verify cannot gate anything, which is the standing rule in CLAUDE.md.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "playwright.config.ts",
+        "e2e/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Surfaced while reviewing PR 12 and 13. Smoke specs pass reliably in isolation (npx playwright test e2e/smoke.spec.ts is 7/7 green), so the failure is about run duration or resource exhaustion, not correctness. Consider pinning reuseExistingServer to false, a local Mongo for e2e, and per-spec server health assertions. 2026-09-20 (from task 31): root cause is very likely CONCURRENT RUNS, not run duration or resource exhaustion. Two agent sessions running the suite in this repo at the same time collide on four shared resources, only one of which the task previously named: (1) port 3020, where reuseExistingServer:true outside CI makes the second run silently attach to the first run's server instead of failing; (2) the local-pm-e2e database; (3) test-results/, which Playwright CLEARS at startup, so the second run deletes the first run's trace and artifact files mid-test; (4) NEXT_DIST_DIR=.next-e2e, the shared dev build directory. Observed signatures, all of which look like a dying server but are not: \"EADDRINUSE :::3020\" with the whole suite skipped; failures whose only error is \"apiRequestContext.dispose: ENOENT ... test-results.playwright-artifacts-N\traces*.network\" with no assertion failure at all; and \"POST /api/projects 500\" caused by \"ENOENT ... .next-e2eserverapp-paths-manifest.json\", which fails beforeAll hooks and reports as 0ms test failures. Evidence: a contended full run gave 62 passed / 2 failed where both failures were artifact ENOENT rather than assertions, and the same accessibility spec passed in 8.1s on a re-run isolated to its own port and database. Note that isolating E2E_PORT and E2E_DATABASE_URI is NOT sufficient, because webServer.env hardcodes NEXT_DIST_DIR to the literal .next-e2e and does not read it from process.env. Suggested fix: set reuseExistingServer:false so a collision fails loudly instead of silently attaching; derive NEXT_DIST_DIR, outputDir and the database name from E2E_PORT (or a run id) so concurrent runs cannot share any of the four; and keep the local-Mongo idea, which removes the Atlas latency that makes the cold first /board compile (measured at 8.9s) run close to the 15s expect timeout."
+    },
+    {
+      "id": 55,
+      "slug": "attachments-on-descriptions",
+      "title": "Attachments on ticket descriptions",
+      "tier": 4,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Bring the drop/paste/select upload path from the comment editor to the ticket description field.",
+      "rationale": "Task 31 shipped uploads on the comment surface only. The description still uses RichTextEditor, a separate component with no upload path, so a user can attach a screenshot to a comment but not to the ticket it is about.",
+      "dependsOn": [
+        32
+      ],
+      "unblocks": [],
+      "touches": [
+        "src/components/ui/RichTextEditor.tsx",
+        "src/components/tickets/TicketBody.tsx",
+        "src/components/tickets/TicketForm.tsx"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Deliberately deferred behind task 32: RichTextEditor is slated for replacement by Lexical, and wiring useUploads into the component that is about to be deleted is throwaway work. The upload plumbing is already generic (src/hooks/useUploads.ts, src/lib/attachments.ts) and is not coupled to comments."
+    }
+  ]
+}

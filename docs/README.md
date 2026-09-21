@@ -93,6 +93,7 @@ instruction, not the specification.
 | SPC-002 | [Workspace restructure (resolves REQ-003)](specs/2026-09-05_SPC-002_workspace-restructure.md) | IMPLEMENTED |
 | SPC-003 | [Testing strategy (Option B: unit + mocked API-contract)](specs/2026-09-06_SPC-003_testing-strategy.md) | IMPLEMENTED |
 | SPC-005 | [Audit attribution & retention policy (Option B: maxPerDoc 1000)](specs/2026-09-08_SPC-005_audit-attribution-retention.md) | IMPLEMENTED |
-| SPC-006 | [OIDC authentication wiring (ADR-002 implementation design)](specs/2026-09-08_SPC-006_oidc-authentication-wiring.md) | IMPLEMENTED (M0–M6; M7 gated OD-1; E2E IdP pending) |
+| SPC-006 | [OIDC authentication wiring (ADR-002 implementation design)](specs/2026-09-08_SPC-006_oidc-authentication-wiring.md) | IMPLEMENTED (M0–M6; M7 gated OD-1; E2E IdP pending) — §20 amendment: REQ-006 deny-by-default |
+| REQ-006 | [OIDC security boundaries deny by default](requirements/2026-09-20_REQ-006_oidc-deny-by-default.md) | IMPLEMENTED on `fix/oidc-deny-by-default` (upstream roadmap task-42 pre-conditions) |
 
 When creating a document, add it to this index in the same commit.

@@ -20,8 +20,15 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `update_team` - Update an existing team
 - `delete_team` - Delete a team
 
+### Members
+- `list_members` - List the people tickets can be assigned to
+- `get_member` - Get member details by ID
+- `create_member` - Create a person work can be assigned to
+- `update_member` - Update a member, or deactivate one who has left
+- `delete_member` - Delete a member (their tickets become unassigned)
+
 ### Tickets
-- `list_tickets` - List tickets with filtering by project, team, or status
+- `list_tickets` - List tickets with filtering by project, team, assignee, or status
 - `get_ticket` - Get ticket details by ID (includes subtasks)
 - `create_ticket` - Create a new ticket with optional subtasks
 - `update_ticket` - Update ticket fields
@@ -34,6 +41,15 @@ This MCP server provides AI models with full access to Local PM functionality:
 ### Subtasks
 - `toggle_subtask` - Toggle a subtask's completion status
 - `add_subtask` - Add a new subtask to a ticket
+
+### Comments
+- `list_comments` - List the comments on a ticket, oldest first
+- `add_comment` - Post a comment, or a reply in an existing thread
+- `update_comment` - Edit a comment body, or resolve/reopen a thread
+- `delete_comment` - Delete a comment (and its replies, if it opened the thread)
+
+### Activity
+- `list_activity` - Read a ticket's change history, oldest first
 
 ## Installation
 
@@ -231,12 +247,58 @@ Deletes a team.
 **Parameters:**
 - `id` (string, required): Team ID
 
+### list_members
+Lists the people tickets can be assigned to. Members are distinct from login
+accounts: a member is a person work is assigned to, a user is a credential.
+
+**Parameters:**
+- `teamId` (string, optional): Filter by team ID
+- `activeOnly` (boolean, optional): Only people still active (default: true)
+- `limit` (number, optional): Max results (default: 20)
+- `page` (number, optional): Page number (default: 1)
+- `include` (array, optional): Extra fields — `email`, `team`, `user`, `createdAt`, `updatedAt`
+
+### get_member
+Gets a member by ID.
+
+**Parameters:**
+- `id` (string, required): Member ID
+
+### create_member
+Creates a person work can be assigned to.
+
+**Parameters:**
+- `name` (string, required): Display name
+- `email` (string, optional): Email address
+- `team` (string, optional): Team ID
+- `user` (string, optional): Login account ID to link. One account maps to at most one member.
+
+### update_member
+Updates a member.
+
+**Parameters:**
+- `id` (string, required): Member ID
+- `name` (string, optional): New display name
+- `email` (string, optional): New email address
+- `team` (string, optional): New team ID (null to remove from the team)
+- `active` (boolean, optional): Set false when someone leaves — they keep existing
+  assignments but drop out of the assignee pickers
+- `user` (string, optional): Login account ID to link (null to unlink)
+
+### delete_member
+Deletes a member. Tickets assigned to them become unassigned. Prefer
+`update_member` with `active: false`, which preserves history.
+
+**Parameters:**
+- `id` (string, required): Member ID
+
 ### list_tickets
 Lists tickets with optional filtering.
 
 **Parameters:**
 - `project` (string, optional): Filter by project ID
 - `team` (string, optional): Filter by team ID
+- `assigneeId` (string, optional): Filter by assignee (member) ID
 - `status` (string, optional): Filter by status (todo, in_progress, done)
 - `limit` (number, optional): Max results (default: 50)
 - `page` (number, optional): Page number (default: 1)
@@ -256,6 +318,7 @@ Creates a new ticket.
 - `description` (string, optional): Ticket description (supports markdown)
 - `status` (string, optional): Initial status (todo, in_progress, done) - defaults to todo
 - `team` (string, optional): Assigned team ID
+- `assignee` (string, optional): Assignee member ID — use `list_members` to find one
 - `subtasks` (array, optional): Array of subtask objects with `title` and optional `completed` fields
 
 ### update_ticket
@@ -299,6 +362,60 @@ Adds a new subtask to a ticket.
 **Parameters:**
 - `ticketId` (string, required): Parent ticket ID
 - `title` (string, required): Subtask title
+
+### list_activity
+Reads the change history of a ticket, oldest first. Entries cover field changes
+(`changed`, with the values before and after as they read at the time) and the
+comment thread (`commented`, `replied`, `edited`, `resolved`, `reopened`,
+`deleted`, carrying the comment text). The text of a deleted comment is kept here
+after the comment itself is gone. The history is written automatically and cannot
+be edited or deleted; board reordering is not recorded.
+
+**Parameters:**
+- `ticketId` (string, required): The ticket whose history to read
+- `field` (string, optional): Only changes to this field, e.g. `status`
+- `action` (string, optional): Only entries with this action, e.g. `deleted`
+- `limit` (number, optional): Maximum entries to return (default: 50)
+- `page` (number, optional): Page number, 1-indexed (default: 1)
+
+### list_comments
+Lists the comments on a ticket, oldest first. Threads are one level deep: a comment
+carrying a `parent` is a reply to the comment that opened that thread.
+
+**Parameters:**
+- `ticketId` (string, required): The ticket whose comments to list
+- `parentId` (string, optional): Only the replies in this thread
+- `includeResolved` (boolean, optional): Include resolved threads (default: true)
+- `limit` (number, optional): Maximum comments to return (default: 50)
+- `page` (number, optional): Page number, 1-indexed (default: 1)
+
+### add_comment
+Posts a comment on a ticket, or a reply in an existing thread.
+
+**Parameters:**
+- `ticketId` (string, required): The ticket to comment on
+- `body` (string, required): Markdown body
+- `parentId` (string, optional): The comment that opened the thread, to reply to it
+- `authorId` (string, optional): Member ID to attribute the comment to
+
+**Mentions:** write `@[Their Name](member:THEIR_ID)` inside the body; `list_members`
+gives the IDs. Mentioned people are resolved into the comment's `mentions` array on
+every save, so they stay queryable even if the body is edited later.
+
+### update_comment
+Edits a comment body, or resolves/reopens a thread. Only the comment that opened a
+thread can carry `resolved`.
+
+**Parameters:**
+- `id` (string, required): The comment ID
+- `body` (string, optional): New markdown body
+- `resolved` (boolean, optional): Resolve (true) or reopen (false) the thread
+
+### delete_comment
+Deletes a comment. Deleting the comment that opened a thread deletes its replies too.
+
+**Parameters:**
+- `id` (string, required): The comment ID to delete
 
 ## Development
 
