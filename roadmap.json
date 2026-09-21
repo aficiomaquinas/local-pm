@@ -979,7 +979,7 @@
       "slug": "workspace-scoping-rbac",
       "title": "Workspace scoping and finer RBAC",
       "tier": 5,
-      "status": "todo",
+      "status": "in_progress",
       "effort": "M",
       "summary": "Per-project or per-workspace membership and permissions, rather than the three global roles.",
       "rationale": "src/lib/access.ts has one global role check: admin may delete, anyone authenticated may write. Fine for one machine, insufficient for a shared install.",
@@ -993,7 +993,7 @@
         "src/lib/access.ts",
         "src/collections/"
       ],
-      "startedAt": null,
+      "startedAt": "2026-09-21",
       "completedAt": null,
       "notes": ""
     },
