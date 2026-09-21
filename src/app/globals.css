@@ -332,6 +332,13 @@
   --color-neutral-subtle: var(--slate-3);
   --color-neutral-border: var(--slate-7);
 
+  --color-label-slate: var(--slate-9);
+  --color-label-indigo: var(--indigo-9);
+  --color-label-blue: var(--blue-9);
+  --color-label-green: var(--green-9);
+  --color-label-amber: var(--amber-9);
+  --color-label-red: var(--red-9);
+
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1.45;
   --text-2xs--letter-spacing: 0.01em;

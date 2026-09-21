@@ -51,6 +51,9 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `update_comment` - Edit a comment body, or resolve/reopen a thread
 - `delete_comment` - Delete a comment (and its replies, if it opened the thread)
 
+### Labels
+- `list_labels` - List the shared labels in the workspace, with their group
+
 ### Activity
 - `list_activity` - Read a ticket's change history, oldest first
 
@@ -378,6 +381,22 @@ Adds a new subtask to a ticket.
 **Parameters:**
 - `ticketId` (string, required): Parent ticket ID
 - `title` (string, required): Subtask title
+
+### list_labels
+Lists the shared labels in the workspace. Labels are workspace-wide, not per
+project, so the same label can be applied to tickets in any project and used to
+filter across them. A label optionally belongs to a group.
+
+On `create_ticket` and `update_ticket`, `labels` is an array of label names, keys
+or ids. A name that does not match an existing label creates one, so an agent can
+apply a label without a separate create step — call `list_labels` first if you
+want to reuse the workspace's existing set rather than risk a near-duplicate.
+`update_ticket` replaces the whole set; pass `[]` to clear it.
+
+**Parameters:**
+- `search` (string, optional): Only labels whose name contains this text
+- `group` (string, optional): Only labels in this group, by group name, key or id
+- `limit` (number, optional): Maximum labels to return (default: 200)
 
 ### list_activity
 Reads the change history of a ticket, oldest first. Entries cover field changes

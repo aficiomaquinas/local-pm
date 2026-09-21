@@ -59,6 +59,26 @@ export function formatDateCompact(value: string | number | Date | null | undefin
   return sameYear ? stem : `${stem} ${date.getFullYear()}`
 }
 
+export function formatDateRange(
+  from: string | number | Date | null | undefined,
+  to: string | number | Date | null | undefined,
+): string {
+  const start = toDate(from)
+  const end = toDate(to)
+  if (!start || !end) return '—'
+
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear()
+  const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth()
+  const head = sameMonth
+    ? `${ordinal(start.getUTCDate())}`
+    : `${ordinal(start.getUTCDate())} ${MONTHS_SHORT[start.getUTCMonth()]}`
+  const tail = `${ordinal(end.getUTCDate())} ${MONTHS_SHORT[end.getUTCMonth()]}`
+
+  return sameYear
+    ? `${head} – ${tail} ${end.getUTCFullYear()}`
+    : `${head} ${start.getUTCFullYear()} – ${tail} ${end.getUTCFullYear()}`
+}
+
 export function formatDateTimeRelative(value: string | number | Date | null | undefined): string {
   const date = toDate(value)
   if (!date) return '—'

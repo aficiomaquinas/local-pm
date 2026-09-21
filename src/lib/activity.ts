@@ -43,6 +43,7 @@ export const TRACKED_FIELDS = [
   'assignee',
   'project',
   'team',
+  'cycle',
   'dueDate',
   'description',
   'labels',
@@ -60,6 +61,7 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
   assignee: 'Assignee',
   project: 'Project',
   team: 'Team',
+  cycle: 'Cycle',
   dueDate: 'Due date',
   description: 'Description',
   labels: 'Labels',
@@ -195,7 +197,8 @@ function comparable(field: TrackedField, value: unknown): string {
     field === 'project' ||
     field === 'team' ||
     field === 'status' ||
-    field === 'epic'
+    field === 'epic' ||
+    field === 'cycle'
   )
     return idOf(value) ?? ''
   if (value === null || value === undefined) return ''

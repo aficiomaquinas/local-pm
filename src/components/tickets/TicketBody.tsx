@@ -1,20 +1,21 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Ban, Check, GitBranch, Plus, Tag } from 'lucide-react'
+import { Ban, Check, GitBranch, Tag } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { BLOCKED_META, ticketPriorityOptions, statusOptions, isClosedStatus } from '@/lib/status'
 import { formatDateTimeRelative } from '@/lib/format'
 import { TicketPriority, TicketStatus } from '@/types/enums'
 import { useOptimisticPatch } from '@/hooks/useOptimisticPatch'
 import { useTicketDependencies } from '@/hooks/useTicketDependencies'
-import { Badge, Chip } from '@/components/ui/Badge'
+import { Badge } from '@/components/ui/Badge'
+import { LabelChips, LabelSelect } from '@/components/ui/LabelPicker'
 import { Button } from '@/components/ui/Button'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Expandable } from '@/components/ui/Expandable'
-import { Field, Input } from '@/components/ui/Field'
+import { Field } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
-import { MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import { CycleSelect, MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { DependencyGraph } from '@/components/kanban/DependencyGraph'
@@ -25,6 +26,8 @@ import { Section } from './TicketSection'
 import type { Project, Ticket } from '@/payload-types'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { statusIdOf } from '@/lib/workflow'
+import { labelsOf } from '@/lib/labels'
+import type { Label } from '@/payload-types'
 
 export function TicketBody({
   ticket,
@@ -49,8 +52,6 @@ export function TicketBody({
   const [editingDescription, setEditingDescription] = useState(false)
   const [draftDescription, setDraftDescription] = useState('')
   const [savingDescription, setSavingDescription] = useState(false)
-  const [newLabel, setNewLabel] = useState('')
-
   const { blockers, blocking, refresh } = useTicketDependencies(ticket)
 
   const project: Project | null = typeof ticket.project === 'object' ? ticket.project : null
@@ -59,9 +60,11 @@ export function TicketBody({
   const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
   const assigneeId =
     typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? '')
+  const cycle = typeof ticket.cycle === 'object' ? ticket.cycle : null
+  const cycleId = typeof ticket.cycle === 'string' ? ticket.cycle : (ticket.cycle?.id ?? '')
   const description = (ticket.description as unknown as string) || ''
   const subtasks = ticket.subtasks ?? []
-  const labels = ticket.labels ?? []
+  const labels = labelsOf(ticket)
   const blockedByIds = blockers.map((b) => b.id)
 
   const saveDescription = async () => {
@@ -72,6 +75,12 @@ export function TicketBody({
     )
     setSavingDescription(false)
     if (ok) setEditingDescription(false)
+  }
+
+  const setLabels = async (next: Label[]) => {
+    await patch({ labels: next.map((label) => label.id) } as Partial<Ticket>, 'the labels', {
+      labels: next,
+    } as Partial<Ticket>)
   }
 
   const patchBlockers = async (ids: string[]) => {
@@ -195,6 +204,21 @@ export function TicketBody({
             )}
           </Field>
 
+          {project && (
+            <Field label="Cycle" optional>
+              {({ id }) => (
+                <CycleSelect
+                  id={id}
+                  value={cycleId}
+                  selected={cycle}
+                  where={{ project: project.id }}
+                  aria-label="Cycle"
+                  onChange={(next) => patch({ cycle: next || null } as Partial<Ticket>, 'the cycle')}
+                />
+              )}
+            </Field>
+          )}
+
           <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
             {({ id, describedBy }) => (
               <DatePicker
@@ -218,50 +242,15 @@ export function TicketBody({
       <EpicSection ticket={ticket} patch={patch} />
 
       <Section title="Labels" icon={Tag}>
-        <div className={cn('flex flex-wrap gap-2', labels.length === 0 && 'hidden')}>
-          {labels.map((label, index) => (
-            <Chip
-              key={label.id ?? index}
-              shape="tag"
-              onRemove={() =>
-                patch(
-                  { labels: labels.filter((_, i) => i !== index) } as Partial<Ticket>,
-                  'the labels',
-                )
-              }
-              removeLabel={`Remove label ${label.name}`}
-            >
-              {label.name}
-            </Chip>
-          ))}
-        </div>
+        <LabelChips labels={labels} onRemove={(label) => void setLabels(labels.filter((entry) => entry.id !== label.id))} />
         {labels.length === 0 && <p className="text-base text-text-muted">No labels.</p>}
 
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const name = newLabel.trim()
-            if (!name) return
-            setNewLabel('')
-            void patch({ labels: [...labels, { name }] } as Partial<Ticket>, 'the labels')
-          }}
-        >
-          <Field label="New label" hideLabel className="flex-1">
-            {({ id }) => (
-              <Input
-                id={id}
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                placeholder="Add a label"
-                autoComplete="off"
-              />
-            )}
-          </Field>
-          <Button type="submit" icon={Plus} variant="secondary">
-            Add
-          </Button>
-        </form>
+        <div className="max-w-72">
+          <LabelSelect
+            selected={labels}
+            onAdd={(label) => void setLabels([...labels, label])}
+          />
+        </div>
       </Section>
 
       <SubtaskList

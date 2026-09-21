@@ -106,6 +106,7 @@ function filtersToSearch(filters: BoardFilters, ticketId: string | null): string
   if (filters.projectId) params.set('project', filters.projectId)
   if (filters.teamId) params.set('team', filters.teamId)
   if (filters.assigneeId) params.set('assignee', filters.assigneeId)
+  if (filters.cycleId) params.set('cycle', filters.cycleId)
   if (filters.query) params.set('q', filters.query)
   if (ticketId) params.set('ticket', ticketId)
   const qs = params.toString()
@@ -131,6 +132,7 @@ export function KanbanBoard({
     projectId: searchParams.get('project'),
     teamId: searchParams.get('team'),
     assigneeId: searchParams.get('assignee'),
+    cycleId: searchParams.get('cycle'),
     query: searchParams.get('q') ?? '',
   })
   const { statusesForProject } = useWorkflow()
@@ -172,6 +174,7 @@ export function KanbanBoard({
       projectId: searchParams.get('project'),
       teamId: searchParams.get('team'),
       assigneeId: searchParams.get('assignee'),
+      cycleId: searchParams.get('cycle'),
       query: searchParams.get('q') ?? '',
       columns: columnIds,
     }),
@@ -205,6 +208,7 @@ export function KanbanBoard({
         projectId: params.get('project'),
         teamId: params.get('team'),
         assigneeId: params.get('assignee'),
+        cycleId: params.get('cycle'),
         query: params.get('q') ?? '',
       })
       setOpenTicketId(params.get('ticket'))
@@ -243,6 +247,7 @@ export function KanbanBoard({
       if (filters.projectId) params.set('project', filters.projectId)
       if (filters.teamId) params.set('team', filters.teamId)
       if (filters.assigneeId) params.set('assignee', filters.assigneeId)
+      if (filters.cycleId) params.set('cycle', filters.cycleId)
       params.set('returnTo', filtersToSearch(filters, null))
       router.push(`/tickets/new?${params}`)
     },
@@ -262,6 +267,7 @@ export function KanbanBoard({
       projectId: filters.projectId,
       teamId: filters.teamId,
       assigneeId: filters.assigneeId,
+      cycleId: filters.cycleId,
       query: filters.query,
       columns: columnIds,
     })
@@ -286,6 +292,7 @@ export function KanbanBoard({
           if (filters.assigneeId) {
             params.set('where[assignee][equals]', filters.assigneeId)
           }
+          if (filters.cycleId) params.set('where[cycle][equals]', filters.cycleId)
           appendTicketSearch(params, filters.query)
           const response = await fetch(`/api/tickets?${params}`, { signal: controller.signal })
           if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
@@ -340,6 +347,7 @@ export function KanbanBoard({
     filters.projectId,
     filters.teamId,
     filters.assigneeId,
+    filters.cycleId,
     filters.query,
     toast,
     retry,
@@ -379,7 +387,7 @@ export function KanbanBoard({
 
   const totalLoaded = tickets.length
   const hasFilters = Boolean(
-    filters.projectId || filters.teamId || filters.assigneeId || filters.query,
+    filters.projectId || filters.teamId || filters.assigneeId || filters.cycleId || filters.query,
   )
 
   const flash = (ticketId: string) => {
@@ -545,6 +553,7 @@ export function KanbanBoard({
       if (filters.projectId) params.set('where[project][equals]', filters.projectId)
       if (filters.teamId) params.set('where[team][equals]', filters.teamId)
       if (filters.assigneeId) params.set('where[assignee][equals]', filters.assigneeId)
+      if (filters.cycleId) params.set('where[cycle][equals]', filters.cycleId)
       appendTicketSearch(params, filters.query)
 
       const response = await fetch(`/api/tickets?${params}`)
@@ -627,7 +636,7 @@ export function KanbanBoard({
     group: 'Board',
     scope: 'board',
     enabled: hasFilters,
-    run: () => updateFilters({ projectId: null, teamId: null, assigneeId: null, query: '' }),
+    run: () => updateFilters({ projectId: null, teamId: null, assigneeId: null, cycleId: null, query: '' }),
   })
 
   const announcements: Announcements = {
@@ -694,7 +703,7 @@ export function KanbanBoard({
             action={{
               label: 'Clear filters',
               onClick: () =>
-                updateFilters({ projectId: null, teamId: null, assigneeId: null, query: '' }),
+                updateFilters({ projectId: null, teamId: null, assigneeId: null, cycleId: null, query: '' }),
             }}
           />
         ) : (

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, FileText, LayoutDashboard, ListChecks, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, FileText, LayoutDashboard, ListChecks, Pencil, Repeat, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { ProjectStatus, TicketStatus } from '@/types/enums'
 import { projectStatusOptions } from '@/lib/status'
@@ -22,6 +22,7 @@ import { TabList, TabPanel } from '@/components/ui/Tabs'
 import { useToast } from '@/components/ui/Toast'
 import { RichTextDisplay } from '@/components/ui/RichTextEditor'
 import { TicketsTable } from '@/components/tickets/TicketsTable'
+import { CycleSettings } from '@/components/cycles/CycleSettings'
 import type { Project } from '@/payload-types'
 
 export interface ProjectStats {
@@ -31,7 +32,7 @@ export interface ProjectStats {
   done: number
 }
 
-const TAB_IDS = ['overview', 'tickets'] as const
+const TAB_IDS = ['overview', 'tickets', 'cycles'] as const
 type TabId = (typeof TAB_IDS)[number]
 
 export function ProjectDetail({
@@ -176,6 +177,7 @@ export function ProjectDetail({
           tabs={[
             { id: 'overview', label: 'Overview', icon: FileText },
             { id: 'tickets', label: 'Tickets', icon: ListChecks, count: stats.total },
+            { id: 'cycles', label: 'Cycles', icon: Repeat },
           ]}
         />
       </header>
@@ -275,6 +277,10 @@ export function ProjectDetail({
             emptyTitle="No tickets in this project"
             emptyDescription="Tickets created here get the key prefix and show up on the board."
           />
+        </TabPanel>
+
+        <TabPanel id="cycles" idPrefix="project" active={tab === 'cycles'}>
+          <CycleSettings project={project} />
         </TabPanel>
       </div>
 

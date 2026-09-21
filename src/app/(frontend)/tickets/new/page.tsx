@@ -2,7 +2,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
 import { resolveWorkflow } from '@/lib/workflow'
-import type { Project, Team, Member } from '@/payload-types'
+import type { Cycle, Project, Team, Member } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'New ticket · local-pm' }
@@ -12,6 +12,7 @@ interface NewTicketPageProps {
     project?: string
     team?: string
     assignee?: string
+    cycle?: string
     status?: string
     returnTo?: string
   }>
@@ -37,14 +38,17 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
     }
   }
 
-  const [team, assignee] = (await Promise.all([
+  const [team, assignee, cycle] = (await Promise.all([
     params.team
       ? payload.findByID({ collection: 'teams', id: params.team, depth: 0 }).catch(() => null)
       : null,
     params.assignee
       ? payload.findByID({ collection: 'members', id: params.assignee, depth: 0 }).catch(() => null)
       : null,
-  ])) as [Team | null, Member | null]
+    params.cycle
+      ? payload.findByID({ collection: 'cycles', id: params.cycle, depth: 0 }).catch(() => null)
+      : null,
+  ])) as [Team | null, Member | null, Cycle | null]
 
   return (
     <TicketForm
@@ -52,6 +56,7 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
       project={project}
       team={team}
       assignee={assignee}
+      cycle={cycle}
       defaultProjectId={project?.id ?? null}
       defaultStatus={status}
       returnTo={

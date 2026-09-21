@@ -113,3 +113,79 @@ export const PROJECT_COLORS = [
   '#06b6d4',
   '#3b82f6',
 ]
+
+export enum CycleRollover {
+  NEXT = 'NEXT',
+  BACKLOG = 'BACKLOG',
+  NONE = 'NONE',
+}
+
+export enum CycleAutomation {
+  AUTOMATIC = 'AUTOMATIC',
+  MANUAL = 'MANUAL',
+}
+
+export const CYCLE_ROLLOVER_OPTIONS = [
+  { label: 'Move to the next cycle', value: CycleRollover.NEXT },
+  { label: 'Move back to the backlog', value: CycleRollover.BACKLOG },
+  { label: 'Leave in the closed cycle', value: CycleRollover.NONE },
+]
+
+export const CYCLE_AUTOMATION_OPTIONS = [
+  { label: 'Automatic', value: CycleAutomation.AUTOMATIC },
+  { label: 'Manual', value: CycleAutomation.MANUAL },
+]
+
+export const CYCLE_START_DAY_OPTIONS = [
+  { label: 'Monday', value: 1 },
+  { label: 'Tuesday', value: 2 },
+  { label: 'Wednesday', value: 3 },
+  { label: 'Thursday', value: 4 },
+  { label: 'Friday', value: 5 },
+  { label: 'Saturday', value: 6 },
+  { label: 'Sunday', value: 0 },
+]
+
+export const CYCLE_LENGTH_OPTIONS = [
+  { label: '1 week', value: 1 },
+  { label: '2 weeks', value: 2 },
+  { label: '3 weeks', value: 3 },
+  { label: '4 weeks', value: 4 },
+  { label: '6 weeks', value: 6 },
+  { label: '8 weeks', value: 8 },
+]
+export enum LabelColor {
+  SLATE = 'SLATE',
+  INDIGO = 'INDIGO',
+  BLUE = 'BLUE',
+  GREEN = 'GREEN',
+  AMBER = 'AMBER',
+  RED = 'RED',
+}
+
+export const LABEL_COLOR_OPTIONS = [
+  { label: 'Slate', value: LabelColor.SLATE },
+  { label: 'Indigo', value: LabelColor.INDIGO },
+  { label: 'Blue', value: LabelColor.BLUE },
+  { label: 'Green', value: LabelColor.GREEN },
+  { label: 'Amber', value: LabelColor.AMBER },
+  { label: 'Red', value: LabelColor.RED },
+]
+
+export const LEGACY_LABEL_COLORS: Record<string, LabelColor> = {
+  '#64748b': LabelColor.SLATE,
+  '#6366f1': LabelColor.INDIGO,
+  '#8b5cf6': LabelColor.INDIGO,
+  '#a855f7': LabelColor.INDIGO,
+  '#d946ef': LabelColor.INDIGO,
+  '#ec4899': LabelColor.RED,
+  '#ef4444': LabelColor.RED,
+  '#f97316': LabelColor.AMBER,
+  '#f59e0b': LabelColor.AMBER,
+  '#eab308': LabelColor.AMBER,
+  '#22c55e': LabelColor.GREEN,
+  '#10b981': LabelColor.GREEN,
+  '#14b8a6': LabelColor.GREEN,
+  '#06b6d4': LabelColor.BLUE,
+  '#3b82f6': LabelColor.BLUE,
+}

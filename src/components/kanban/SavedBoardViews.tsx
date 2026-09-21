@@ -20,15 +20,23 @@ function readViews(): SavedView[] {
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
     if (!Array.isArray(value)) return []
-    return value.filter(
-      (view): view is SavedView =>
-        typeof view?.id === 'string' &&
-        typeof view?.name === 'string' &&
-        typeof view?.filters?.query === 'string' &&
-        ['projectId', 'teamId', 'assigneeId'].every(
-          (key) => view.filters[key] === null || typeof view.filters[key] === 'string',
-        ),
-    )
+    return value
+      .filter(
+        (view): view is SavedView =>
+          typeof view?.id === 'string' &&
+          typeof view?.name === 'string' &&
+          typeof view?.filters?.query === 'string' &&
+          ['projectId', 'teamId', 'assigneeId'].every(
+            (key) => view.filters[key] === null || typeof view.filters[key] === 'string',
+          ),
+      )
+      .map((view) => ({
+        ...view,
+        filters: {
+          ...view.filters,
+          cycleId: typeof view.filters.cycleId === 'string' ? view.filters.cycleId : null,
+        },
+      }))
   } catch {
     return []
   }

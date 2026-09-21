@@ -8,14 +8,15 @@ import { useEntityDoc } from '@/hooks/useEntityDoc'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { Kbd } from '@/components/ui/Kbd'
-import { MemberSelect, ProjectSelect, TeamSelect } from '@/components/ui/EntityPickers'
+import { CycleSelect, MemberSelect, ProjectSelect, TeamSelect } from '@/components/ui/EntityPickers'
 import { SavedBoardViews } from './SavedBoardViews'
-import type { Member, Project, Team } from '@/payload-types'
+import type { Cycle, Member, Project, Team } from '@/payload-types'
 
 export interface BoardFilters {
   projectId: string | null
   teamId: string | null
   assigneeId: string | null
+  cycleId: string | null
   query: string
 }
 
@@ -40,8 +41,9 @@ export function BoardToolbar({
   const selectedProject = useEntityDoc<Project>('projects', filters.projectId)
   const selectedTeam = useEntityDoc<Team>('teams', filters.teamId)
   const selectedAssignee = useEntityDoc<Member>('members', filters.assigneeId)
+  const selectedCycle = useEntityDoc<Cycle>('cycles', filters.cycleId)
   const hasFilters = Boolean(
-    filters.projectId || filters.teamId || filters.assigneeId || filters.query,
+    filters.projectId || filters.teamId || filters.assigneeId || filters.cycleId || filters.query,
   )
 
   useShortcut({
@@ -147,6 +149,19 @@ export function BoardToolbar({
             className="w-40 max-sm:w-full"
             onChange={(next) => onChange({ assigneeId: next || null })}
           />
+
+          {filters.projectId && (
+            <CycleSelect
+              id="board-cycle-filter"
+              aria-label="Filter by cycle"
+              value={filters.cycleId ?? ''}
+              allLabel="All cycles"
+              placeholder="All cycles"
+              where={{ project: filters.projectId }}
+              className="w-40 max-sm:w-full"
+              onChange={(next) => onChange({ cycleId: next || null })}
+            />
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs tabular text-text-muted" role="status">
@@ -188,6 +203,15 @@ export function BoardToolbar({
             Assignee: {selectedAssignee.name}
           </Chip>
         )}
+        {selectedCycle && (
+          <Chip
+            tone="accent"
+            onRemove={() => onChange({ cycleId: null })}
+            removeLabel={`Remove cycle filter ${selectedCycle.name}`}
+          >
+            Cycle: {selectedCycle.name}
+          </Chip>
+        )}
         {filters.query && (
           <Chip
             tone="accent"
@@ -202,7 +226,15 @@ export function BoardToolbar({
           variant="ghost"
           size="sm"
           icon={X}
-          onClick={() => onChange({ projectId: null, teamId: null, assigneeId: null, query: '' })}
+          onClick={() =>
+            onChange({
+              projectId: null,
+              teamId: null,
+              assigneeId: null,
+              cycleId: null,
+              query: '',
+            })
+          }
         >
           Clear all
         </Button>

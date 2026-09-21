@@ -72,11 +72,15 @@ export interface Config {
     teams: Team;
     members: Member;
     statuses: Status;
+    cycles: Cycle;
+    'label-groups': LabelGroup;
+    labels: Label;
     tickets: Ticket;
     comments: Comment;
     attachments: Attachment;
     activity: Activity;
     'payload-kv': PayloadKv;
+    'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -88,11 +92,15 @@ export interface Config {
     teams: TeamsSelect<false> | TeamsSelect<true>;
     members: MembersSelect<false> | MembersSelect<true>;
     statuses: StatusesSelect<false> | StatusesSelect<true>;
+    cycles: CyclesSelect<false> | CyclesSelect<true>;
+    'label-groups': LabelGroupsSelect<false> | LabelGroupsSelect<true>;
+    labels: LabelsSelect<false> | LabelsSelect<true>;
     tickets: TicketsSelect<false> | TicketsSelect<true>;
     comments: CommentsSelect<false> | CommentsSelect<true>;
     attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
     activity: ActivitySelect<false> | ActivitySelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -101,14 +109,24 @@ export interface Config {
     defaultIDType: string;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'payload-jobs-stats': PayloadJobsStat;
+  };
+  globalsSelect: {
+    'payload-jobs-stats': PayloadJobsStatsSelect<false> | PayloadJobsStatsSelect<true>;
+  };
   locale: null;
   user: User & {
     collection: 'users';
   };
   jobs: {
-    tasks: unknown;
+    tasks: {
+      cycleRollover: TaskCycleRollover;
+      inline: {
+        input: unknown;
+        output: unknown;
+      };
+    };
     workflows: unknown;
   };
 }
@@ -248,6 +266,35 @@ export interface Project {
    */
   status: 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
   /**
+   * Time-boxed cycles for this project
+   */
+  cycles?: {
+    /**
+     * Turn cycles on for this project. Off by default.
+     */
+    enabled?: boolean | null;
+    /**
+     * How long each cycle runs. Applies to cycles created from now on.
+     */
+    lengthWeeks?: number | null;
+    /**
+     * Weekday the first cycle starts on, 0 being Sunday
+     */
+    startDay?: number | null;
+    /**
+     * Where incomplete tickets go when a cycle closes
+     */
+    rollover?: ('NEXT' | 'BACKLOG' | 'NONE') | null;
+    /**
+     * Automatic closes elapsed cycles on the server on a schedule. Manual waits for someone to close each cycle.
+     */
+    automation?: ('AUTOMATIC' | 'MANUAL') | null;
+    /**
+     * How many future cycles to keep provisioned ahead of the active one
+     */
+    upcomingCount?: number | null;
+  };
+  /**
    * Auto-incremented counter for ticket IDs
    */
   ticketCounter?: number | null;
@@ -358,6 +405,107 @@ export interface Status {
   createdAt: string;
 }
 /**
+ * Time-boxed cycles that incomplete work rolls out of when they end
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "cycles".
+ */
+export interface Cycle {
+  id: string;
+  /**
+   * Shown on the cycle page and on tickets. Defaults to the cycle number.
+   */
+  name: string;
+  /**
+   * Sequential within the project, starting at 1. Never reused.
+   */
+  number: number;
+  /**
+   * The project whose workflow this cycle belongs to
+   */
+  project: string | Project;
+  /**
+   * First day of the cycle
+   */
+  startsAt: string;
+  /**
+   * Last day of the cycle, inclusive
+   */
+  endsAt: string;
+  /**
+   * Optional one-line goal for the cycle
+   */
+  goal?: string | null;
+  /**
+   * Set when the cycle was closed and its incomplete work rolled over
+   */
+  completedAt?: string | null;
+  /**
+   * How many tickets moved out of this cycle when it closed
+   */
+  rolledOver?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Optional clusters that labels can belong to, such as Area or Kind
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "label-groups".
+ */
+export interface LabelGroup {
+  id: string;
+  /**
+   * The heading this group gets in the label picker
+   */
+  name: string;
+  /**
+   * Stable identifier used by the API and the MCP server. Derived from the name.
+   */
+  key: string;
+  /**
+   * Position in the picker, ascending. Gaps are intentional.
+   */
+  order: number;
+  /**
+   * Optional hint shown beside the group heading
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Shared labels that any ticket in the workspace can carry
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "labels".
+ */
+export interface Label {
+  id: string;
+  /**
+   * What the label reads as on a card. One or two words.
+   */
+  name: string;
+  /**
+   * Stable identifier used by the API and the MCP server. Derived from the name.
+   */
+  key: string;
+  /**
+   * The swatch shown beside the name. The palette is fixed so colour stays mappable to meaning.
+   */
+  color: 'SLATE' | 'INDIGO' | 'BLUE' | 'GREEN' | 'AMBER' | 'RED';
+  /**
+   * Optional. Groups cluster related labels in the picker.
+   */
+  group?: (string | null) | LabelGroup;
+  /**
+   * Optional hint shown when picking this label
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * Individual work items within projects
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -408,6 +556,10 @@ export interface Ticket {
    */
   team?: (string | null) | Team;
   /**
+   * The cycle this ticket is committed to, when the project runs cycles
+   */
+  cycle?: (string | null) | Cycle;
+  /**
    * The person responsible for this ticket
    */
   assignee?: (string | null) | Member;
@@ -416,15 +568,9 @@ export interface Ticket {
    */
   blockedBy?: (string | Ticket)[] | null;
   /**
-   * Labels for categorization
+   * Shared labels drawn from the workspace label set
    */
-  labels?:
-    | {
-        name: string;
-        color?: string | null;
-        id?: string | null;
-      }[]
-    | null;
+  labels?: (string | Label)[] | null;
   /**
    * When this ticket should be completed
    */
@@ -571,6 +717,107 @@ export interface PayloadKv {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs".
+ */
+export interface PayloadJob {
+  id: string;
+  /**
+   * Input data provided to the job
+   */
+  input?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  taskStatus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  completedAt?: string | null;
+  totalTried?: number | null;
+  /**
+   * If hasError is true this job will not be retried
+   */
+  hasError?: boolean | null;
+  /**
+   * If hasError is true, this is the error that caused it
+   */
+  error?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Task execution log
+   */
+  log?:
+    | {
+        executedAt: string;
+        completedAt: string;
+        taskSlug: 'inline' | 'cycleRollover';
+        taskID: string;
+        input?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        output?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        state: 'failed' | 'succeeded';
+        error?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  taskSlug?: ('inline' | 'cycleRollover') | null;
+  queue?: string | null;
+  waitUntil?: string | null;
+  processing?: boolean | null;
+  meta?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -595,6 +842,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'statuses';
         value: string | Status;
+      } | null)
+    | ({
+        relationTo: 'cycles';
+        value: string | Cycle;
+      } | null)
+    | ({
+        relationTo: 'label-groups';
+        value: string | LabelGroup;
+      } | null)
+    | ({
+        relationTo: 'labels';
+        value: string | Label;
       } | null)
     | ({
         relationTo: 'tickets';
@@ -692,6 +951,16 @@ export interface ProjectsSelect<T extends boolean = true> {
   icon?: T;
   color?: T;
   status?: T;
+  cycles?:
+    | T
+    | {
+        enabled?: T;
+        lengthWeeks?: T;
+        startDay?: T;
+        rollover?: T;
+        automation?: T;
+        upcomingCount?: T;
+      };
   ticketCounter?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -736,6 +1005,47 @@ export interface StatusesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "cycles_select".
+ */
+export interface CyclesSelect<T extends boolean = true> {
+  name?: T;
+  number?: T;
+  project?: T;
+  startsAt?: T;
+  endsAt?: T;
+  goal?: T;
+  completedAt?: T;
+  rolledOver?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "label-groups_select".
+ */
+export interface LabelGroupsSelect<T extends boolean = true> {
+  name?: T;
+  key?: T;
+  order?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "labels_select".
+ */
+export interface LabelsSelect<T extends boolean = true> {
+  name?: T;
+  key?: T;
+  color?: T;
+  group?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "tickets_select".
  */
 export interface TicketsSelect<T extends boolean = true> {
@@ -746,15 +1056,10 @@ export interface TicketsSelect<T extends boolean = true> {
   priority?: T;
   project?: T;
   team?: T;
+  cycle?: T;
   assignee?: T;
   blockedBy?: T;
-  labels?:
-    | T
-    | {
-        name?: T;
-        color?: T;
-        id?: T;
-      };
+  labels?: T;
   dueDate?: T;
   isEpic?: T;
   epic?: T;
@@ -829,6 +1134,38 @@ export interface PayloadKvSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs_select".
+ */
+export interface PayloadJobsSelect<T extends boolean = true> {
+  input?: T;
+  taskStatus?: T;
+  completedAt?: T;
+  totalTried?: T;
+  hasError?: T;
+  error?: T;
+  log?:
+    | T
+    | {
+        executedAt?: T;
+        completedAt?: T;
+        taskSlug?: T;
+        taskID?: T;
+        input?: T;
+        output?: T;
+        state?: T;
+        error?: T;
+        id?: T;
+      };
+  taskSlug?: T;
+  queue?: T;
+  waitUntil?: T;
+  processing?: T;
+  meta?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents_select".
  */
 export interface PayloadLockedDocumentsSelect<T extends boolean = true> {
@@ -858,6 +1195,47 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats".
+ */
+export interface PayloadJobsStat {
+  id: string;
+  stats?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats_select".
+ */
+export interface PayloadJobsStatsSelect<T extends boolean = true> {
+  stats?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskCycleRollover".
+ */
+export interface TaskCycleRollover {
+  input?: unknown;
+  output: {
+    projects?: number | null;
+    created?: number | null;
+    closed?: number | null;
+    rolledOver?: number | null;
+  };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
