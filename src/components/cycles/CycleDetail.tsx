@@ -7,6 +7,8 @@ import { ArrowLeft, CheckCircle2, LayoutDashboard } from 'lucide-react'
 import { formatDateRange } from '@/lib/format'
 import { CYCLE_STATE_META, cycleState, cycleTiming } from '@/lib/cycle-display'
 import type { CycleProgress } from '@/lib/cycles'
+import type { BurndownSeries } from '@/lib/burndown'
+import { BurndownChart } from '@/components/charts/BurndownChart'
 import { useOptimisticPatch, saveStateLabel } from '@/hooks/useOptimisticPatch'
 import { Badge } from '@/components/ui/Badge'
 import { Button, LinkButton } from '@/components/ui/Button'
@@ -21,11 +23,15 @@ export function CycleDetail({
   cycle: initialCycle,
   project,
   progress,
+  burndown,
+  frozen,
   closable,
 }: {
   cycle: Cycle
   project: Project
   progress: CycleProgress
+  burndown: BurndownSeries
+  frozen: boolean
   closable: boolean
 }) {
   const router = useRouter()
@@ -156,6 +162,10 @@ export function CycleDetail({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 max-md:px-4">
         <div className="mb-6 max-w-md">
           <CycleProgressBar progress={progress} label={`${cycle.name} progress`} />
+        </div>
+
+        <div className="mb-6">
+          <BurndownChart series={burndown} cycleName={cycle.name} frozen={frozen} />
         </div>
 
         <TicketsTable

@@ -24,6 +24,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
+import { EstimateBadge, estimatesFor } from '@/components/ui/EstimatePicker'
 import { LabelBadges } from '@/components/ui/LabelPicker'
 import { PriorityIndicator } from '@/components/ui/StateIndicator'
 import { TicketKey } from '@/components/ui/EntityMark'
@@ -75,6 +76,7 @@ export function KanbanCard({
   delete pointerListeners.onKeyDown
 
   const project = typeof ticket.project === 'object' ? ticket.project : null
+  const estimates = estimatesFor(project)
   const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
   const epic = epicRefOf(ticket)
   const labels = labelsOf(ticket)
@@ -210,6 +212,8 @@ export function KanbanCard({
               Blocked · {blockedCount}
             </Badge>
           )}
+
+          <EstimateBadge value={ticket.estimate} settings={estimates} />
 
           <LabelBadges labels={labels} />
 

@@ -29,7 +29,7 @@ describe('diffTicket', () => {
 
   it('names both sides of a status change in human words', () => {
     const events = diffTicket(base, { ...base, status: { id: 's-doing', name: 'In Progress' } })
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       { action: 'changed', field: 'status', from: 'Todo', to: 'In Progress' },
     ])
   })
@@ -65,16 +65,51 @@ describe('diffTicket', () => {
 
   it('reads a name off a populated relationship', () => {
     const events = diffTicket(base, { ...base, assignee: { id: 'm1', name: 'Alex' } })
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       { action: 'changed', field: 'assignee', from: null, to: 'Alex' },
     ])
   })
 
   it('treats an unassignment as a cleared value', () => {
     const events = diffTicket({ ...base, assignee: { id: 'm1', name: 'Alex' } }, base)
-    expect(events).toEqual([
+    expect(events).toMatchObject([
       { action: 'changed', field: 'assignee', from: 'Alex', to: null },
     ])
+  })
+
+  it('carries the ids behind a record change so history can be replayed exactly', () => {
+    const events = diffTicket(
+      { ...base, cycle: { id: 'c1', name: 'Cycle 1' } },
+      { ...base, cycle: { id: 'c2', name: 'Cycle 2' } },
+    )
+    expect(events).toEqual([
+      {
+        action: 'changed',
+        field: 'cycle',
+        from: 'Cycle 1',
+        to: 'Cycle 2',
+        fromId: 'c1',
+        toId: 'c2',
+      },
+    ])
+  })
+
+  it('does not invent ids for a field that is not a record', () => {
+    const events = diffTicket({ ...base, estimate: 3 }, { ...base, estimate: 5 })
+    expect(events).toEqual([{ action: 'changed', field: 'estimate', from: '3', to: '5' }])
+  })
+
+  it('records an estimate being set and cleared', () => {
+    expect(diffTicket(base, { ...base, estimate: 8 })[0]).toMatchObject({
+      field: 'estimate',
+      from: null,
+      to: '8',
+    })
+    expect(diffTicket({ ...base, estimate: 8 }, { ...base, estimate: null })[0]).toMatchObject({
+      field: 'estimate',
+      from: '8',
+      to: null,
+    })
   })
 
   it('summarises labels by name rather than by object', () => {

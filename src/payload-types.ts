@@ -295,6 +295,19 @@ export interface Project {
     upcomingCount?: number | null;
   };
   /**
+   * Effort estimates for tickets in this project
+   */
+  estimates?: {
+    /**
+     * Turn estimates on for this project. Off by default, and cycle charts count tickets instead.
+     */
+    enabled?: boolean | null;
+    /**
+     * How estimates are written. Changing it relabels existing estimates without rewriting them.
+     */
+    scale?: ('LINEAR' | 'FIBONACCI' | 'EXPONENTIAL' | 'TSHIRT') | null;
+  };
+  /**
    * Auto-incremented counter for ticket IDs
    */
   ticketCounter?: number | null;
@@ -441,6 +454,18 @@ export interface Cycle {
    */
   completedAt?: string | null;
   /**
+   * The burndown as it stood when the cycle closed. Frozen so the chart keeps reading the same afterwards, whatever happens to the tickets later.
+   */
+  progressSnapshot?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
    * How many tickets moved out of this cycle when it closed
    */
   rolledOver?: number | null;
@@ -572,6 +597,10 @@ export interface Ticket {
    */
   labels?: (string | Label)[] | null;
   /**
+   * How much work this is, in points. The project picks the scale it is shown in; t-shirt sizes are stored as their point value so they still add up.
+   */
+  estimate?: number | null;
+  /**
    * When this ticket should be completed
    */
   dueDate?: string | null;
@@ -691,6 +720,14 @@ export interface Activity {
    * The value, or comment text, as it read after the change
    */
   to?: string | null;
+  /**
+   * The id behind `from`, when the value was a record. Lets reports replay history exactly instead of matching on a name that may since have changed.
+   */
+  fromId?: string | null;
+  /**
+   * The id behind `to`, when the value was a record
+   */
+  toId?: string | null;
   /**
    * Who made the change. Empty when nobody was signed in.
    */
@@ -961,6 +998,12 @@ export interface ProjectsSelect<T extends boolean = true> {
         automation?: T;
         upcomingCount?: T;
       };
+  estimates?:
+    | T
+    | {
+        enabled?: T;
+        scale?: T;
+      };
   ticketCounter?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1015,6 +1058,7 @@ export interface CyclesSelect<T extends boolean = true> {
   endsAt?: T;
   goal?: T;
   completedAt?: T;
+  progressSnapshot?: T;
   rolledOver?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1060,6 +1104,7 @@ export interface TicketsSelect<T extends boolean = true> {
   assignee?: T;
   blockedBy?: T;
   labels?: T;
+  estimate?: T;
   dueDate?: T;
   isEpic?: T;
   epic?: T;
@@ -1120,6 +1165,8 @@ export interface ActivitySelect<T extends boolean = true> {
   field?: T;
   from?: T;
   to?: T;
+  fromId?: T;
+  toId?: T;
   actor?: T;
   updatedAt?: T;
   createdAt?: T;

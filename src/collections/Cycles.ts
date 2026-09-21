@@ -1,8 +1,9 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
-import type { Project } from '@/payload-types'
+import type { Cycle, Project } from '@/payload-types'
 import { collectionAccess, requireAuthEnabled } from '@/lib/access'
 import { closeCycleNow, reconcileAllProjects, reconcileProjectCycles } from '@/lib/cycle-service'
+import { loadBurndown, loadVelocity, snapshotOf } from '@/lib/burndown-service'
 import { defaultCycleName, toIsoDate } from '@/lib/cycles'
 
 function denied(req: PayloadRequest): boolean {
@@ -56,6 +57,78 @@ export const Cycles: CollectionConfig = {
             force: body.force,
           })
           return json({ reports: [report] })
+        } catch {
+          return json({ error: 'That project could not be found.' }, 404)
+        }
+      },
+    },
+    {
+      path: '/:id/burndown',
+      method: 'get',
+      handler: async (req) => {
+        if (denied(req)) return json({ error: 'Not authorised' }, 403)
+
+        const id = req.routeParams?.id
+        if (typeof id !== 'string') return json({ error: 'A cycle id is required.' }, 400)
+
+        try {
+          const cycle = (await req.payload.findByID({
+            collection: 'cycles',
+            id,
+            depth: 0,
+            overrideAccess: true,
+          })) as Cycle
+
+          const projectId = String(
+            typeof cycle.project === 'object' ? cycle.project.id : cycle.project,
+          )
+          const project = (await req.payload.findByID({
+            collection: 'projects',
+            id: projectId,
+            depth: 0,
+            overrideAccess: true,
+          })) as Project
+
+          const live = req.query?.live === 'true' || req.query?.live === '1'
+          const series = await loadBurndown(req.payload, cycle, project, { live })
+
+          return json({
+            cycle: { id: String(cycle.id), name: cycle.name, number: cycle.number },
+            project: { id: String(project.id), name: project.name },
+            frozen: !live && Boolean(snapshotOf(cycle)),
+            series,
+          })
+        } catch {
+          return json({ error: 'That cycle could not be found.' }, 404)
+        }
+      },
+    },
+    {
+      path: '/velocity',
+      method: 'get',
+      handler: async (req) => {
+        if (denied(req)) return json({ error: 'Not authorised' }, 403)
+
+        const projectId = req.query?.project
+        if (typeof projectId !== 'string' || !projectId) {
+          return json({ error: 'A project id is required.' }, 400)
+        }
+
+        try {
+          const project = (await req.payload.findByID({
+            collection: 'projects',
+            id: projectId,
+            depth: 0,
+            overrideAccess: true,
+          })) as Project
+
+          const requested = Number(req.query?.window)
+          const window = Number.isFinite(requested) && requested > 0 ? Math.trunc(requested) : undefined
+
+          return json({
+            project: { id: String(project.id), name: project.name },
+            ...(await loadVelocity(req.payload, project, { window })),
+          })
         } catch {
           return json({ error: 'That project could not be found.' }, 404)
         }
@@ -208,6 +281,15 @@ export const Cycles: CollectionConfig = {
       index: true,
       admin: {
         description: 'Set when the cycle was closed and its incomplete work rolled over',
+      },
+    },
+    {
+      name: 'progressSnapshot',
+      type: 'json',
+      admin: {
+        readOnly: true,
+        description:
+          'The burndown as it stood when the cycle closed. Frozen so the chart keeps reading the same afterwards, whatever happens to the tickets later.',
       },
     },
     {
