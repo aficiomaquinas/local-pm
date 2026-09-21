@@ -1,4 +1,5 @@
 import type { CollectionConfig, PayloadRequest } from 'payload'
+import { APIError } from 'payload'
 import {
   ProjectStatus,
   PROJECT_STATUS_OPTIONS,
@@ -11,6 +12,7 @@ import {
   ESTIMATE_SCALE_OPTIONS,
 } from '@/types/enums'
 import { collectionAccess } from '@/lib/access'
+import { PROJECT_DATES, pendingDateOrderError } from '@/lib/dates'
 import { DEFAULT_ESTIMATE_SCALE } from '@/lib/estimates'
 import {
   DEFAULT_CYCLE_LENGTH_WEEKS,
@@ -57,6 +59,13 @@ export const Projects: CollectionConfig = {
   },
   access: collectionAccess,
   hooks: {
+    beforeChange: [
+      ({ data, originalDoc }) => {
+        const dateError = pendingDateOrderError(PROJECT_DATES, data, originalDoc)
+        if (dateError) throw new APIError(dateError, 400, null, true)
+        return data
+      },
+    ],
     afterDelete: [
       async ({ req, id }) => {
         await detachFromInitiatives(req, id)
@@ -121,6 +130,28 @@ export const Projects: CollectionConfig = {
       required: true,
       admin: {
         description: 'Current status of the project',
+      },
+    },
+    {
+      name: 'startDate',
+      type: 'date',
+      index: true,
+      admin: {
+        description: 'When work on this project is meant to begin',
+        date: {
+          pickerAppearance: 'dayOnly',
+        },
+      },
+    },
+    {
+      name: 'targetDate',
+      type: 'date',
+      index: true,
+      admin: {
+        description: 'The date this project is aiming to finish by',
+        date: {
+          pickerAppearance: 'dayOnly',
+        },
       },
     },
     {

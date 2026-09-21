@@ -33,6 +33,7 @@ export function fromIso(value: string): Date | undefined {
 
 export interface DatePickerProps {
   id?: string
+  label?: string
   value: string
   onChange: (next: string) => void
   disabled?: boolean
@@ -45,6 +46,7 @@ export interface DatePickerProps {
 
 export function DatePicker({
   id,
+  label,
   value,
   onChange,
   disabled,
@@ -53,6 +55,7 @@ export function DatePicker({
   className,
   ...aria
 }: DatePickerProps) {
+  const subject = label ? `the ${label.toLowerCase()}` : 'the date'
   const [text, setText] = useState(value)
   const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -64,12 +67,20 @@ export function DatePicker({
   const commit = (next: string) => {
     const trimmed = next.trim()
     if (trimmed === '') {
-      onChange('')
+      if (value === '') setText('')
+      else onChange('')
       return
     }
+
     const parsed = fromIso(trimmed)
-    if (parsed) onChange(toIso(parsed))
-    else setText(value)
+    if (!parsed) {
+      setText(value)
+      return
+    }
+
+    const iso = toIso(parsed)
+    if (iso === value) setText(iso)
+    else onChange(iso)
   }
 
   return (
@@ -116,7 +127,7 @@ export function DatePicker({
           size="xs"
           iconOnly
           icon={X}
-          aria-label="Clear the date"
+          aria-label={`Clear ${subject}`}
           onClick={() => {
             onChange('')
             inputRef.current?.focus()
@@ -132,7 +143,7 @@ export function DatePicker({
             iconOnly
             icon={CalendarDays}
             disabled={disabled}
-            aria-label="Choose a date from the calendar"
+            aria-label={`Choose ${subject} from the calendar`}
           />
         </Popover.Trigger>
         <Popover.Portal>

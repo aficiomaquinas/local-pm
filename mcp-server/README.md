@@ -208,6 +208,8 @@ Creates a new project.
 - `description` (string, optional): Project description
 - `prefix` (string, optional): Ticket ID prefix (auto-generated if not provided)
 - `color` (string, optional): Hex color code
+- `startDate` (string, optional): Start date, `YYYY-MM-DD`
+- `targetDate` (string, optional): Target completion date, `YYYY-MM-DD`
 
 ### update_project
 Updates an existing project.
@@ -217,6 +219,8 @@ Updates an existing project.
 - `name` (string, optional): New name
 - `description` (string, optional): New description
 - `color` (string, optional): New color
+- `startDate` (string, optional): New start date, or `null` to clear
+- `targetDate` (string, optional): New target date, or `null` to clear
 
 ### delete_project
 Deletes a project.
@@ -337,6 +341,8 @@ Creates a new ticket.
 - `team` (string, optional): Assigned team ID
 - `assignee` (string, optional): Assignee member ID — use `list_members` to find one
 - `subtasks` (array, optional): Array of subtask objects with `title` and optional `completed` fields
+- `startDate` (string, optional): Start date, `YYYY-MM-DD`
+- `dueDate` (string, optional): Due date, `YYYY-MM-DD`
 - `isEpic` (boolean, optional): Create it as an epic
 - `epic` (string, optional): ID of the epic it rolls up into
 
@@ -348,8 +354,14 @@ Updates an existing ticket.
 - `title` (string, optional): New title
 - `description` (string, optional): New description
 - `team` (string, optional): New team ID
+- `startDate` (string, optional): New start date, or `null` to clear
+- `dueDate` (string, optional): New due date, or `null` to clear
 - `isEpic` (boolean, optional): Turn the ticket into an epic, or back into a normal ticket
 - `epic` (string, optional): ID of the epic it rolls up into, or `null` to take it out
+
+Dates are day-only. A start date after the end date is rejected with an explicit
+message rather than stored: tickets run `startDate` → `dueDate`, projects run
+`startDate` → `targetDate`.
 
 ### get_epic
 Gets an epic together with its children and rollup progress. Cancelled children are excluded

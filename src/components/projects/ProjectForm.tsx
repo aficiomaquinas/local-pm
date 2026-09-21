@@ -7,9 +7,11 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { PROJECT_COLORS, PROJECT_ICONS, ProjectStatus } from '@/types/enums'
 import { projectStatusOptions } from '@/lib/status'
+import { dateOrderError, PROJECT_DATES } from '@/lib/dates'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { DatePicker } from '@/components/ui/DatePicker'
 import { ErrorSummary, Field, Input } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { EntityMark, projectIcon } from '@/components/ui/EntityMark'
@@ -24,9 +26,11 @@ interface FormState {
   status: ProjectStatus
   icon: string
   color: string
+  startDate: string
+  targetDate: string
 }
 
-type FieldName = 'name' | 'prefix'
+type FieldName = 'name' | 'prefix' | 'targetDate'
 
 const EMPTY: FormState = {
   name: '',
@@ -35,6 +39,8 @@ const EMPTY: FormState = {
   status: ProjectStatus.ACTIVE,
   icon: 'folder',
   color: PROJECT_COLORS[0],
+  startDate: '',
+  targetDate: '',
 }
 
 function validateField(name: FieldName, form: FormState): string | null {
@@ -43,6 +49,7 @@ function validateField(name: FieldName, form: FormState): string | null {
     if (!form.prefix.trim()) return 'Enter a 2–6 letter prefix, used for ticket IDs like ABC-12.'
     if (form.prefix.length < 2) return 'The prefix needs at least 2 letters.'
   }
+  if (name === 'targetDate') return dateOrderError(form.startDate, form.targetDate, PROJECT_DATES)
   return null
 }
 
@@ -58,6 +65,8 @@ export function ProjectForm({ project, returnTo }: { project: Project | null; re
         status: project.status as ProjectStatus,
         icon: (project.icon as string) || 'folder',
         color: (project.color as string) || PROJECT_COLORS[0],
+        startDate: project.startDate ? project.startDate.slice(0, 10) : '',
+        targetDate: project.targetDate ? project.targetDate.slice(0, 10) : '',
       }
     : EMPTY
 
@@ -79,7 +88,7 @@ export function ProjectForm({ project, returnTo }: { project: Project | null; re
     if (!project) nameRef.current?.focus()
   }, [project])
 
-  const errors = (['name', 'prefix'] as FieldName[])
+  const errors = (['name', 'prefix', 'targetDate'] as FieldName[])
     .map((field) => ({ field, message: validateField(field, form) }))
     .filter((e): e is { field: FieldName; message: string } => e.message !== null)
 
@@ -117,6 +126,8 @@ export function ProjectForm({ project, returnTo }: { project: Project | null; re
           status: form.status,
           icon: form.icon,
           color: form.color,
+          startDate: form.startDate || null,
+          targetDate: form.targetDate || null,
         }),
       })
       if (!response.ok) {
@@ -275,6 +286,45 @@ export function ProjectForm({ project, returnTo }: { project: Project | null; re
               />
             )}
           </Field>
+
+          <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
+            <Field label="Start date" optional hint="Type YYYY-MM-DD, or pick a day.">
+              {({ id, describedBy }) => (
+                <DatePicker
+                  id={id}
+                  label="Start date"
+                  aria-describedby={describedBy}
+                  value={form.startDate}
+                  onChange={(next) => {
+                    set('startDate', next)
+                    setTouched((t) => ({ ...t, targetDate: true }))
+                  }}
+                />
+              )}
+            </Field>
+
+            <Field
+              id="project-form-targetDate"
+              label="Target date"
+              optional
+              hint="When this project is aiming to finish."
+              error={errorFor('targetDate')}
+            >
+              {({ id, describedBy, invalid }) => (
+                <DatePicker
+                  id={id}
+                  label="Target date"
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                  value={form.targetDate}
+                  onChange={(next) => {
+                    set('targetDate', next)
+                    setTouched((t) => ({ ...t, targetDate: true }))
+                  }}
+                />
+              )}
+            </Field>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-text-muted">Description</span>

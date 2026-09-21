@@ -268,6 +268,14 @@ export interface Project {
    */
   status: 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
   /**
+   * When work on this project is meant to begin
+   */
+  startDate?: string | null;
+  /**
+   * The date this project is aiming to finish by
+   */
+  targetDate?: string | null;
+  /**
    * Time-boxed cycles for this project
    */
   cycles?: {
@@ -678,6 +686,10 @@ export interface Ticket {
    */
   estimate?: number | null;
   /**
+   * When work on this ticket is meant to begin
+   */
+  startDate?: string | null;
+  /**
    * When this ticket should be completed
    */
   dueDate?: string | null;
@@ -1069,6 +1081,8 @@ export interface ProjectsSelect<T extends boolean = true> {
   icon?: T;
   color?: T;
   status?: T;
+  startDate?: T;
+  targetDate?: T;
   cycles?:
     | T
     | {
@@ -1202,6 +1216,7 @@ export interface TicketsSelect<T extends boolean = true> {
   blockedBy?: T;
   labels?: T;
   estimate?: T;
+  startDate?: T;
   dueDate?: T;
   isEpic?: T;
   epic?: T;

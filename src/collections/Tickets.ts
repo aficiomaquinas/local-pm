@@ -3,6 +3,7 @@ import { APIError } from 'payload'
 import { TicketPriority, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 import { collectionAccess } from '@/lib/access'
 import { diffTicket, idOf } from '@/lib/activity'
+import { TICKET_DATES, pendingDateOrderError } from '@/lib/dates'
 import { MAX_ESTIMATE, normalizeEstimate } from '@/lib/estimates'
 
 export const Tickets: CollectionConfig = {
@@ -32,6 +33,9 @@ export const Tickets: CollectionConfig = {
         if (data?.epic !== undefined || data?.isEpic !== undefined) {
           await assertValidEpicLink(req, data, originalDoc)
         }
+
+        const dateError = pendingDateOrderError(TICKET_DATES, data, originalDoc)
+        if (dateError) throw new APIError(dateError, 400, null, true)
 
         return data
       },
@@ -158,8 +162,20 @@ export const Tickets: CollectionConfig = {
       },
     },
     {
+      name: 'startDate',
+      type: 'date',
+      index: true,
+      admin: {
+        description: 'When work on this ticket is meant to begin',
+        date: {
+          pickerAppearance: 'dayOnly',
+        },
+      },
+    },
+    {
       name: 'dueDate',
       type: 'date',
+      index: true,
       admin: {
         description: 'When this ticket should be completed',
         date: {

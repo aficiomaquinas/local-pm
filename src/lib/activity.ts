@@ -1,4 +1,5 @@
 import { TICKET_PRIORITY_OPTIONS } from '@/types/enums'
+import { toDay } from '@/lib/dates'
 
 export type ActivityAction =
   | 'created'
@@ -47,6 +48,7 @@ export const TRACKED_FIELDS = [
   'team',
   'cycle',
   'estimate',
+  'startDate',
   'dueDate',
   'description',
   'labels',
@@ -66,6 +68,7 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
   team: 'Team',
   cycle: 'Cycle',
   estimate: 'Estimate',
+  startDate: 'Start date',
   dueDate: 'Due date',
   description: 'Description',
   labels: 'Labels',
@@ -75,6 +78,8 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
 }
 
 const OPAQUE_FIELDS = new Set<TrackedField>(['description'])
+
+const DAY_FIELDS = new Set<TrackedField>(['startDate', 'dueDate'])
 
 const CHOICE_LABELS: Partial<Record<TrackedField, Record<string, string>>> = {
   priority: Object.fromEntries(TICKET_PRIORITY_OPTIONS.map((o) => [o.value, o.label])),
@@ -156,10 +161,7 @@ export function displayValue(field: TrackedField, value: unknown): string | null
 
   if (field === 'epic') return epicLabel(value)
 
-  if (field === 'dueDate') {
-    const date = new Date(value as string)
-    return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
-  }
+  if (DAY_FIELDS.has(field)) return toDay(value)
 
   const choices = CHOICE_LABELS[field]
   if (choices) {
@@ -191,11 +193,7 @@ function comparable(field: TrackedField, value: unknown): string {
       })
       .join('\u0000')
   }
-  if (field === 'dueDate') {
-    if (value === null || value === undefined || value === '') return ''
-    const date = new Date(value as string)
-    return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
-  }
+  if (DAY_FIELDS.has(field)) return toDay(value) ?? ''
   if (
     field === 'assignee' ||
     field === 'project' ||

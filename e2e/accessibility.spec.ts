@@ -146,6 +146,17 @@ test('the project filter listbox is keyboard-operable and writes to the URL', as
   await expect(trigger).toBeFocused()
 })
 
+test('each date field names its own calendar and clear buttons', async ({ page }) => {
+  await page.goto('/tickets/new')
+
+  await expect(
+    page.getByRole('button', { name: 'Choose the start date from the calendar' }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Choose the due date from the calendar' }),
+  ).toBeVisible()
+})
+
 test('the due date accepts both typing and a calendar pick', async ({ page }) => {
   await page.goto('/tickets/new')
 
@@ -154,7 +165,7 @@ test('the due date accepts both typing and a calendar pick', async ({ page }) =>
   await input.blur()
   await expect(input).toHaveValue('2030-04-17')
 
-  await page.getByRole('button', { name: 'Choose a date from the calendar' }).click()
+  await page.getByRole('button', { name: 'Choose the due date from the calendar' }).click()
   const today = page.getByRole('button', { name: 'Today' })
   await expect(today).toBeVisible()
   await today.click()
@@ -163,6 +174,6 @@ test('the due date accepts both typing and a calendar pick', async ({ page }) =>
   const iso = `${expected.getFullYear()}-${`${expected.getMonth() + 1}`.padStart(2, '0')}-${`${expected.getDate()}`.padStart(2, '0')}`
   await expect(input).toHaveValue(iso)
 
-  await page.getByRole('button', { name: 'Clear the date' }).click()
+  await page.getByRole('button', { name: 'Clear the due date' }).click()
   await expect(input).toHaveValue('')
 })

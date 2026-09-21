@@ -19,10 +19,12 @@ import { cn } from '@/lib/cn'
 import { ProjectStatus, TicketStatus } from '@/types/enums'
 import { projectStatusOptions } from '@/lib/status'
 import { formatDateTimeRelative } from '@/lib/format'
+import { durationInDays } from '@/lib/dates'
 import { useOptimisticPatch, saveStateLabel } from '@/hooks/useOptimisticPatch'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Expandable } from '@/components/ui/Expandable'
+import { DatePicker } from '@/components/ui/DatePicker'
 import { Field } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { projectIcon } from '@/components/ui/EntityMark'
@@ -75,6 +77,7 @@ export function ProjectDetail({
   const description = (project.description as unknown as string) || ''
   const savingLabel = saveStateLabel(state)
   const percent = stats.total ? Math.round((stats.done / stats.total) * 100) : 0
+  const span = durationInDays(project.startDate, project.targetDate)
 
   const selectTab = (next: string) => {
     setTab(next as TabId)
@@ -220,6 +223,40 @@ export function ProjectDetail({
                   />
                 )}
               </Field>
+
+              <section className="flex flex-col gap-3">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">
+                  Dates
+                </h2>
+
+                <Field label="Start date" optional>
+                  {({ id }) => (
+                    <DatePicker
+                      id={id}
+                      label="Start date"
+                      value={project.startDate ? project.startDate.slice(0, 10) : ''}
+                      onChange={(next) => patch({ startDate: next || null }, 'the start date')}
+                    />
+                  )}
+                </Field>
+
+                <Field label="Target date" optional>
+                  {({ id }) => (
+                    <DatePicker
+                      id={id}
+                      label="Target date"
+                      value={project.targetDate ? project.targetDate.slice(0, 10) : ''}
+                      onChange={(next) => patch({ targetDate: next || null }, 'the target date')}
+                    />
+                  )}
+                </Field>
+
+                {span !== null && (
+                  <p className="text-xs text-text-muted tabular">
+                    {span} {span === 1 ? 'day' : 'days'} planned
+                  </p>
+                )}
+              </section>
 
               <section className="flex flex-col gap-3">
                 <h2 className="text-xs font-medium uppercase tracking-wide text-text-muted">

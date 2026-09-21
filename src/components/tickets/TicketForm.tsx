@@ -25,6 +25,7 @@ import { LabelChips, LabelSelect } from '@/components/ui/LabelPicker'
 import { Select } from '@/components/ui/Select'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketKey } from '@/components/ui/EntityMark'
+import { dateOrderError, TICKET_DATES } from '@/lib/dates'
 import { useTicketDraft } from '@/hooks/useTicketDraft'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 import type { Cycle, Label, Member, Project, Team, Ticket } from '@/payload-types'
@@ -48,6 +49,7 @@ interface FormState {
   assigneeId: string
   cycleId: string
   estimate: number | null
+  startDate: string
   dueDate: string
   labels: Label[]
   subtasks: { title: string; completed: boolean }[]
@@ -56,9 +58,15 @@ interface FormState {
   epic: TicketRef | null
 }
 
-type FieldName = 'title' | 'projectId'
+type FieldName = 'title' | 'projectId' | 'dueDate'
 
-const MESSAGES: Record<FieldName, string> = {
+const FIELD_TARGETS: Record<FieldName, string> = {
+  title: 'ticket-form-title',
+  projectId: 'ticket-form-project',
+  dueDate: 'ticket-form-due-date',
+}
+
+const MESSAGES = {
   title: 'Enter a title for this ticket.',
   projectId: 'Choose the project this ticket belongs to.',
 }
@@ -74,6 +82,7 @@ function emptyForm(projectId: string, status: string): FormState {
     assigneeId: '',
     cycleId: '',
     estimate: null,
+    startDate: '',
     dueDate: '',
     labels: [],
     subtasks: [],
@@ -94,6 +103,7 @@ function fromTicket(ticket: Ticket): FormState {
     assigneeId: typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
     cycleId: typeof ticket.cycle === 'string' ? ticket.cycle : (ticket.cycle?.id ?? ''),
     estimate: normalizeEstimate(ticket.estimate),
+    startDate: ticket.startDate ? ticket.startDate.slice(0, 10) : '',
     dueDate: ticket.dueDate ? ticket.dueDate.slice(0, 10) : '',
     labels: labelsOf(ticket),
     subtasks: (ticket.subtasks ?? []).map((s) => ({
@@ -118,6 +128,7 @@ function fromTicket(ticket: Ticket): FormState {
 function validateField(name: FieldName, form: FormState): string | null {
   if (name === 'title') return form.title.trim() ? null : MESSAGES.title
   if (name === 'projectId') return form.projectId ? null : MESSAGES.projectId
+  if (name === 'dueDate') return dateOrderError(form.startDate, form.dueDate, TICKET_DATES)
   return null
 }
 
@@ -188,7 +199,7 @@ export function TicketForm({
       if (!value || typeof value !== 'object') return false
       const candidate = value as FormState
       return (
-        ['title', 'description', 'projectId', 'teamId', 'assigneeId', 'dueDate'].every(
+        ['title', 'description', 'projectId', 'teamId', 'assigneeId', 'startDate', 'dueDate'].every(
           (key) => typeof candidate[key as keyof FormState] === 'string',
         ) &&
         typeof candidate.status === 'string' &&
@@ -222,7 +233,7 @@ export function TicketForm({
     if (!ticket) titleRef.current?.focus()
   }, [ticket])
 
-  const errors = (['title', 'projectId'] as FieldName[])
+  const errors = (['title', 'projectId', 'dueDate'] as FieldName[])
     .map((field) => ({ field, message: validateField(field, form) }))
     .filter((e): e is { field: FieldName; message: string } => e.message !== null)
 
@@ -265,6 +276,7 @@ export function TicketForm({
         labels: form.labels.map((label) => label.id),
         subtasks: form.subtasks,
         blockedBy: form.blockers.map((b) => b.id),
+        startDate: form.startDate || null,
         dueDate: form.dueDate || null,
         isEpic: form.isEpic,
         epic: form.isEpic ? null : (form.epic?.id ?? null),
@@ -406,7 +418,7 @@ export function TicketForm({
                   : errors.map((e) => ({
                       field: e.field,
                       message: e.message,
-                      targetId: e.field === 'title' ? 'ticket-form-title' : 'ticket-form-project',
+                      targetId: FIELD_TARGETS[e.field],
                     }))
               }
             />
@@ -559,13 +571,39 @@ export function TicketForm({
               )}
             </Field>
 
-            <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
+            <Field label="Start date" optional hint="Type YYYY-MM-DD, or pick a day.">
               {({ id, describedBy }) => (
                 <DatePicker
                   id={id}
+                  label="Start date"
                   aria-describedby={describedBy}
+                  value={form.startDate}
+                  onChange={(next) => {
+                    set('startDate', next)
+                    setTouched((t) => ({ ...t, dueDate: true }))
+                  }}
+                />
+              )}
+            </Field>
+
+            <Field
+              id="ticket-form-due-date"
+              label="Due date"
+              optional
+              hint="Type YYYY-MM-DD, or pick a day."
+              error={errorFor('dueDate')}
+            >
+              {({ id, describedBy, invalid }) => (
+                <DatePicker
+                  id={id}
+                  label="Due date"
+                  aria-describedby={describedBy}
+                  invalid={invalid}
                   value={form.dueDate}
-                  onChange={(next) => set('dueDate', next)}
+                  onChange={(next) => {
+                    set('dueDate', next)
+                    setTouched((t) => ({ ...t, dueDate: true }))
+                  }}
                 />
               )}
             </Field>
