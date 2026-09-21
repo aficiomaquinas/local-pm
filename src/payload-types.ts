@@ -419,6 +419,14 @@ export interface Member {
    * The login account this person signs in with. Set it and "My tickets" works for them.
    */
   user?: (string | null) | User;
+  /**
+   * Projects this person can open. Empty means no project access; only admins of the install see everything.
+   */
+  projects?: (string | Project)[] | null;
+  /**
+   * What this person can do inside their projects. Viewer reads, member also writes, admin also deletes. Ignored outside the projects above.
+   */
+  projectRole?: ('admin' | 'member' | 'viewer') | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1126,6 +1134,8 @@ export interface MembersSelect<T extends boolean = true> {
   team?: T;
   active?: T;
   user?: T;
+  projects?: T;
+  projectRole?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -2,6 +2,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
 import { resolveWorkflow } from '@/lib/workflow'
+import { accessOpen, requireUser } from '@/lib/rbac'
 import type { Cycle, Project, Team, Member } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,9 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
   const params = await searchParams
   const projectId = params.project || null
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
+  const authedArgs = accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }
+
   const workflow = await resolveWorkflow(payload, projectId)
   const requested = params.status ?? ''
   const status =
@@ -32,7 +36,12 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
   let project: Project | null = null
   if (projectId) {
     try {
-      project = await payload.findByID({ collection: 'projects', id: projectId, depth: 0 })
+      project = await payload.findByID({
+        collection: 'projects',
+        id: projectId,
+        depth: 0,
+        ...authedArgs,
+      })
     } catch {
       project = null
     }
@@ -40,13 +49,19 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
 
   const [team, assignee, cycle] = (await Promise.all([
     params.team
-      ? payload.findByID({ collection: 'teams', id: params.team, depth: 0 }).catch(() => null)
+      ? payload
+          .findByID({ collection: 'teams', id: params.team, depth: 0, ...authedArgs })
+          .catch(() => null)
       : null,
     params.assignee
-      ? payload.findByID({ collection: 'members', id: params.assignee, depth: 0 }).catch(() => null)
+      ? payload
+          .findByID({ collection: 'members', id: params.assignee, depth: 0, ...authedArgs })
+          .catch(() => null)
       : null,
     params.cycle
-      ? payload.findByID({ collection: 'cycles', id: params.cycle, depth: 0 }).catch(() => null)
+      ? payload
+          .findByID({ collection: 'cycles', id: params.cycle, depth: 0, ...authedArgs })
+          .catch(() => null)
       : null,
   ])) as [Team | null, Member | null, Cycle | null]
 

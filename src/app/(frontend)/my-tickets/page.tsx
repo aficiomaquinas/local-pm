@@ -10,6 +10,7 @@ export const metadata = { title: 'My tickets · local-pm' }
 export default async function MyTicketsPage() {
   const payload = await getPayload({ config })
   const { user } = await payload.auth({ headers: await getHeaders() })
+  const authed = Boolean(user)
 
   let member: Member | null = null
   let signedInAs: SignedInUser | null = null
@@ -30,5 +31,5 @@ export default async function MyTicketsPage() {
     member = found.docs[0] ?? null
   }
 
-  return <MyTickets member={member} signedInAs={signedInAs} />
+  return <MyTickets member={member} signedInAs={signedInAs} canReadTickets={authed} />
 }

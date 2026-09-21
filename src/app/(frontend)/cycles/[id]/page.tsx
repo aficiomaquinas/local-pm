@@ -6,6 +6,7 @@ import { cycleSettingsOf } from '@/lib/cycle-service'
 import { loadBurndown, snapshotOf } from '@/lib/burndown-service'
 import { cycleProgress } from '@/lib/cycles'
 import { CycleAutomation } from '@/types/enums'
+import { accessOpen, requireUser } from '@/lib/rbac'
 import type { Cycle, Project } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -28,9 +29,16 @@ export async function generateMetadata({ params }: CyclePageProps) {
 export default async function CyclePage({ params }: CyclePageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
+  const authedArgs = accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }
 
   try {
-    const cycle = (await payload.findByID({ collection: 'cycles', id, depth: 1 })) as Cycle
+    const cycle = (await payload.findByID({
+      collection: 'cycles',
+      id,
+      depth: 1,
+      ...authedArgs,
+    })) as Cycle
     if (!cycle) notFound()
 
     const project =
@@ -40,6 +48,7 @@ export default async function CyclePage({ params }: CyclePageProps) {
             collection: 'projects',
             id: String(cycle.project),
             depth: 0,
+            ...authedArgs,
           })) as Project)
 
     const tickets = await payload.find({
@@ -47,6 +56,7 @@ export default async function CyclePage({ params }: CyclePageProps) {
       where: { cycle: { equals: id } },
       limit: 2000,
       depth: 1,
+      ...authedArgs,
     })
 
     const progress = cycleProgress(

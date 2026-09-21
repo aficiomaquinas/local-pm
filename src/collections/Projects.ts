@@ -10,7 +10,7 @@ import {
   CYCLE_ROLLOVER_OPTIONS,
   ESTIMATE_SCALE_OPTIONS,
 } from '@/types/enums'
-import { collectionAccess } from '@/lib/access'
+import { projectsAccess } from '@/lib/access'
 import { DEFAULT_ESTIMATE_SCALE } from '@/lib/estimates'
 import {
   DEFAULT_CYCLE_LENGTH_WEEKS,
@@ -55,7 +55,7 @@ export const Projects: CollectionConfig = {
     defaultColumns: ['name', 'prefix', 'status', 'createdAt'],
     description: 'Projects organize related tickets together',
   },
-  access: collectionAccess,
+  access: projectsAccess,
   hooks: {
     afterDelete: [
       async ({ req, id }) => {

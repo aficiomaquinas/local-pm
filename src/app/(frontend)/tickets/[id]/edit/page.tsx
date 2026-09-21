@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
+import { accessOpen, requireUser } from '@/lib/rbac'
 import type { Cycle, Member, Project, Team } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -26,9 +27,15 @@ export default async function EditTicketPage({ params, searchParams }: EditTicke
   const { id } = await params
   const { returnTo } = await searchParams
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
 
   try {
-    const ticket = await payload.findByID({ collection: 'tickets', id, depth: 2 })
+    const ticket = await payload.findByID({
+      collection: 'tickets',
+      id,
+      depth: 2,
+      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+    })
     if (!ticket) notFound()
 
     return (

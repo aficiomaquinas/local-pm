@@ -4,6 +4,7 @@ import config from '@payload-config'
 import { notFound } from 'next/navigation'
 import { StatusType } from '@/types/enums'
 import { resolveWorkflow } from '@/lib/workflow'
+import { accessOpen, requireUser } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +28,15 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
   const { id } = await params
   const { tab } = await searchParams
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
 
   try {
-    const team = await payload.findByID({ collection: 'teams', id, depth: 0 })
+    const team = await payload.findByID({
+      collection: 'teams',
+      id,
+      depth: 0,
+      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+    })
     if (!team) notFound()
 
     const workflow = await resolveWorkflow(payload, null)
@@ -53,6 +60,7 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
         sort: 'name',
         limit: 100,
         depth: 0,
+        ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
       }),
     ])
 

@@ -4,6 +4,7 @@ import config from '@payload-config'
 import { ProjectDetail } from '@/components/projects/ProjectDetail'
 import { StatusType } from '@/types/enums'
 import { resolveWorkflow } from '@/lib/workflow'
+import { accessOpen, requireUser } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +28,18 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const { id } = await params
   const { tab } = await searchParams
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
 
   try {
-    const project = await payload.findByID({ collection: 'projects', id, depth: 0 })
+    // With auth on, collectionAccess on projects runs (overrideAccess false):
+    // a non-member's deep link fails here and resolves to not-found, so the
+    // project's name and metadata never leak.
+    const project = await payload.findByID({
+      collection: 'projects',
+      id,
+      depth: 0,
+      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+    })
     if (!project) notFound()
 
     const workflow = await resolveWorkflow(payload, id)
@@ -56,6 +66,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
         limit: 20,
         depth: 0,
         sort: 'name',
+        ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
       }),
     ])
 

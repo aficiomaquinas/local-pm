@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketDetail } from '@/components/tickets/TicketDetail'
+import { accessOpen, requireUser } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,9 +24,15 @@ export async function generateMetadata({ params }: TicketPageProps) {
 export default async function TicketPage({ params }: TicketPageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
 
   try {
-    const ticket = await payload.findByID({ collection: 'tickets', id, depth: 2 })
+    const ticket = await payload.findByID({
+      collection: 'tickets',
+      id,
+      depth: 2,
+      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+    })
     if (!ticket) notFound()
     return <TicketDetail ticket={ticket} />
   } catch {

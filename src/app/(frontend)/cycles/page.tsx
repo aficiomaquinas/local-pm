@@ -6,6 +6,7 @@ import { cycleProgress, sortCycles } from '@/lib/cycles'
 import { loadVelocity } from '@/lib/burndown-service'
 import { VELOCITY_WINDOW } from '@/lib/burndown'
 import { CycleAutomation } from '@/types/enums'
+import { accessOpen, requireUser } from '@/lib/rbac'
 import type { Cycle, Project } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -19,8 +20,10 @@ interface CyclesPageProps {
 export default async function CyclesPage({ searchParams }: CyclesPageProps) {
   const { project: requested } = await searchParams
   const payload = await getPayload({ config })
+  const user = accessOpen() ? await requireUser() : null
+  const authedArgs = accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }
 
-  const project = await resolveProject(payload, requested)
+  const project = await resolveProject(payload, requested, authedArgs)
 
   if (!project) {
     return <CyclesView project={null} summaries={[]} manual={false} />
@@ -41,12 +44,14 @@ export default async function CyclesPage({ searchParams }: CyclesPageProps) {
       sort: '-number',
       limit: 200,
       depth: 0,
+      ...authedArgs,
     }),
     payload.find({
       collection: 'tickets',
       where: { project: { equals: project.id }, cycle: { exists: true } },
       limit: 2000,
       depth: 1,
+      ...authedArgs,
     }),
   ])
 
@@ -84,6 +89,7 @@ export default async function CyclesPage({ searchParams }: CyclesPageProps) {
 async function resolveProject(
   payload: Awaited<ReturnType<typeof getPayload>>,
   requested: string | undefined,
+  authedArgs: Record<string, unknown> = {},
 ): Promise<Project | null> {
   if (requested) {
     try {
@@ -91,6 +97,7 @@ async function resolveProject(
         collection: 'projects',
         id: requested,
         depth: 0,
+        ...authedArgs,
       })) as Project
     } catch {
       return null
@@ -103,6 +110,7 @@ async function resolveProject(
     sort: 'name',
     limit: 1,
     depth: 0,
+    ...authedArgs,
   })
 
   return (enabled.docs[0] as Project) ?? null
