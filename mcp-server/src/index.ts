@@ -199,6 +199,68 @@ function slimBlockedBy(blockedBy: unknown): string[] | null {
   }).filter(Boolean) as string[];
 }
 
+interface EpicRollup {
+  total: number;
+  done: number;
+  cancelled: number;
+  started: number;
+  open: number;
+  counted: number;
+  percent: number;
+}
+
+function statusTypeOf(status: unknown): string | null {
+  if (!status || typeof status !== 'object') return null;
+  const type = (status as Record<string, unknown>).type;
+  return typeof type === 'string' ? type : null;
+}
+
+function rollupEpic(children: Array<Record<string, unknown>>): EpicRollup {
+  let done = 0;
+  let cancelled = 0;
+  let started = 0;
+
+  for (const child of children) {
+    const type = statusTypeOf(child.status);
+    if (type === 'COMPLETED') done += 1;
+    else if (type === 'CANCELLED') cancelled += 1;
+    else if (type === 'STARTED') started += 1;
+  }
+
+  const total = children.length;
+  const counted = total - cancelled;
+
+  return {
+    total,
+    done,
+    cancelled,
+    started,
+    open: counted - done,
+    counted,
+    percent: counted > 0 ? Math.round((done / counted) * 100) : 0,
+  };
+}
+
+interface SlimEpic {
+  id: string;
+  ticketId: string | null;
+  title: string;
+}
+
+function slimEpic(epic: unknown): SlimEpic | string | null {
+  if (!epic) return null;
+  if (typeof epic === 'string') return epic;
+  if (typeof epic === 'object' && epic !== null) {
+    const e = epic as Record<string, unknown>;
+    return {
+      id: e.id as string,
+      ticketId: (e.ticketId as string) ?? null,
+      title: e.title as string,
+    };
+  }
+  return null;
+}
+
 function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string>): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
 
@@ -215,6 +277,8 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
       filtered[field] = slimMember(value);
     } else if (field === 'blockedBy') {
       filtered[field] = slimBlockedBy(value);
+    } else if (field === 'epic') {
+      filtered[field] = slimEpic(value);
     } else {
       filtered[field] = value;
     }
@@ -631,6 +695,14 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Filter by assignee (member) ID',
         },
+        epicId: {
+          type: 'string',
+          description: 'Only return tickets that roll up into this epic (a ticket ID)',
+        },
+        isEpic: {
+          type: 'boolean',
+          description: 'Set true to return only epics, false to return only non-epic tickets',
+        },
         status: {
           type: 'string',
           description: 'Filter by status',
@@ -654,7 +726,7 @@ const tools: Tool[] = [
           description: 'Additional fields to include in the response. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -669,6 +741,20 @@ const tools: Tool[] = [
         id: {
           type: 'string',
           description: 'The ticket ID',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'get_epic',
+    description: 'Get an epic with every ticket that rolls up into it, plus rollup progress (done, in progress, cancelled and percent complete). Cancelled tickets are left out of the percentage.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The ticket ID of the epic',
         },
       },
       required: ['id'],
@@ -747,6 +833,15 @@ const tools: Tool[] = [
             type: 'string',
           },
         },
+        isEpic: {
+          type: 'boolean',
+          description: 'Create this ticket as an epic so other tickets in the same project can roll up into it. Epics cannot themselves belong to an epic.',
+          default: false,
+        },
+        epic: {
+          type: 'string',
+          description: 'ID of the epic this ticket rolls up into. The epic must be marked isEpic and live in the same project.',
+        },
       },
       required: ['title', 'project'],
     },
@@ -822,6 +917,14 @@ const tools: Tool[] = [
             type: 'string',
           },
         },
+        isEpic: {
+          type: 'boolean',
+          description: 'Turn this ticket into an epic, or back into a normal ticket. Turning it off fails while tickets still roll up into it.',
+        },
+        epic: {
+          type: 'string',
+          description: 'ID of the epic this ticket rolls up into (use null to take it out of its epic).',
+        },
       },
       required: ['id'],
     },
@@ -883,7 +986,7 @@ const tools: Tool[] = [
           description: 'Additional ticket fields to include. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -1272,6 +1375,12 @@ async function handleToolCall(
       if (args.assigneeId) {
         query += `&where[assignee][equals]=${args.assigneeId}`;
       }
+      if (args.epicId) {
+        query += `&where[epic][equals]=${args.epicId}`;
+      }
+      if (args.isEpic !== undefined) {
+        query += `&where[isEpic][equals]=${args.isEpic ? 'true' : 'false'}`;
+      }
       if (args.status) {
         query += `&where[status][equals]=${await resolveStatusId(args.status as string, args.projectId as string | undefined)}`;
       }
@@ -1291,7 +1400,7 @@ async function handleToolCall(
       };
 
       const defaultFields = ['id', 'title', 'status', 'project'];
-      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'];
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
@@ -1304,6 +1413,33 @@ async function handleToolCall(
     }
     case 'get_ticket': {
       return apiRequest(`/tickets/${args.id}?depth=1`);
+    }
+    case 'get_epic': {
+      const epic = (await apiRequest(`/tickets/${args.id}?depth=1`)) as Record<string, unknown>;
+      if (!epic.isEpic) {
+        throw new Error(
+          `Ticket ${epic.ticketId ?? args.id} is not an epic. Set isEpic on it first with update_ticket.`,
+        );
+      }
+
+      const response = (await apiRequest(
+        `/tickets?where[epic][equals]=${args.id}&limit=200&depth=1&sort=sortOrder`,
+      )) as { docs: Array<Record<string, unknown>> };
+
+      const fields = new Set(['id', 'ticketId', 'title', 'status', 'assignee', 'priority']);
+      const children = response.docs.map(child => slimTicket(child, fields));
+
+      return {
+        epic: {
+          id: epic.id,
+          ticketId: epic.ticketId ?? null,
+          title: epic.title,
+          status: epic.status,
+          project: slimProject(epic.project),
+        },
+        progress: rollupEpic(response.docs),
+        children,
+      };
     }
     case 'create_ticket': {
       return apiRequest('/tickets', 'POST', {
@@ -1320,6 +1456,8 @@ async function handleToolCall(
         labels: args.labels || [],
         subtasks: args.subtasks || [],
         blockedBy: args.blockedBy || [],
+        isEpic: args.isEpic === true,
+        epic: args.epic || null,
       });
     }
     case 'update_ticket': {
@@ -1335,6 +1473,8 @@ async function handleToolCall(
       if (args.labels) updates.labels = args.labels;
       if (args.subtasks) updates.subtasks = args.subtasks;
       if (args.blockedBy !== undefined) updates.blockedBy = args.blockedBy;
+      if (args.isEpic !== undefined) updates.isEpic = args.isEpic;
+      if (args.epic !== undefined) updates.epic = args.epic;
       return apiRequest(`/tickets/${id}`, 'PATCH', updates);
     }
     case 'move_ticket': {
@@ -1363,7 +1503,7 @@ async function handleToolCall(
       const tickets = response.docs || [];
 
       const defaultFields = ['id', 'title', 'status', 'project'];
-      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'];
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 

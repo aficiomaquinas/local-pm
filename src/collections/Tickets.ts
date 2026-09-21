@@ -24,6 +24,10 @@ export const Tickets: CollectionConfig = {
           await assertNoDependencyCycle(req, data.blockedBy, originalDoc?.id ?? null)
         }
 
+        if (data?.epic !== undefined || data?.isEpic !== undefined) {
+          await assertValidEpicLink(req, data, originalDoc)
+        }
+
         return data
       },
     ],
@@ -36,6 +40,7 @@ export const Tickets: CollectionConfig = {
       async ({ req, id }) => {
         await deleteCommentsFor(req, id)
         await deleteActivityFor(req, id)
+        await detachChildrenOf(req, id)
       },
     ],
   },
@@ -148,6 +153,26 @@ export const Tickets: CollectionConfig = {
       },
     },
     {
+      name: 'isEpic',
+      type: 'checkbox',
+      defaultValue: false,
+      index: true,
+      admin: {
+        description:
+          'Mark this ticket as an epic so other tickets in the same project can roll up into it',
+      },
+    },
+    {
+      name: 'epic',
+      type: 'relationship',
+      relationTo: 'tickets',
+      index: true,
+      admin: {
+        description:
+          'The epic this ticket rolls up into. An epic and its children share a project, and epics do not nest.',
+      },
+    },
+    {
       name: 'subtasks',
       type: 'array',
       admin: {
@@ -198,6 +223,89 @@ async function deleteActivityFor(req: PayloadRequest, id: string | number): Prom
   })
 }
 
+async function detachChildrenOf(req: PayloadRequest, id: string | number): Promise<void> {
+  const children = await req.payload.find({
+    req,
+    collection: 'tickets',
+    where: { epic: { equals: id } },
+    limit: 500,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  for (const child of children.docs) {
+    await req.payload.update({
+      collection: 'tickets',
+      id: child.id,
+      data: { epic: null },
+      depth: 0,
+      overrideAccess: true,
+    })
+  }
+}
+
+class EpicError extends APIError {
+  constructor(message: string) {
+    super(message, 400, null, true)
+  }
+}
+
+async function assertValidEpicLink(
+  req: PayloadRequest,
+  data: Record<string, unknown>,
+  originalDoc: Record<string, unknown> | undefined,
+): Promise<void> {
+  const selfId = originalDoc?.id === undefined ? null : String(originalDoc.id)
+  const parentId = data.epic !== undefined ? idOf(data.epic) : idOf(originalDoc?.epic)
+  const wantsEpic =
+    data.isEpic !== undefined ? Boolean(data.isEpic) : Boolean(originalDoc?.isEpic)
+
+  if (selfId && parentId === selfId) {
+    throw new EpicError('A ticket cannot be its own epic.')
+  }
+
+  if (wantsEpic && parentId) {
+    throw new EpicError('An epic cannot sit inside another epic. Epics are one level deep.')
+  }
+
+  if (wantsEpic === false && selfId && originalDoc?.isEpic) {
+    const children = await req.payload.find({
+      req,
+      collection: 'tickets',
+      where: { epic: { equals: selfId } },
+      limit: 0,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (children.totalDocs > 0) {
+      throw new EpicError(
+        `This epic still has ${children.totalDocs} ticket${children.totalDocs === 1 ? '' : 's'} rolling up into it. Move them out before turning it back into a normal ticket.`,
+      )
+    }
+  }
+
+  if (!parentId) return
+
+  const parent = await req.payload
+    .findByID({ req, collection: 'tickets', id: parentId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+
+  if (!parent) {
+    throw new EpicError('That epic no longer exists.')
+  }
+  if (!(parent as { isEpic?: unknown }).isEpic) {
+    throw new EpicError(
+      'That ticket is not an epic. Mark it as an epic first, then roll tickets up into it.',
+    )
+  }
+
+  const childProject = data.project !== undefined ? idOf(data.project) : idOf(originalDoc?.project)
+  const parentProject = idOf((parent as { project?: unknown }).project)
+  if (childProject && parentProject && childProject !== parentProject) {
+    throw new EpicError('An epic and its tickets have to live in the same project.')
+  }
+}
+
 async function hydrateStatus(
   req: PayloadRequest,
   record: Record<string, unknown> | undefined,
@@ -220,6 +328,28 @@ async function hydrateStatus(
   }
 }
 
+async function hydrateEpic(
+  req: PayloadRequest,
+  record: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (!record) return record
+  const epic = record.epic
+  if (!epic || typeof epic === 'object') return record
+
+  try {
+    const doc = await req.payload.findByID({
+      req,
+      collection: 'tickets',
+      id: String(epic),
+      depth: 0,
+      overrideAccess: true,
+    })
+    return { ...record, epic: { id: doc.id, title: doc.title, ticketId: doc.ticketId } }
+  } catch {
+    return record
+  }
+}
+
 async function recordActivity(
   req: PayloadRequest,
   doc: Record<string, unknown>,
@@ -232,10 +362,19 @@ async function recordActivity(
   }
 
   const statusChanged = idOf(previousDoc?.status) !== idOf(doc.status)
-  const hydratedDoc = statusChanged
-    ? ((await hydrateStatus(req, doc)) as Record<string, unknown>)
-    : doc
-  const hydratedPrevious = statusChanged ? await hydrateStatus(req, previousDoc) : previousDoc
+  const epicChanged = idOf(previousDoc?.epic) !== idOf(doc.epic)
+
+  let hydratedDoc = doc
+  let hydratedPrevious = previousDoc
+
+  if (statusChanged) {
+    hydratedDoc = (await hydrateStatus(req, hydratedDoc)) as Record<string, unknown>
+    hydratedPrevious = await hydrateStatus(req, hydratedPrevious)
+  }
+  if (epicChanged) {
+    hydratedDoc = (await hydrateEpic(req, hydratedDoc)) as Record<string, unknown>
+    hydratedPrevious = await hydrateEpic(req, hydratedPrevious)
+  }
 
   const events = diffTicket(hydratedPrevious, hydratedDoc)
   await writeEvents(req, doc, events)

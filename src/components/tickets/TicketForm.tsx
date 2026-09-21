@@ -28,7 +28,7 @@ import type { Member, Project, Team, Ticket } from '@/payload-types'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { statusIdOf } from '@/lib/workflow'
 
-interface BlockerRef {
+interface TicketRef {
   id: string
   key: string
   title: string
@@ -45,7 +45,9 @@ interface FormState {
   dueDate: string
   labels: { name: string }[]
   subtasks: { title: string; completed: boolean }[]
-  blockers: BlockerRef[]
+  blockers: TicketRef[]
+  isEpic: boolean
+  epic: TicketRef | null
 }
 
 type FieldName = 'title' | 'projectId'
@@ -68,6 +70,8 @@ function emptyForm(projectId: string, status: string): FormState {
     labels: [],
     subtasks: [],
     blockers: [],
+    isEpic: false,
+    epic: null,
   }
 }
 
@@ -89,6 +93,15 @@ function fromTicket(ticket: Ticket): FormState {
     blockers: (ticket.blockedBy ?? [])
       .filter((b): b is Ticket => typeof b === 'object' && b !== null)
       .map((b) => ({ id: b.id, key: b.ticketId ?? b.id, title: b.title })),
+    isEpic: Boolean(ticket.isEpic),
+    epic:
+      ticket.epic && typeof ticket.epic === 'object'
+        ? {
+            id: ticket.epic.id,
+            key: ticket.epic.ticketId ?? ticket.epic.id,
+            title: ticket.epic.title,
+          }
+        : null,
   }
 }
 
@@ -178,7 +191,12 @@ export function TicketForm({
             typeof blocker?.id === 'string' &&
             typeof blocker?.key === 'string' &&
             typeof blocker?.title === 'string',
-        )
+        ) &&
+        typeof candidate.isEpic === 'boolean' &&
+        (candidate.epic === null ||
+          (typeof candidate.epic?.id === 'string' &&
+            typeof candidate.epic?.key === 'string' &&
+            typeof candidate.epic?.title === 'string'))
       )
     },
   )
@@ -230,6 +248,8 @@ export function TicketForm({
         subtasks: form.subtasks,
         blockedBy: form.blockers.map((b) => b.id),
         dueDate: form.dueDate || null,
+        isEpic: form.isEpic,
+        epic: form.isEpic ? null : (form.epic?.id ?? null),
       }
 
       const response = await fetch(ticket ? `/api/tickets/${ticket.id}` : '/api/tickets', {
@@ -519,11 +539,75 @@ export function TicketForm({
             <summary className="cursor-pointer rounded-sm text-base font-medium">
               More details{' '}
               <span className="ml-2 text-sm font-normal text-text-muted">
-                Labels, subtasks, dependencies
+                Epic, labels, subtasks, dependencies
               </span>
             </summary>
             <div className="mt-5 flex flex-col gap-6">
-              <fieldset className="flex flex-col gap-2">
+              <fieldset className="flex flex-col gap-3">
+                <legend className="text-xs font-medium text-text-muted">Epic</legend>
+
+                <label className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={form.isEpic}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        isEpic: e.target.checked,
+                        epic: e.target.checked ? null : f.epic,
+                      }))
+                    }
+                    className={cn(
+                      'mt-0.5 size-4 shrink-0 cursor-pointer accent-accent',
+                      'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+                    )}
+                  />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-base text-text">This ticket is an epic</span>
+                    <span className="text-xs text-text-muted">
+                      Other tickets in the same project can roll up into it. Epics do not nest.
+                    </span>
+                  </span>
+                </label>
+
+                {!form.isEpic && (
+                  <>
+                    {form.epic && (
+                      <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface px-2 py-1.5">
+                        <TicketKey value={form.epic.key} />
+                        <span
+                          className="min-w-0 flex-1 truncate text-base text-text"
+                          title={form.epic.title}
+                        >
+                          {form.epic.title}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          icon={X}
+                          aria-label={`Remove epic ${form.epic.key}`}
+                          onClick={() => set('epic', null)}
+                        />
+                      </div>
+                    )}
+
+                    <TicketSelect
+                      value=""
+                      selected={null}
+                      aria-label="Roll this ticket up into an epic"
+                      placeholder="Search for an epic…"
+                      where={{ project: form.projectId || null, isEpic: 'true' }}
+                      onChange={(next, doc) => {
+                        if (!next || !doc || next === ticket?.id) return
+                        set('epic', { id: doc.id, key: doc.ticketId ?? doc.id, title: doc.title })
+                      }}
+                    />
+                  </>
+                )}
+              </fieldset>
+
+              <fieldset className="flex flex-col gap-2 border-t border-border-subtle pt-5">
                 <legend className="text-xs font-medium text-text-muted">Labels</legend>
                 <div className={cn('flex flex-wrap gap-2', form.labels.length === 0 && 'hidden')}>
                   {form.labels.map((label, index) => (

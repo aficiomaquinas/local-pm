@@ -430,6 +430,14 @@ export interface Ticket {
    */
   dueDate?: string | null;
   /**
+   * Mark this ticket as an epic so other tickets in the same project can roll up into it
+   */
+  isEpic?: boolean | null;
+  /**
+   * The epic this ticket rolls up into. An epic and its children share a project, and epics do not nest.
+   */
+  epic?: (string | null) | Ticket;
+  /**
    * Subtasks for this ticket
    */
   subtasks?:
@@ -748,6 +756,8 @@ export interface TicketsSelect<T extends boolean = true> {
         id?: T;
       };
   dueDate?: T;
+  isEpic?: T;
+  epic?: T;
   subtasks?:
     | T
     | {

@@ -7,6 +7,7 @@ import {
   CornerDownRight,
   FileText,
   FolderClosed,
+  Layers,
   ListChecks,
   MessageSquare,
   Pencil,
@@ -40,6 +41,7 @@ const FIELD_ICONS: Record<TrackedField, IconType> = {
   labels: Tag,
   blockedBy: Unlink,
   subtasks: ListChecks,
+  epic: Layers,
 }
 
 const ACTION_ICONS: Record<string, IconType> = {

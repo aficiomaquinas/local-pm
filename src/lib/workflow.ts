@@ -51,6 +51,10 @@ export function statusKeyOf(ticket: Pick<Ticket, 'status'>): string | null {
   return status.key
 }
 
+export function statusTypeOf(status: Status | string | null | undefined): string | null {
+  return status && typeof status !== 'string' ? status.type : null
+}
+
 export function findStatusByKey(statuses: Status[], key: string): Status | undefined {
   return statuses.find((s) => s.key === key)
 }

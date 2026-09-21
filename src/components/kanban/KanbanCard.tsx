@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CheckSquare,
   GripVertical,
+  Layers,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -16,6 +17,7 @@ import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
 import { BLOCKED_META, statusMeta, statusTypeMeta, isClosedStatus } from '@/lib/status'
 import { statusIdOf } from '@/lib/workflow'
+import { epicRefOf } from '@/lib/epic'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -72,6 +74,7 @@ export function KanbanCard({
 
   const project = typeof ticket.project === 'object' ? ticket.project : null
   const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
+  const epic = epicRefOf(ticket)
   const labels = ticket.labels ?? []
   const subtasks = ticket.subtasks ?? []
   const doneSubtasks = subtasks.filter((s) => s.completed).length
@@ -172,6 +175,22 @@ export function KanbanCard({
         <span className="flex items-center gap-2">
           <PriorityIndicator priority={ticket.priority} />
           <TicketKey value={ticket.ticketId} color={project?.color} />
+
+          {ticket.isEpic && (
+            <Badge tone="accent" icon={Layers}>
+              Epic
+            </Badge>
+          )}
+          {!ticket.isEpic && epic && (
+            <Badge
+              tone="neutral"
+              icon={Layers}
+              maxWidth="7rem"
+              title={`Epic: ${epic.title}`}
+            >
+              {epic.ticketId ?? epic.title}
+            </Badge>
+          )}
 
           <span className="ml-auto w-12" aria-hidden />
         </span>
