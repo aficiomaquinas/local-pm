@@ -61,7 +61,9 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
           inProgress: inProgress.totalDocs,
           done: done.totalDocs,
         }}
-        initialTab={tab === 'tickets' || tab === 'cycles' ? tab : 'overview'}
+        initialTab={
+          tab === 'tickets' || tab === 'cycles' || tab === 'estimates' ? tab : 'overview'
+        }
       />
     )
   } catch {

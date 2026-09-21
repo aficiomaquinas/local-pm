@@ -12,6 +12,8 @@ import { AvatarLabel } from '@/components/ui/Avatar'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { estimatesFor } from '@/components/ui/EstimatePicker'
+import { estimateLabel } from '@/lib/estimates'
 import { Kbd } from '@/components/ui/Kbd'
 import { Select } from '@/components/ui/Select'
 import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
@@ -74,6 +76,15 @@ export function TicketsTable({
 
   const showSkeleton = useDelayedFlag(loading)
   const hasFilters = Boolean(query || status)
+  const showEstimates = useMemo(
+    () =>
+      docs.some(
+        (ticket) =>
+          estimatesFor(typeof ticket.project === 'object' ? (ticket.project as Project) : null)
+            .enabled,
+      ),
+    [docs],
+  )
 
   useEffect(() => {
     const restore = () => {
@@ -231,6 +242,11 @@ export function TicketsTable({
                   <Th width="9rem">Status</Th>
                   <Th width="12rem">{relationColumn === 'team' ? 'Team' : 'Project'}</Th>
                   <Th width="11rem">Assignee</Th>
+                  {showEstimates && (
+                    <Th width="6rem" align="right">
+                      Estimate
+                    </Th>
+                  )}
                   <Th width="8rem">Due</Th>
                 </tr>
               </thead>
@@ -288,6 +304,18 @@ export function TicketsTable({
                           fallback="Unassigned"
                         />
                       </Td>
+                      {showEstimates && (
+                        <Td align="right" className="text-text-muted">
+                          {estimateLabel(
+                            estimatesFor(
+                              typeof ticket.project === 'object'
+                                ? (ticket.project as Project)
+                                : null,
+                            ).scale,
+                            ticket.estimate,
+                          ) ?? '—'}
+                        </Td>
+                      )}
                       <Td
                         className={cn(
                           'whitespace-nowrap tabular',

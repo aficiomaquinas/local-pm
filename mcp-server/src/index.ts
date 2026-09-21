@@ -22,6 +22,22 @@ const STATUS_MAP: Record<string, string> = {
   low: 'LOW',
 };
 
+const TSHIRT_POINTS: Record<string, number> = { xs: 1, s: 2, m: 3, l: 5, xl: 8 };
+
+function resolveEstimate(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (typeof value === 'string') {
+    const size = TSHIRT_POINTS[value.trim().toLowerCase()];
+    if (size) return size;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  return rounded > 0 ? Math.min(rounded, 1000) : null;
+}
+
 interface StatusDoc {
   id: string;
   name: string;
@@ -558,6 +574,23 @@ const tools: Tool[] = [
           type: 'string',
           description: 'New hex color code',
         },
+        estimates: {
+          type: 'object',
+          description:
+            'Effort estimate settings. Turning estimates on makes the cycle burndown and velocity charts count points rather than tickets.',
+          properties: {
+            enabled: {
+              type: 'boolean',
+              description: 'Whether tickets in this project carry an estimate',
+            },
+            scale: {
+              type: 'string',
+              description:
+                'How estimates are written. T-shirt sizes map onto the fibonacci values, so every scale still sums.',
+              enum: ['linear', 'fibonacci', 'exponential', 'tshirt'],
+            },
+          },
+        },
       },
       required: ['id'],
     },
@@ -809,6 +842,45 @@ const tools: Tool[] = [
         },
       },
       required: ['id'],
+    },
+  },
+  {
+    name: 'get_cycle_burndown',
+    description:
+      'Day-by-day burndown for a cycle: scope, completed and remaining work per day, against the ideal line. Rebuilt from the ticket history, so scope added or removed mid-cycle shows on the day it happened. A closed cycle reads from the snapshot frozen when it closed. Counts points when the project has estimates enabled, tickets otherwise.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The cycle ID',
+        },
+        live: {
+          type: 'boolean',
+          description:
+            'Recompute a closed cycle from the current history instead of reading its frozen snapshot (default: false)',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'get_velocity',
+    description:
+      'What each closed cycle in a project committed to against what it finished, plus the average completed and the share of committed work delivered. Counts points when the project has estimates enabled, tickets otherwise.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project ID',
+        },
+        window: {
+          type: 'number',
+          description: 'How many recent closed cycles to include (default: 6)',
+        },
+      },
+      required: ['projectId'],
     },
   },
   {
@@ -1078,6 +1150,11 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Cycle ID to commit this ticket to (optional). Use list_cycles to find one.',
         },
+        estimate: {
+          type: ['number', 'string'],
+          description:
+            'Effort estimate, as a point value or a t-shirt size (xs, s, m, l, xl). Only meaningful when the project has estimates enabled.',
+        },
         status: {
           type: 'string',
           description: 'Ticket status',
@@ -1161,6 +1238,11 @@ const tools: Tool[] = [
         cycle: {
           type: 'string',
           description: 'New cycle ID (use null to take the ticket out of its cycle)',
+        },
+        estimate: {
+          type: ['number', 'string'],
+          description:
+            'New effort estimate, as a point value or a t-shirt size (xs, s, m, l, xl). Use null to clear it.',
         },
         status: {
           type: 'string',
@@ -1528,6 +1610,19 @@ async function handleToolCall(
       if (args.status) updates.status = toPayloadValue(args.status as string);
       if (args.icon) updates.icon = args.icon;
       if (args.color) updates.color = args.color;
+      if (args.estimates !== undefined) {
+        const requested = args.estimates as { enabled?: boolean; scale?: string };
+        const current = (await apiRequest(`/projects/${id}?depth=0`)) as {
+          estimates?: { enabled?: boolean; scale?: string };
+        };
+        updates.estimates = {
+          enabled: requested.enabled ?? current.estimates?.enabled ?? false,
+          scale:
+            (requested.scale ? requested.scale.toUpperCase() : undefined) ??
+            current.estimates?.scale ??
+            'FIBONACCI',
+        };
+      }
       return apiRequest(`/projects/${id}`, 'PATCH', updates);
     }
     case 'delete_project': {
@@ -1683,6 +1778,13 @@ async function handleToolCall(
     }
     case 'close_cycle': {
       return apiRequest(`/cycles/${args.id}/close`, 'POST');
+    }
+    case 'get_cycle_burndown': {
+      return apiRequest(`/cycles/${args.id}/burndown${args.live ? '?live=true' : ''}`);
+    }
+    case 'get_velocity': {
+      const window = args.window ? `&window=${args.window}` : '';
+      return apiRequest(`/cycles/velocity?project=${args.projectId}${window}`);
     }
     case 'reconcile_cycles': {
       return apiRequest('/cycles/reconcile', 'POST', args.projectId ? { project: args.projectId } : {});
@@ -1849,6 +1951,7 @@ async function handleToolCall(
         team: args.team || null,
         assignee: args.assignee || null,
         cycle: args.cycle || null,
+        estimate: resolveEstimate(args.estimate),
         status:
           (await resolveStatusId(args.status as string, args.projectId as string | undefined)) ||
           (await defaultStatusId(args.projectId as string | undefined)),
@@ -1869,6 +1972,7 @@ async function handleToolCall(
       if (args.team !== undefined) updates.team = args.team;
       if (args.assignee !== undefined) updates.assignee = args.assignee;
       if (args.cycle !== undefined) updates.cycle = args.cycle;
+      if (args.estimate !== undefined) updates.estimate = resolveEstimate(args.estimate);
       if (args.status) updates.status = await resolveStatusId(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;

@@ -3,6 +3,8 @@ import config from '@payload-config'
 import { CyclesView, type CycleSummary } from '@/components/cycles/CyclesView'
 import { cycleSettingsOf, reconcileProjectCycles } from '@/lib/cycle-service'
 import { cycleProgress, sortCycles } from '@/lib/cycles'
+import { loadVelocity } from '@/lib/burndown-service'
+import { VELOCITY_WINDOW } from '@/lib/burndown'
 import { CycleAutomation } from '@/types/enums'
 import type { Cycle, Project } from '@/payload-types'
 
@@ -67,10 +69,13 @@ export default async function CyclesPage({ searchParams }: CyclesPageProps) {
       progress: cycleProgress(typesByCycle.get(String(cycle.id)) ?? []),
     }))
 
+  const velocity = await loadVelocity(payload, project, { window: VELOCITY_WINDOW })
+
   return (
     <CyclesView
       project={project}
       summaries={summaries}
+      velocity={velocity}
       manual={settings.automation === CycleAutomation.MANUAL}
     />
   )

@@ -67,6 +67,21 @@ export const Activity: CollectionConfig = {
       },
     },
     {
+      name: 'fromId',
+      type: 'text',
+      admin: {
+        description:
+          'The id behind `from`, when the value was a record. Lets reports replay history exactly instead of matching on a name that may since have changed.',
+      },
+    },
+    {
+      name: 'toId',
+      type: 'text',
+      admin: {
+        description: 'The id behind `to`, when the value was a record',
+      },
+    },
+    {
       name: 'actor',
       type: 'relationship',
       relationTo: 'members',
