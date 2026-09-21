@@ -1,7 +1,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
-import { TicketStatus } from '@/types/enums'
+import { resolveWorkflow } from '@/lib/workflow'
 import type { Project } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -14,14 +14,17 @@ interface NewTicketPageProps {
 export default async function NewTicketPage({ searchParams }: NewTicketPageProps) {
   const params = await searchParams
   const projectId = params.project || null
-  const status = (Object.values(TicketStatus) as string[]).includes(params.status ?? '')
-    ? (params.status as TicketStatus)
-    : TicketStatus.TODO
+  const payload = await getPayload({ config })
+  const workflow = await resolveWorkflow(payload, projectId)
+  const requested = params.status ?? ''
+  const status =
+    workflow.find((entry) => entry.id === requested || entry.key === requested)?.id ??
+    workflow[0]?.id ??
+    ''
 
   let project: Project | null = null
   if (projectId) {
     try {
-      const payload = await getPayload({ config })
       project = await payload.findByID({ collection: 'projects', id: projectId, depth: 0 })
     } catch {
       project = null

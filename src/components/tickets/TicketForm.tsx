@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { TicketPriority, TicketStatus } from '@/types/enums'
-import { ticketPriorityOptions, ticketStatusOptions } from '@/lib/status'
+import { ticketPriorityOptions, statusOptions } from '@/lib/status'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
@@ -19,6 +19,8 @@ import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
 import type { Member, Project, Team, Ticket } from '@/payload-types'
+import { useWorkflow } from '@/components/shell/WorkflowProvider'
+import { statusIdOf } from '@/lib/workflow'
 
 interface BlockerRef {
   id: string
@@ -29,7 +31,7 @@ interface BlockerRef {
 interface FormState {
   title: string
   description: string
-  status: TicketStatus
+  status: string
   priority: TicketPriority
   projectId: string
   teamId: string
@@ -47,7 +49,7 @@ const MESSAGES: Record<FieldName, string> = {
   projectId: 'Choose the project this ticket belongs to.',
 }
 
-function emptyForm(projectId: string, status: TicketStatus): FormState {
+function emptyForm(projectId: string, status: string): FormState {
   return {
     title: '',
     description: '',
@@ -67,7 +69,7 @@ function fromTicket(ticket: Ticket): FormState {
   return {
     title: ticket.title,
     description: (ticket.description as unknown as string) || '',
-    status: ticket.status as TicketStatus,
+    status: statusIdOf(ticket) ?? '',
     priority: (ticket.priority as TicketPriority) ?? TicketPriority.NO_PRIORITY,
     projectId: typeof ticket.project === 'string' ? ticket.project : (ticket.project?.id ?? ''),
     teamId: typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? ''),
@@ -97,7 +99,7 @@ export function TicketForm({
   team,
   assignee,
   defaultProjectId,
-  defaultStatus = TicketStatus.TODO,
+  defaultStatus,
   returnTo,
 }: {
   ticket: Ticket | null
@@ -105,15 +107,21 @@ export function TicketForm({
   team?: Team | null
   assignee?: Member | null
   defaultProjectId?: string | null
-  defaultStatus?: TicketStatus
+  defaultStatus?: string
   returnTo?: string
 }) {
+  const { statusesForProject } = useWorkflow()
+  const workflow = statusesForProject(
+    defaultProjectId ?? (typeof ticket?.project === 'string' ? ticket.project : ticket?.project?.id),
+  )
+  const fallbackStatusId = workflow[0]?.id ?? ''
+
   const router = useRouter()
   const { toast } = useToast()
 
   const initialState = ticket
     ? fromTicket(ticket)
-    : emptyForm(defaultProjectId ?? '', defaultStatus)
+    : emptyForm(defaultProjectId ?? '', defaultStatus ?? fallbackStatusId)
 
   const [form, setForm] = useState<FormState>(initialState)
   const [initial] = useState<FormState>(initialState)
@@ -365,8 +373,8 @@ export function TicketForm({
                 <Select
                   id={id}
                   value={form.status}
-                  options={ticketStatusOptions()}
-                  onValueChange={(next) => set('status', next as TicketStatus)}
+                  options={statusOptions(workflow)}
+                  onValueChange={(next) => set('status', next)}
                 />
               )}
             </Field>

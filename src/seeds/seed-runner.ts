@@ -2,6 +2,8 @@ import 'dotenv/config'
 import { getPayload } from 'payload'
 import config from '../payload.config'
 import { ProjectStatus, TicketStatus, TicketPriority } from '../types/enums'
+import { ensureDefaultStatuses } from '../migrations/configurable-statuses'
+import { LEGACY_STATUS_KEYS } from '../types/enums'
 
 interface SeedProject {
   name: string
@@ -352,6 +354,10 @@ async function seed() {
     membersByTeam.set(member.teamName, roster)
   }
 
+  console.log('Ensuring default statuses...')
+  const statusIdsByKey = await ensureDefaultStatuses(payload)
+  const statusIdFor = (status: TicketStatus) => statusIdsByKey.get(LEGACY_STATUS_KEYS[status]) ?? ''
+
   console.log('Creating tickets (first pass)...')
   const ticketMap = new Map<string, string>()
 
@@ -376,7 +382,7 @@ async function seed() {
       collection: 'tickets',
       data: {
         title: ticket.title,
-        status: ticket.status,
+        status: statusIdFor(ticket.status),
         priority: ticket.priority,
         project: projectId,
         team: teamId,

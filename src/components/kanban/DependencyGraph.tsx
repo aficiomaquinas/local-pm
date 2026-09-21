@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { TicketStatus } from '@/types/enums'
+import { isClosedStatus } from '@/lib/status'
 import type { Ticket } from '@/payload-types'
 
 interface GraphNode {
@@ -83,7 +83,7 @@ export function DependencyGraph({
   const strokeFor = (node: GraphNode) =>
     node.kind === 'current'
       ? 'var(--color-accent)'
-      : node.ticket.status === TicketStatus.DONE
+      : isClosedStatus(node.ticket.status)
         ? 'var(--color-success)'
         : 'var(--color-warning)'
 
@@ -111,7 +111,7 @@ export function DependencyGraph({
           const toX = edge.to.x + PAD + NODE_W / 2
           const toY = edge.to.y + PAD
           const midY = (fromY + toY) / 2
-          const done = edge.from.ticket.status === TicketStatus.DONE
+          const done = isClosedStatus(edge.from.ticket.status)
           return (
             <path
               key={i}
@@ -147,7 +147,7 @@ export function DependencyGraph({
             <text x={12} y={50} fontSize={9} fill="var(--color-text-muted)">
               {node.kind === 'current'
                 ? 'this ticket'
-                : node.ticket.status === TicketStatus.DONE
+                : isClosedStatus(node.ticket.status)
                   ? 'done'
                   : node.kind === 'blocker'
                     ? 'blocking'

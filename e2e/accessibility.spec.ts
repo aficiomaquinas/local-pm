@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { seedProject, createTicket, getTicket, type SeedRefs } from './helpers'
+import { seedProject, createTicket, getTicket, type SeedRefs, statusKeyOf } from './helpers'
 
 let refs: SeedRefs
 
@@ -28,8 +28,8 @@ test.describe('WCAG 2.5.7 — a board move without dragging', () => {
     ).toBeVisible()
 
     await expect
-      .poll(async () => (await getTicket(request, ticket.id)).status, { timeout: 15_000 })
-      .toBe('IN_PROGRESS')
+      .poll(async () => await statusKeyOf(request, (await getTicket(request, ticket.id)).status), { timeout: 15_000 })
+      .toBe('in_progress')
   })
 
   test('the move is announced by name, with both positions', async ({ page, request }) => {
@@ -69,8 +69,8 @@ test('a card can be lifted, moved and dropped with the keyboard alone', async ({
   await page.keyboard.press('Space')
 
   await expect
-    .poll(async () => (await getTicket(request, ticket.id)).status, { timeout: 15_000 })
-    .toBe('IN_PROGRESS')
+    .poll(async () => await statusKeyOf(request, (await getTicket(request, ticket.id)).status), { timeout: 15_000 })
+    .toBe('in_progress')
 })
 
 test('a ticket detail view is addressable, and Back closes it', async ({ page, request }) => {
@@ -99,7 +99,6 @@ test('the create form reports errors inline and in a summary, and never blocks s
 
   await expect(page).toHaveURL(/\/tickets\/new/)
 
-  // Scoped to the form: Next's route announcer is a page-level role="alert".
   const form = page.locator('#ticket-form')
   const submit = page.getByRole('button', { name: 'Create ticket' })
   await expect(submit).toBeEnabled()

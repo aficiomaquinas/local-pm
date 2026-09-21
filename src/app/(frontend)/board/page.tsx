@@ -1,7 +1,7 @@
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { TicketStatus } from '@/types/enums'
+import { resolveWorkflow } from '@/lib/workflow'
 import type { Where } from 'payload'
 
 export const dynamic = 'force-dynamic'
@@ -22,9 +22,10 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
   const query = (params.q || '').trim()
 
   const payload = await getPayload({ config })
+  const statuses = await resolveWorkflow(payload, projectFilter)
 
-  const buildWhere = (status: TicketStatus): Where => {
-    const conditions: Where = { status: { equals: status } }
+  const buildWhere = (statusId: string): Where => {
+    const conditions: Where = { status: { equals: statusId } }
     if (projectFilter) conditions.project = { equals: projectFilter }
     if (teamFilter) conditions.team = { equals: teamFilter }
     if (assigneeFilter) conditions.assignee = { equals: assigneeFilter }
@@ -32,40 +33,36 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
     return conditions
   }
 
-  const findColumn = (status: TicketStatus) =>
-    payload.find({
-      collection: 'tickets',
-      limit: TICKETS_PER_COLUMN,
-      page: 1,
-      sort: 'sortOrder',
-      depth: 2,
-      where: buildWhere(status),
-    })
-
-  const [todoResult, inProgressResult, doneResult, projectsResult] = await Promise.all([
-    findColumn(TicketStatus.TODO),
-    findColumn(TicketStatus.IN_PROGRESS),
-    findColumn(TicketStatus.DONE),
+  const [columnResults, projectsResult] = await Promise.all([
+    Promise.all(
+      statuses.map((status) =>
+        payload.find({
+          collection: 'tickets',
+          limit: TICKETS_PER_COLUMN,
+          page: 1,
+          sort: 'sortOrder',
+          depth: 2,
+          where: buildWhere(status.id),
+        }),
+      ),
+    ),
     payload.find({ collection: 'projects', limit: 0, depth: 0 }),
   ])
 
-  const initialTickets = [...todoResult.docs, ...inProgressResult.docs, ...doneResult.docs]
+  const initialTickets = columnResults.flatMap((result) => result.docs)
 
-  const initialColumnPagination = [
-    { status: TicketStatus.TODO, result: todoResult },
-    { status: TicketStatus.IN_PROGRESS, result: inProgressResult },
-    { status: TicketStatus.DONE, result: doneResult },
-  ].map(({ status, result }) => ({
-    status,
-    page: result.page ?? 1,
-    totalPages: result.totalPages,
-    hasNextPage: result.hasNextPage,
-    totalDocs: result.totalDocs,
+  const initialColumnPagination = statuses.map((status, index) => ({
+    status: status.id,
+    page: columnResults[index].page ?? 1,
+    totalPages: columnResults[index].totalPages,
+    hasNextPage: columnResults[index].hasNextPage,
+    totalDocs: columnResults[index].totalDocs,
   }))
 
   return (
     <KanbanBoard
       initialTickets={initialTickets}
+      statuses={statuses}
       hasProjects={projectsResult.totalDocs > 0}
       initialColumnPagination={initialColumnPagination}
     />

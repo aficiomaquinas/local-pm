@@ -1,11 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { seedProject, createTicket, getTicket, type SeedRefs } from './helpers'
 
-/**
- * End-to-end coverage for the fixes ported from community forks.
- * Each block names the defect it pins.
- */
-
 let refs: SeedRefs
 
 test.beforeAll(async ({ request }) => {
@@ -29,8 +24,6 @@ test.describe('atomic ticket-ID allocation (ArsNovaSingers)', () => {
   })
 
   test('20 CONCURRENT creates all get distinct ids', async ({ request }) => {
-    // The original read-then-write allocator handed the same number to
-    // callers that raced. This is the regression that fix exists for.
     const results = await Promise.all(
       Array.from({ length: 20 }, (_, i) =>
         createTicket(request, refs, { title: `Concurrent ${i}` }),
@@ -54,11 +47,9 @@ test.describe('blockedBy dependency cycle guard (ArsNovaSingers)', () => {
     const a = (await aRes.json()).doc
     const b = (await bRes.json()).doc
 
-    // A blocked by B is fine.
     const ok = await request.patch(`/api/tickets/${a.id}`, { data: { blockedBy: [b.id] } })
     expect(ok.ok()).toBeTruthy()
 
-    // B blocked by A would close the loop.
     const cycle = await request.patch(`/api/tickets/${b.id}`, { data: { blockedBy: [a.id] } })
     expect(cycle.ok()).toBeFalsy()
     expect(await cycle.text()).toContain('cycle')
@@ -102,8 +93,6 @@ test.describe('rich-text XSS sanitization (btafoya, fixed for SSR)', () => {
     expect(res.ok()).toBeTruthy()
     probeId = (await res.json()).doc.id
 
-    // The payload must really be stored raw, or these tests would pass for
-    // the wrong reason: sanitization happens on OUTPUT, not on write.
     const stored = await getTicket(request, probeId)
     expect(stored.description).toContain('onerror')
   })
@@ -114,7 +103,6 @@ test.describe('rich-text XSS sanitization (btafoya, fixed for SSR)', () => {
     await page.goto(`/board?project=${refs.projectId}`)
     await page.waitForLoadState('networkidle')
 
-    // Descriptions render through RichTextDisplay inside the detail modal.
     await page.locator(`[data-ticket-id="${probeId}"]`).click()
 
     const body = page.locator('.rich-text-content').first()
@@ -129,10 +117,6 @@ test.describe('rich-text XSS sanitization (btafoya, fixed for SSR)', () => {
   })
 
   test('no payload executes anywhere in the flow', async ({ page }) => {
-    // Note: the raw description does travel to the client inside the RSC
-    // flight payload, but as JSON-escaped DATA in a script *string* — it is
-    // never parsed as markup. What matters is that nothing executes and that
-    // what reaches the DOM is sanitized, both asserted here.
     await page.goto(`/board?project=${refs.projectId}`)
     await page.waitForLoadState('networkidle')
     await page.locator(`[data-ticket-id="${probeId}"]`).click()
@@ -148,8 +132,6 @@ test.describe('rich-text XSS sanitization (btafoya, fixed for SSR)', () => {
     await page.locator(`[data-ticket-id="${probeId}"]`).click()
     await expect(page.locator('.rich-text-content').first()).toBeVisible()
 
-    // Query the live DOM rather than the response text, so the RSC data
-    // island is correctly excluded.
     const live = await page.evaluate(() => ({
       handlers: document.querySelectorAll('[onerror], [onload]').length,
       scripts: document.querySelectorAll('.rich-text-content script').length,
@@ -164,9 +146,6 @@ test.describe('rich-text XSS sanitization (btafoya, fixed for SSR)', () => {
 
 test.describe('infinite scroll threshold (btafoya, units corrected)', () => {
   test('projects list mounts its observer without a RangeError', async ({ page }) => {
-    // Passing the old pixel-valued default (100) straight to
-    // IntersectionObserver throws "threshold values must be between 0 and 1",
-    // which would kill the list. Any such error surfaces on the console here.
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(String(e)))
     page.on('console', (m) => {

@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test'
 
-/**
- * Baseline: the pages the hardening pass touched still render and still work.
- * A security change that breaks the product is not a security change.
- */
-
 test('board renders all three columns', async ({ page }) => {
   await page.goto('/board')
   await expect(page.locator('[data-testid="column-TODO"]')).toBeVisible()
@@ -25,15 +20,11 @@ test('teams page renders', async ({ page }) => {
 })
 
 test('the users collection accepts a first-user registration over REST', async ({ request }) => {
-  // This is the path the LOCAL_PM_REQUIRE_AUTH flow depends on for bootstrapping.
-  // It deliberately does NOT go through /admin — see the fixme below.
   const email = `smoke-${Date.now()}@local-pm.test`
   const res = await request.post('/api/users', {
     data: { email, password: 'LocalPM-smoke-2026', name: 'Smoke', role: 'admin' },
   })
 
-  // 201 on the first account; once one exists, creation is still permitted
-  // while the auth flag is off, so any 2xx is a pass here.
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
   expect(body.doc.email).toBe(email)
@@ -46,7 +37,6 @@ test('admin panel renders its login screen', async ({ page }) => {
 })
 
 test('with LOCAL_PM_REQUIRE_AUTH off, anonymous API access still works', async ({ request }) => {
-  // The default posture is unchanged for existing installs, by design.
   const res = await request.get('/api/tickets?limit=1&depth=0')
   expect(res.ok()).toBeTruthy()
 })

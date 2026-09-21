@@ -14,8 +14,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
-import { BLOCKED_META, ticketStatusMeta } from '@/lib/status'
-import { TicketStatus } from '@/types/enums'
+import { BLOCKED_META, statusMeta, statusTypeMeta, isClosedStatus } from '@/lib/status'
+import { statusIdOf } from '@/lib/workflow'
+import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -25,12 +26,6 @@ import { TicketKey } from '@/components/ui/EntityMark'
 import { Tooltip } from '@/components/ui/Tooltip'
 import type { Ticket } from '@/payload-types'
 
-const MOVE_TARGETS: { status: TicketStatus; label: string }[] = [
-  { status: TicketStatus.TODO, label: 'Todo' },
-  { status: TicketStatus.IN_PROGRESS, label: 'In Progress' },
-  { status: TicketStatus.DONE, label: 'Done' },
-]
-
 export interface KanbanCardProps {
   ticket: Ticket
 
@@ -39,7 +34,7 @@ export interface KanbanCardProps {
   href?: string
   onEdit?: () => void
   onDelete?: () => void
-  onMoveToColumn?: (status: TicketStatus) => void
+  onMoveToColumn?: (status: string) => void
   onReorder?: (direction: -1 | 1) => void
 
   justLanded?: boolean
@@ -81,10 +76,13 @@ export function KanbanCard({
   const subtasks = ticket.subtasks ?? []
   const doneSubtasks = subtasks.filter((s) => s.completed).length
   const blockedCount = ticket.blockedBy?.length ?? 0
-  const status = ticket.status as TicketStatus
+  const { statusesForProject } = useWorkflow()
+  const projectId = typeof ticket.project === 'string' ? ticket.project : ticket.project?.id
+  const currentStatusId = statusIdOf(ticket)
+  const moveTargets = statusesForProject(projectId).filter((entry) => entry.id !== currentStatusId)
 
   const dueDate = ticket.dueDate ? new Date(ticket.dueDate) : null
-  const overdue = dueDate ? dueDate.getTime() < Date.now() && status !== TicketStatus.DONE : false
+  const overdue = dueDate ? dueDate.getTime() < Date.now() && !isClosedStatus(ticket.status) : false
 
   const menuItems: MenuItem[] = [
     ...(onOpen ? [{ id: 'open', label: 'Open ticket', shortcut: 'enter', onSelect: onOpen } as MenuItem] : []),
@@ -103,11 +101,11 @@ export function KanbanCard({
         ] as MenuItem[])
       : []),
     ...(onMoveToColumn
-      ? MOVE_TARGETS.filter((t) => t.status !== status).map<MenuItem>((t) => ({
-          id: `move-${t.status}`,
-          label: `Move to ${t.label}`,
-          icon: ticketStatusMeta(t.status).icon,
-          onSelect: () => onMoveToColumn(t.status),
+      ? moveTargets.map<MenuItem>((t) => ({
+          id: `move-${t.id}`,
+          label: `Move to ${t.name}`,
+          icon: statusTypeMeta(t.type).icon,
+          onSelect: () => onMoveToColumn(t.id),
         }))
       : []),
     ...(onDelete
