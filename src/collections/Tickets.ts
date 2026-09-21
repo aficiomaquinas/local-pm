@@ -129,22 +129,13 @@ export const Tickets: CollectionConfig = {
     },
     {
       name: 'labels',
-      type: 'array',
+      type: 'relationship',
+      relationTo: 'labels',
+      hasMany: true,
+      index: true,
       admin: {
-        description: 'Labels for categorization',
+        description: 'Shared labels drawn from the workspace label set',
       },
-      fields: [
-        {
-          name: 'name',
-          type: 'text',
-          required: true,
-        },
-        {
-          name: 'color',
-          type: 'text',
-          defaultValue: '#6366f1',
-        },
-      ],
     },
     {
       name: 'dueDate',
@@ -229,6 +220,39 @@ async function hydrateStatus(
   }
 }
 
+function labelIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((entry) => idOf(entry)).filter((id): id is string => Boolean(id))
+}
+
+async function hydrateLabels(
+  req: PayloadRequest,
+  record: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  if (!record) return record
+
+  const ids = labelIds(record.labels)
+  if (ids.length === 0) return record
+
+  try {
+    const found = await req.payload.find({
+      req,
+      collection: 'labels',
+      where: { id: { in: ids } },
+      limit: ids.length,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const byId = new Map(found.docs.map((doc) => [String(doc.id), doc.name]))
+    return {
+      ...record,
+      labels: ids.map((id) => ({ id, name: byId.get(id) ?? id })),
+    }
+  } catch {
+    return record
+  }
+}
+
 async function recordActivity(
   req: PayloadRequest,
   doc: Record<string, unknown>,
@@ -236,15 +260,27 @@ async function recordActivity(
   operation: 'create' | 'update',
 ): Promise<void> {
   if (operation === 'create') {
-    await writeEvents(req, doc, diffTicket(null, doc))
+    const created = (await hydrateLabels(req, doc)) as Record<string, unknown>
+    await writeEvents(req, doc, diffTicket(null, created))
     return
   }
 
   const statusChanged = idOf(previousDoc?.status) !== idOf(doc.status)
-  const hydratedDoc = statusChanged
-    ? ((await hydrateStatus(req, doc)) as Record<string, unknown>)
-    : doc
-  const hydratedPrevious = statusChanged ? await hydrateStatus(req, previousDoc) : previousDoc
+  const labelsChanged =
+    labelIds(previousDoc?.labels).join('\u0000') !== labelIds(doc.labels).join('\u0000')
+
+  let hydratedDoc = doc
+  let hydratedPrevious = previousDoc
+
+  if (statusChanged) {
+    hydratedDoc = (await hydrateStatus(req, hydratedDoc)) as Record<string, unknown>
+    hydratedPrevious = await hydrateStatus(req, hydratedPrevious)
+  }
+
+  if (labelsChanged) {
+    hydratedDoc = (await hydrateLabels(req, hydratedDoc)) as Record<string, unknown>
+    hydratedPrevious = await hydrateLabels(req, hydratedPrevious)
+  }
 
   const events = diffTicket(hydratedPrevious, hydratedDoc)
   await writeEvents(req, doc, events)

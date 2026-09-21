@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ListFilter, Loader2, Plus, Search, X } from 'lucide-react'
@@ -51,7 +51,11 @@ export function TicketsTable({
   emptyDescription,
   relationColumn,
 }: TicketsTableProps) {
-  const { statuses } = useWorkflow()
+  const { statuses: allStatuses, statusesForProject } = useWorkflow()
+  const statuses = useMemo(
+    () => (where.project ? statusesForProject(where.project) : allStatuses),
+    [where.project, statusesForProject, allStatuses],
+  )
   const router = useRouter()
 
   const [query, setQuery] = useState('')

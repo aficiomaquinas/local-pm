@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '../payload.config'
 import { ProjectStatus, TicketStatus, TicketPriority } from '../types/enums'
 import { ensureDefaultStatuses } from '../migrations/configurable-statuses'
+import { LabelColor } from '../types/enums'
 import { LEGACY_STATUS_KEYS } from '../types/enums'
 
 interface SeedProject {
@@ -25,15 +26,46 @@ interface SeedMember {
   teamName: string
 }
 
+interface SeedLabelGroup {
+  name: string
+  order: number
+}
+
+interface SeedLabel {
+  name: string
+  color: LabelColor
+  groupName: string | null
+}
+
 interface SeedTicket {
   title: string
   status: TicketStatus
   priority: TicketPriority
   projectPrefix: string
   teamName: string | null
-  labels: { name: string; color: string }[]
+  labels: string[]
   blockedByTitles?: string[]
 }
+
+const SEED_LABEL_GROUPS: SeedLabelGroup[] = [
+  { name: 'Area', order: 1000 },
+  { name: 'Kind', order: 2000 },
+]
+
+const SEED_LABELS: SeedLabel[] = [
+  { name: 'frontend', color: LabelColor.BLUE, groupName: 'Area' },
+  { name: 'api', color: LabelColor.GREEN, groupName: 'Area' },
+  { name: 'mobile', color: LabelColor.INDIGO, groupName: 'Area' },
+  { name: 'infrastructure', color: LabelColor.BLUE, groupName: 'Area' },
+  { name: 'auth', color: LabelColor.RED, groupName: 'Area' },
+  { name: 'ads', color: LabelColor.BLUE, groupName: 'Area' },
+  { name: 'design', color: LabelColor.INDIGO, groupName: 'Kind' },
+  { name: 'planning', color: LabelColor.SLATE, groupName: 'Kind' },
+  { name: 'qa', color: LabelColor.AMBER, groupName: 'Kind' },
+  { name: 'strategy', color: LabelColor.AMBER, groupName: 'Kind' },
+  { name: 'ci/cd', color: LabelColor.INDIGO, groupName: 'Kind' },
+  { name: 'reliability', color: LabelColor.GREEN, groupName: 'Kind' },
+]
 
 const SEED_PROJECTS: SeedProject[] = [
   {
@@ -188,7 +220,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.HIGH,
     projectPrefix: 'WEB',
     teamName: 'Design',
-    labels: [{ name: 'design', color: '#ec4899' }],
+    labels: ['design'],
   },
   {
     title: 'Design homepage wireframes',
@@ -196,7 +228,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.HIGH,
     projectPrefix: 'WEB',
     teamName: 'Design',
-    labels: [{ name: 'design', color: '#ec4899' }],
+    labels: ['design'],
     blockedByTitles: ['Finalize new brand guidelines'],
   },
   {
@@ -205,7 +237,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.MEDIUM,
     projectPrefix: 'WEB',
     teamName: 'Frontend Engineering',
-    labels: [{ name: 'frontend', color: '#3b82f6' }],
+    labels: ['frontend'],
     blockedByTitles: ['Design homepage wireframes'],
   },
   {
@@ -214,7 +246,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.MEDIUM,
     projectPrefix: 'WEB',
     teamName: 'Frontend Engineering',
-    labels: [{ name: 'frontend', color: '#3b82f6' }],
+    labels: ['frontend'],
     blockedByTitles: ['Design homepage wireframes'],
   },
 
@@ -224,7 +256,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.URGENT,
     projectPrefix: 'APP',
     teamName: 'Product Management',
-    labels: [{ name: 'planning', color: '#64748b' }],
+    labels: ['planning'],
   },
   {
     title: 'Audit current React Native performance',
@@ -232,7 +264,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.MEDIUM,
     projectPrefix: 'APP',
     teamName: 'QA & Testing',
-    labels: [{ name: 'qa', color: '#f97316' }],
+    labels: ['qa'],
   },
   {
     title: 'Implement OAuth logic',
@@ -240,7 +272,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.HIGH,
     projectPrefix: 'APP',
     teamName: 'Backend Engineering',
-    labels: [{ name: 'auth', color: '#ef4444' }, { name: 'api', color: '#10b981' }],
+    labels: ['auth', 'api'],
     blockedByTitles: ['Define API contract for Auth'],
   },
   {
@@ -249,7 +281,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.MEDIUM,
     projectPrefix: 'APP',
     teamName: 'Frontend Engineering',
-    labels: [{ name: 'mobile', color: '#8b5cf6' }],
+    labels: ['mobile'],
     blockedByTitles: ['Implement OAuth logic'],
   },
 
@@ -259,7 +291,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.HIGH,
     projectPrefix: 'MKT',
     teamName: 'Marketing',
-    labels: [{ name: 'strategy', color: '#f59e0b' }],
+    labels: ['strategy'],
   },
   {
     title: 'Create social media assets',
@@ -267,7 +299,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.MEDIUM,
     projectPrefix: 'MKT',
     teamName: 'Design',
-    labels: [{ name: 'design', color: '#ec4899' }],
+    labels: ['design'],
     blockedByTitles: ['Identify target audience for Q1'],
   },
   {
@@ -276,7 +308,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.HIGH,
     projectPrefix: 'MKT',
     teamName: 'Marketing',
-    labels: [{ name: 'ads', color: '#3b82f6' }],
+    labels: ['ads'],
     blockedByTitles: ['Create social media assets'],
   },
 
@@ -286,7 +318,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.URGENT,
     projectPrefix: 'OPS',
     teamName: 'DevOps',
-    labels: [{ name: 'infrastructure', color: '#06b6d4' }],
+    labels: ['infrastructure'],
   },
   {
     title: 'Optimize Docker build times',
@@ -294,7 +326,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.LOW,
     projectPrefix: 'OPS',
     teamName: 'DevOps',
-    labels: [{ name: 'ci/cd', color: '#8b5cf6' }],
+    labels: ['ci/cd'],
   },
   {
     title: 'Implement auto-scaling for API',
@@ -302,7 +334,7 @@ const SEED_TICKETS: SeedTicket[] = [
     priority: TicketPriority.MEDIUM,
     projectPrefix: 'OPS',
     teamName: 'DevOps',
-    labels: [{ name: 'reliability', color: '#10b981' }],
+    labels: ['reliability'],
     blockedByTitles: ['Migrate DB to new cluster'],
   },
 ]
@@ -316,6 +348,8 @@ async function seed() {
   await payload.delete({ collection: 'comments', where: {} })
   await payload.delete({ collection: 'tickets', where: {} })
   await payload.delete({ collection: 'cycles', where: {} })
+  await payload.delete({ collection: 'labels', where: {} })
+  await payload.delete({ collection: 'label-groups', where: {} })
   await payload.delete({ collection: 'members', where: {} })
   await payload.delete({ collection: 'projects', where: {} })
   await payload.delete({ collection: 'teams', where: {} })
@@ -355,6 +389,29 @@ async function seed() {
     membersByTeam.set(member.teamName, roster)
   }
 
+  console.log('Creating labels...')
+  const labelGroupMap = new Map<string, string>()
+  for (const group of SEED_LABEL_GROUPS) {
+    const created = await payload.create({
+      collection: 'label-groups',
+      data: { name: group.name, order: group.order } as any,
+    })
+    labelGroupMap.set(group.name, created.id)
+  }
+
+  const labelMap = new Map<string, string>()
+  for (const label of SEED_LABELS) {
+    const created = await payload.create({
+      collection: 'labels',
+      data: {
+        name: label.name,
+        color: label.color,
+        group: label.groupName ? (labelGroupMap.get(label.groupName) ?? null) : null,
+      } as any,
+    })
+    labelMap.set(label.name, created.id)
+  }
+
   console.log('Ensuring default statuses...')
   const statusIdsByKey = await ensureDefaultStatuses(payload)
   const statusIdFor = (status: TicketStatus) => statusIdsByKey.get(LEGACY_STATUS_KEYS[status]) ?? ''
@@ -388,7 +445,9 @@ async function seed() {
         project: projectId,
         team: teamId,
         assignee: assigneeId,
-        labels: ticket.labels,
+        labels: ticket.labels
+          .map((name) => labelMap.get(name))
+          .filter((id): id is string => Boolean(id)),
       },
     })
 

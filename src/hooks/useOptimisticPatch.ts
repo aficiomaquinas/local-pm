@@ -29,9 +29,9 @@ export function useOptimisticPatch<T extends { id: string }>({
   )
 
   const patch = useCallback(
-    async (changes: Partial<T>, label: string) => {
+    async (changes: Partial<T>, label: string, preview?: Partial<T>) => {
       const previous = recordRef.current
-      const optimistic = { ...previous, ...changes }
+      const optimistic = { ...previous, ...changes, ...(preview ?? {}) }
 
       onApply(optimistic)
       setState('saving')

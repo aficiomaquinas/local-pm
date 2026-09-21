@@ -7,6 +7,7 @@ import { TONE_CHIP, type StateIcon, type Tone } from '@/lib/status'
 export interface BadgeProps {
   tone?: Tone
   icon?: StateIcon
+  swatchClass?: string
   children: React.ReactNode
 
   maxWidth?: string
@@ -14,7 +15,24 @@ export interface BadgeProps {
   className?: string
 }
 
-export function Badge({ tone = 'neutral', icon: Icon, children, maxWidth, title, className }: BadgeProps) {
+function Swatch({ className }: { className: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn('size-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10', className)}
+    />
+  )
+}
+
+export function Badge({
+  tone = 'neutral',
+  icon: Icon,
+  swatchClass,
+  children,
+  maxWidth,
+  title,
+  className,
+}: BadgeProps) {
   return (
     <span
       title={title}
@@ -26,6 +44,7 @@ export function Badge({ tone = 'neutral', icon: Icon, children, maxWidth, title,
         className,
       )}
     >
+      {swatchClass && <Swatch className={swatchClass} />}
       {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
       <span className="truncate">{children}</span>
     </span>
@@ -35,6 +54,7 @@ export function Badge({ tone = 'neutral', icon: Icon, children, maxWidth, title,
 export interface ChipProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   tone?: Tone
   icon?: StateIcon
+  swatchClass?: string
   children: React.ReactNode
   onRemove?: () => void
   removeLabel?: string
@@ -46,6 +66,7 @@ export interface ChipProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonEle
 export function Chip({
   tone = 'neutral',
   icon: Icon,
+  swatchClass,
   children,
   onRemove,
   removeLabel,
@@ -57,6 +78,7 @@ export function Chip({
 }: ChipProps) {
   const body = (
     <>
+      {swatchClass && <Swatch className={swatchClass} />}
       {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
       <span className="truncate">{children}</span>
     </>

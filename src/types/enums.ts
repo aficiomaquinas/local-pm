@@ -154,3 +154,38 @@ export const CYCLE_LENGTH_OPTIONS = [
   { label: '6 weeks', value: 6 },
   { label: '8 weeks', value: 8 },
 ]
+export enum LabelColor {
+  SLATE = 'SLATE',
+  INDIGO = 'INDIGO',
+  BLUE = 'BLUE',
+  GREEN = 'GREEN',
+  AMBER = 'AMBER',
+  RED = 'RED',
+}
+
+export const LABEL_COLOR_OPTIONS = [
+  { label: 'Slate', value: LabelColor.SLATE },
+  { label: 'Indigo', value: LabelColor.INDIGO },
+  { label: 'Blue', value: LabelColor.BLUE },
+  { label: 'Green', value: LabelColor.GREEN },
+  { label: 'Amber', value: LabelColor.AMBER },
+  { label: 'Red', value: LabelColor.RED },
+]
+
+export const LEGACY_LABEL_COLORS: Record<string, LabelColor> = {
+  '#64748b': LabelColor.SLATE,
+  '#6366f1': LabelColor.INDIGO,
+  '#8b5cf6': LabelColor.INDIGO,
+  '#a855f7': LabelColor.INDIGO,
+  '#d946ef': LabelColor.INDIGO,
+  '#ec4899': LabelColor.RED,
+  '#ef4444': LabelColor.RED,
+  '#f97316': LabelColor.AMBER,
+  '#f59e0b': LabelColor.AMBER,
+  '#eab308': LabelColor.AMBER,
+  '#22c55e': LabelColor.GREEN,
+  '#10b981': LabelColor.GREEN,
+  '#14b8a6': LabelColor.GREEN,
+  '#06b6d4': LabelColor.BLUE,
+  '#3b82f6': LabelColor.BLUE,
+}
