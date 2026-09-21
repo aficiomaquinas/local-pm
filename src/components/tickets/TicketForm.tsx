@@ -9,7 +9,6 @@ import { TicketPriority } from '@/types/enums'
 import { ticketPriorityOptions, statusOptions } from '@/lib/status'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
-import { Chip } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ErrorSummary, Field, Input } from '@/components/ui/Field'
@@ -19,14 +18,16 @@ import {
   TeamSelect,
   TicketSelect,
 } from '@/components/ui/EntityPickers'
+import { LabelChips, LabelSelect } from '@/components/ui/LabelPicker'
 import { Select } from '@/components/ui/Select'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { useTicketDraft } from '@/hooks/useTicketDraft'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
-import type { Member, Project, Team, Ticket } from '@/payload-types'
+import type { Label, Member, Project, Team, Ticket } from '@/payload-types'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { statusIdOf } from '@/lib/workflow'
+import { labelsOf } from '@/lib/labels'
 
 interface BlockerRef {
   id: string
@@ -43,7 +44,7 @@ interface FormState {
   teamId: string
   assigneeId: string
   dueDate: string
-  labels: { name: string }[]
+  labels: Label[]
   subtasks: { title: string; completed: boolean }[]
   blockers: BlockerRef[]
 }
@@ -81,7 +82,7 @@ function fromTicket(ticket: Ticket): FormState {
     teamId: typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? ''),
     assigneeId: typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
     dueDate: ticket.dueDate ? ticket.dueDate.slice(0, 10) : '',
-    labels: (ticket.labels ?? []).map((l) => ({ name: l.name })),
+    labels: labelsOf(ticket),
     subtasks: (ticket.subtasks ?? []).map((s) => ({
       title: s.title,
       completed: Boolean(s.completed),
@@ -140,7 +141,6 @@ export function TicketForm({
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [newLabel, setNewLabel] = useState('')
   const [newSubtask, setNewSubtask] = useState('')
   const [confirmDiscard, setConfirmDiscard] = useState(false)
 
@@ -167,7 +167,9 @@ export function TicketForm({
         typeof candidate.status === 'string' &&
         Object.values(TicketPriority).includes(candidate.priority) &&
         Array.isArray(candidate.labels) &&
-        candidate.labels.every((label) => typeof label?.name === 'string') &&
+        candidate.labels.every(
+          (label) => typeof label?.id === 'string' && typeof label?.name === 'string',
+        ) &&
         Array.isArray(candidate.subtasks) &&
         candidate.subtasks.every(
           (task) => typeof task?.title === 'string' && typeof task?.completed === 'boolean',
@@ -226,7 +228,7 @@ export function TicketForm({
         project: form.projectId,
         team: form.teamId || null,
         assignee: form.assigneeId || null,
-        labels: form.labels,
+        labels: form.labels.map((label) => label.id),
         subtasks: form.subtasks,
         blockedBy: form.blockers.map((b) => b.id),
         dueDate: form.dueDate || null,
@@ -257,17 +259,6 @@ export function TicketForm({
       )
       requestAnimationFrame(() => summaryRef.current?.focus())
     }
-  }
-
-  const addLabel = () => {
-    const name = newLabel.trim()
-    if (!name) return
-    if (form.labels.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
-      setNewLabel('')
-      return
-    }
-    set('labels', [...form.labels, { name }])
-    setNewLabel('')
   }
 
   const addSubtask = () => {
@@ -525,43 +516,20 @@ export function TicketForm({
             <div className="mt-5 flex flex-col gap-6">
               <fieldset className="flex flex-col gap-2">
                 <legend className="text-xs font-medium text-text-muted">Labels</legend>
-                <div className={cn('flex flex-wrap gap-2', form.labels.length === 0 && 'hidden')}>
-                  {form.labels.map((label, index) => (
-                    <Chip
-                      key={`${label.name}-${index}`}
-                      shape="tag"
-                      onRemove={() =>
-                        set(
-                          'labels',
-                          form.labels.filter((_, i) => i !== index),
-                        )
-                      }
-                      removeLabel={`Remove label ${label.name}`}
-                    >
-                      {label.name}
-                    </Chip>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Field label="Add a label" hideLabel className="flex-1">
-                    {({ id }) => (
-                      <Input
-                        id={id}
-                        value={newLabel}
-                        onChange={(e) => setNewLabel(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter' && e.key !== ',') return
-                          e.preventDefault()
-                          addLabel()
-                        }}
-                        placeholder="Type and press Enter"
-                        autoComplete="off"
-                      />
-                    )}
-                  </Field>
-                  <Button icon={Plus} onClick={addLabel}>
-                    Add
-                  </Button>
+                <LabelChips
+                  labels={form.labels}
+                  onRemove={(label) =>
+                    set(
+                      'labels',
+                      form.labels.filter((entry) => entry.id !== label.id),
+                    )
+                  }
+                />
+                <div className="max-w-72">
+                  <LabelSelect
+                    selected={form.labels}
+                    onAdd={(label) => set('labels', [...form.labels, label])}
+                  />
                 </div>
               </fieldset>
 

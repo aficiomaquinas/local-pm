@@ -77,6 +77,98 @@ async function defaultStatusId(projectId?: string): Promise<string | undefined> 
   return scope[0]?.id;
 }
 
+interface LabelDoc {
+  id: string;
+  name: string;
+  key: string;
+  color?: string;
+  group?: { id: string; name?: string } | string | null;
+}
+
+let labelCache: { at: number; docs: LabelDoc[] } | null = null;
+
+async function loadLabels(refresh = false): Promise<LabelDoc[]> {
+  if (!refresh && labelCache && Date.now() - labelCache.at < 30000) return labelCache.docs;
+  const response = (await apiRequest('/labels?limit=500&depth=1')) as { docs?: LabelDoc[] };
+  const docs = response.docs ?? [];
+  labelCache = { at: Date.now(), docs };
+  return docs;
+}
+
+function labelKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function matchLabel(docs: LabelDoc[], value: string): LabelDoc | undefined {
+  const needle = value.trim().toLowerCase();
+  return (
+    docs.find((doc) => doc.id === value) ??
+    docs.find((doc) => doc.key.toLowerCase() === needle) ??
+    docs.find((doc) => doc.name.trim().toLowerCase() === needle) ??
+    docs.find((doc) => doc.key === labelKey(value))
+  );
+}
+
+async function resolveLabelIds(values: unknown): Promise<string[] | undefined> {
+  if (values === undefined || values === null) return undefined;
+  if (!Array.isArray(values)) throw new Error('labels must be an array of label names, keys or ids');
+
+  const names = values
+    .map((entry) => {
+      if (typeof entry === 'string') return entry;
+      if (entry && typeof entry === 'object' && 'name' in (entry as Record<string, unknown>)) {
+        return String((entry as { name: unknown }).name);
+      }
+      return '';
+    })
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (names.length === 0) return [];
+
+  let docs = await loadLabels();
+  const ids: string[] = [];
+
+  for (const name of names) {
+    let match = matchLabel(docs, name);
+
+    if (!match) {
+      docs = await loadLabels(true);
+      match = matchLabel(docs, name);
+    }
+
+    if (!match) {
+      const created = (await apiRequest('/labels', 'POST', { name })) as { doc?: LabelDoc };
+      if (!created.doc) throw new Error(`Could not create the label "${name}"`);
+      match = created.doc;
+      labelCache = { at: Date.now(), docs: [...docs, match] };
+      docs = labelCache.docs;
+    }
+
+    if (!ids.includes(match.id)) ids.push(match.id);
+  }
+
+  return ids;
+}
+
+function slimLabels(labels: unknown): string[] | null {
+  if (!Array.isArray(labels)) return null;
+  return labels
+    .map((entry) => {
+      if (typeof entry === 'string') return entry;
+      if (entry && typeof entry === 'object') {
+        const record = entry as Record<string, unknown>;
+        return (record.name ?? record.id) as string;
+      }
+      return '';
+    })
+    .filter(Boolean) as string[];
+}
+
 function toPayloadValue(value: string | undefined): string | undefined {
   if (!value) return undefined;
   return STATUS_MAP[value] || value;
@@ -215,6 +307,8 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
       filtered[field] = slimMember(value);
     } else if (field === 'blockedBy') {
       filtered[field] = slimBlockedBy(value);
+    } else if (field === 'labels') {
+      filtered[field] = slimLabels(value);
     } else {
       filtered[field] = value;
     }
@@ -718,15 +812,9 @@ const tools: Tool[] = [
         },
         labels: {
           type: 'array',
-          description: 'Array of labels with name and color',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              color: { type: 'string' },
-            },
-            required: ['name', 'color'],
-          },
+          description:
+            'Shared labels, given as label names, keys or ids. Use list_labels to see what exists; a name that does not match an existing label creates one.',
+          items: { type: 'string' },
         },
         subtasks: {
           type: 'array',
@@ -793,15 +881,9 @@ const tools: Tool[] = [
         },
         labels: {
           type: 'array',
-          description: 'New array of labels (replaces existing)',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              color: { type: 'string' },
-            },
-            required: ['name', 'color'],
-          },
+          description:
+            'The complete new set of labels, given as label names, keys or ids. Replaces the existing set; pass [] to clear it. A name that does not match an existing label creates one.',
+          items: { type: 'string' },
         },
         subtasks: {
           type: 'array',
@@ -927,6 +1009,29 @@ const tools: Tool[] = [
     },
   },
 
+  {
+    name: 'list_labels',
+    description:
+      'List the shared labels in the workspace, with their group. Labels are workspace-wide, so the same label can be applied to tickets in any project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        search: {
+          type: 'string',
+          description: 'Filter to labels whose name contains this text',
+        },
+        group: {
+          type: 'string',
+          description: 'Only return labels in this group, by group name, key or id',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum labels to return (default 200)',
+          default: 200,
+        },
+      },
+    },
+  },
   {
     name: 'list_activity',
     description: 'Read the change history of a ticket, oldest first. Entries cover field changes (action "changed", with the field and the values before and after as they read at the time) and the comment thread (actions "commented", "replied", "edited", "resolved", "reopened", "deleted", carrying the comment text). The text of a deleted comment is kept here after the comment itself is gone. The history is written automatically and cannot be edited or deleted. Board reordering is not recorded.',
@@ -1317,7 +1422,7 @@ async function handleToolCall(
           (await defaultStatusId(args.projectId as string | undefined)),
         priority: toPayloadValue(args.priority as string) || 'NO_PRIORITY',
         dueDate: args.dueDate || null,
-        labels: args.labels || [],
+        labels: (await resolveLabelIds(args.labels)) ?? [],
         subtasks: args.subtasks || [],
         blockedBy: args.blockedBy || [],
       });
@@ -1332,7 +1437,7 @@ async function handleToolCall(
       if (args.status) updates.status = await resolveStatusId(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
-      if (args.labels) updates.labels = args.labels;
+      if (args.labels !== undefined) updates.labels = await resolveLabelIds(args.labels);
       if (args.subtasks) updates.subtasks = args.subtasks;
       if (args.blockedBy !== undefined) updates.blockedBy = args.blockedBy;
       return apiRequest(`/tickets/${id}`, 'PATCH', updates);
@@ -1419,6 +1524,37 @@ async function handleToolCall(
       return apiRequest(`/tickets/${args.ticketId}`, 'PATCH', { subtasks });
     }
 
+    case 'list_labels': {
+      const docs = await loadLabels(true);
+      const search = typeof args.search === 'string' ? args.search.trim().toLowerCase() : '';
+      const group = typeof args.group === 'string' ? args.group.trim().toLowerCase() : '';
+      const limit = typeof args.limit === 'number' ? args.limit : 200;
+
+      const matches = docs.filter((doc) => {
+        if (search && !doc.name.toLowerCase().includes(search)) return false;
+        if (!group) return true;
+
+        const own = doc.group;
+        if (!own) return false;
+        if (typeof own === 'string') return own === args.group;
+        return (
+          own.id === args.group ||
+          (own.name ?? '').trim().toLowerCase() === group ||
+          labelKey(own.name ?? '') === labelKey(group)
+        );
+      });
+
+      return {
+        labels: matches.slice(0, limit).map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          key: doc.key,
+          color: doc.color ?? null,
+          group: typeof doc.group === 'object' && doc.group ? (doc.group.name ?? null) : null,
+        })),
+        total: matches.length,
+      };
+    }
     case 'list_activity': {
       const limit = (args.limit as number) || 50;
       const page = (args.page as number) || 1;

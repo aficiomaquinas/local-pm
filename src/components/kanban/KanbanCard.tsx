@@ -16,11 +16,13 @@ import { cn } from '@/lib/cn'
 import { formatDateCompact } from '@/lib/format'
 import { BLOCKED_META, statusMeta, statusTypeMeta, isClosedStatus } from '@/lib/status'
 import { statusIdOf } from '@/lib/workflow'
+import { labelsOf } from '@/lib/labels'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
+import { LabelBadges } from '@/components/ui/LabelPicker'
 import { PriorityIndicator } from '@/components/ui/StateIndicator'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -72,7 +74,7 @@ export function KanbanCard({
 
   const project = typeof ticket.project === 'object' ? ticket.project : null
   const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
-  const labels = ticket.labels ?? []
+  const labels = labelsOf(ticket)
   const subtasks = ticket.subtasks ?? []
   const doneSubtasks = subtasks.filter((s) => s.completed).length
   const blockedCount = ticket.blockedBy?.length ?? 0
@@ -190,14 +192,7 @@ export function KanbanCard({
             </Badge>
           )}
 
-          {labels.slice(0, 3).map((label, i) => (
-            <Badge key={label.id ?? i} tone="neutral" maxWidth="8rem" title={label.name}>
-              {label.name}
-            </Badge>
-          ))}
-          {labels.length > 3 && (
-            <span className="text-xs text-text-muted tabular">+{labels.length - 3}</span>
-          )}
+          <LabelBadges labels={labels} />
 
           {subtasks.length > 0 && (
             <span className="inline-flex items-center gap-1 text-xs text-text-muted tabular">

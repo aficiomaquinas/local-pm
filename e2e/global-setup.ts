@@ -15,7 +15,7 @@ export default async function globalSetup() {
     withDatabase(sourceUri, 'local-pm-e2e-' + (process.env.E2E_PORT ?? 3020))
 
   if (e2eUri === sourceUri) {
-    throw new Error('Refusing to seed statuses into the working database.')
+    throw new Error('Refusing to migrate the working database from the e2e setup.')
   }
 
   const originalUri = process.env.DATABASE_URI
@@ -25,6 +25,7 @@ export default async function globalSetup() {
     const { getPayload } = await import('payload')
     const { default: config } = await import('../src/payload.config')
     const { migrateTicketStatuses } = await import('../src/migrations/configurable-statuses')
+    const { migrateInlineLabels } = await import('../src/migrations/shared-labels')
 
     const payload = await getPayload({ config })
     const report = await migrateTicketStatuses(payload)
@@ -32,6 +33,14 @@ export default async function globalSetup() {
     if (report.ticketsUnresolved.length > 0) {
       throw new Error(
         `E2E database has ${report.ticketsUnresolved.length} tickets whose status could not be resolved.`,
+      )
+    }
+
+    const labelReport = await migrateInlineLabels(payload)
+
+    if (labelReport.ticketsUnresolved.length > 0) {
+      throw new Error(
+        `E2E database has ${labelReport.ticketsUnresolved.length} tickets whose labels could not be resolved.`,
       )
     }
 

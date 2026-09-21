@@ -10,7 +10,7 @@ A lightweight, self-hosted project management tool with a built-in MCP (Model Co
 - **Tickets** - Full-featured tickets with:
   - Priority levels (Urgent, High, Medium, Low)
   - Due dates
-  - Custom labels with colors
+  - Shared labels, optionally grouped, reusable across every project
   - Subtasks with completion tracking
   - Ticket dependencies (blocked by)
   - Rich text descriptions
@@ -127,7 +127,7 @@ Add to your Claude Desktop config (`~/.claude/claude_desktop_config.json`):
 
 ## MCP Tools Reference
 
-The MCP server exposes 30 tools for complete project management:
+The MCP server exposes 31 tools for complete project management:
 
 ### Project Tools
 | Tool | Description |
@@ -171,6 +171,11 @@ The MCP server exposes 30 tools for complete project management:
 | `add_comment` | Post a comment, or a reply in an existing thread |
 | `update_comment` | Edit a comment, or resolve/reopen a thread |
 | `delete_comment` | Delete a comment and any replies under it |
+
+### Label Tools
+| Tool | Description |
+|------|-------------|
+| `list_labels` | List the workspace's shared labels, with their group |
 
 ### Activity Tools
 | Tool | Description |
@@ -314,6 +319,21 @@ sessions. First run needs browsers:
 ```bash
 npx playwright install chromium
 ```
+
+## Upgrading an existing install
+
+Two data-model changes need a one-off migration. Both are idempotent, so running
+them twice is safe, and both run automatically against the E2E database.
+
+```bash
+npm run migrate:statuses   # string ticket statuses -> the statuses collection
+npm run migrate:labels     # inline ticket labels   -> the labels collection
+```
+
+`migrate:labels` creates one shared label per distinct inline label name, keeping
+the closest colour from the fixed palette, and rewrites each ticket to reference
+them. Labels that differed only in casing or punctuation collapse into one — that
+is the point of the change.
 
 ## Tech Stack
 

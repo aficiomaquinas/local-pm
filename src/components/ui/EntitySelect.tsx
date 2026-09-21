@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { AlertCircle, ArrowDownUp, Check, ChevronDown, Loader2, Search, X } from 'lucide-react'
+import { AlertCircle, ArrowDownUp, Check, ChevronDown, Loader2, Plus, Search, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useEntityQuery, type EntityCollection } from '@/hooks/useEntityQuery'
 import { TONE_TEXT, type StateIcon, type Tone } from '@/lib/status'
@@ -15,6 +15,7 @@ export interface EntityOption {
   hint?: string
   icon?: StateIcon
   swatch?: string | null
+  swatchClass?: string
   tone?: Tone
   avatar?: { name: string | null; seed?: string | null }
 }
@@ -47,13 +48,25 @@ export interface EntitySelectProps<T extends { id: string }> {
   contentClassName?: string
   'aria-label'?: string
   'aria-describedby'?: string
+
+  onCreate?: (name: string) => void | Promise<void>
+  createLabel?: (name: string) => string
 }
 
 function OptionBody({ option }: { option: EntityOption }) {
   const Icon = option.icon
   return (
     <>
-      {option.swatch && (
+      {option.swatchClass && (
+        <span
+          aria-hidden
+          className={cn(
+            'size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10',
+            option.swatchClass,
+          )}
+        />
+      )}
+      {!option.swatchClass && option.swatch && (
         <span
           aria-hidden
           className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10"
@@ -101,6 +114,8 @@ export function EntitySelect<T extends { id: string }>({
   required,
   className,
   contentClassName,
+  onCreate,
+  createLabel,
   ...aria
 }: EntitySelectProps<T>) {
   const listboxId = useId()
@@ -125,9 +140,34 @@ export function EntitySelect<T extends { id: string }>({
     })
 
   const options = useMemo(() => {
-    const mapped = docs.map((doc) => ({ option: toOption(doc), doc: doc as T | null }))
-    return emptyOption ? [{ option: emptyOption, doc: null as T | null }, ...mapped] : mapped
-  }, [docs, emptyOption, toOption])
+    const mapped = docs.map((doc) => ({
+      option: toOption(doc),
+      doc: doc as T | null,
+      create: null as string | null,
+    }))
+    const withEmpty = emptyOption
+      ? [{ option: emptyOption, doc: null as T | null, create: null as string | null }, ...mapped]
+      : mapped
+
+    const pending = query.trim()
+    const duplicate = mapped.some(
+      (entry) => entry.option.label.trim().toLowerCase() === pending.toLowerCase(),
+    )
+    if (!onCreate || !pending || duplicate) return withEmpty
+
+    return [
+      ...withEmpty,
+      {
+        option: {
+          value: `__create__:${pending}`,
+          label: createLabel ? createLabel(pending) : `Create “${pending}”`,
+          icon: Plus,
+        } as EntityOption,
+        doc: null as T | null,
+        create: pending,
+      },
+    ]
+  }, [createLabel, docs, emptyOption, onCreate, query, toOption])
 
   useEffect(() => {
     if (selectedOption !== undefined) setResolved(selectedOption)
@@ -181,10 +221,16 @@ export function EntitySelect<T extends { id: string }>({
   const choose = (index: number) => {
     const entry = options[index]
     if (!entry) return
-    onChange(entry.option.value, entry.doc)
+
     setOpen(false)
     setQuery('')
     triggerRef.current?.focus()
+
+    if (entry.create && onCreate) {
+      void onCreate(entry.create)
+      return
+    }
+    onChange(entry.option.value, entry.doc)
   }
 
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
