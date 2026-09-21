@@ -21,34 +21,13 @@ import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { DependencyGraph } from '@/components/kanban/DependencyGraph'
 import { CommentsSection } from '@/components/comments/CommentsSection'
 import { SubtaskList } from './SubtaskList'
+import { EpicSection } from './EpicSection'
+import { Section } from './TicketSection'
 import type { Project, Ticket } from '@/payload-types'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { statusIdOf } from '@/lib/workflow'
 import { labelsOf } from '@/lib/labels'
 import type { Label } from '@/payload-types'
-
-export function Section({
-  title,
-  icon: Icon,
-  action,
-  children,
-}: {
-  title: string
-  icon?: React.ComponentType<{ className?: string }>
-  action?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <div className="flex items-center gap-2">
-        {Icon && <Icon className="size-4 shrink-0 text-text-muted" />}
-        <h3 className="text-xs font-medium uppercase tracking-wide text-text-muted">{title}</h3>
-        {action && <div className="ml-auto">{action}</div>}
-      </div>
-      {children}
-    </section>
-  )
-}
 
 export function TicketBody({
   ticket,
@@ -259,6 +238,8 @@ export function TicketBody({
           ticket between projects changes its key, so that lives on the edit page.
         </p>
       </Section>
+
+      <EpicSection ticket={ticket} patch={patch} />
 
       <Section title="Labels" icon={Tag}>
         <LabelChips labels={labels} onRemove={(label) => void setLabels(labels.filter((entry) => entry.id !== label.id))} />

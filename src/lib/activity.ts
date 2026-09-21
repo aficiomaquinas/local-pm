@@ -49,6 +49,7 @@ export const TRACKED_FIELDS = [
   'labels',
   'blockedBy',
   'subtasks',
+  'epic',
 ] as const
 
 export type TrackedField = (typeof TRACKED_FIELDS)[number]
@@ -66,6 +67,7 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
   labels: 'Labels',
   blockedBy: 'Blocked by',
   subtasks: 'Subtasks',
+  epic: 'Epic',
 }
 
 const OPAQUE_FIELDS = new Set<TrackedField>(['description'])
@@ -119,6 +121,18 @@ function subtaskSummary(value: unknown): string | null {
   return `${done}/${total} done`
 }
 
+function epicLabel(value: unknown): string | null {
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    const key = typeof record.ticketId === 'string' ? record.ticketId.trim() : ''
+    const title = typeof record.title === 'string' ? record.title.trim() : ''
+    if (key && title) return `${key} · ${title}`
+    if (key) return key
+    if (title) return title
+  }
+  return idOf(value)
+}
+
 export function displayValue(field: TrackedField, value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null
 
@@ -135,6 +149,8 @@ export function displayValue(field: TrackedField, value: unknown): string | null
   }
 
   if (field === 'subtasks') return subtaskSummary(value)
+
+  if (field === 'epic') return epicLabel(value)
 
   if (field === 'dueDate') {
     const date = new Date(value as string)
@@ -181,6 +197,7 @@ function comparable(field: TrackedField, value: unknown): string {
     field === 'project' ||
     field === 'team' ||
     field === 'status' ||
+    field === 'epic' ||
     field === 'cycle'
   )
     return idOf(value) ?? ''

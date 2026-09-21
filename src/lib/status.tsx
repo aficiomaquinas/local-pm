@@ -18,7 +18,10 @@ import {
   PriorityUrgent,
 } from '@/components/ui/icons/Priority'
 import { ProjectStatus, StatusType, TicketPriority } from '@/types/enums'
+import { statusTypeOf } from '@/lib/workflow'
 import type { Status } from '@/payload-types'
+
+export { statusTypeOf }
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'accent'
 
@@ -82,10 +85,6 @@ export function statusMeta(status: Status | string | null | undefined): StateMet
   if (!status || typeof status === 'string') return FALLBACK_STATUS_META
   const { icon, tone } = statusTypeMeta(status.type)
   return { value: status.key, label: status.name, icon, tone }
-}
-
-export function statusTypeOf(status: Status | string | null | undefined): string | null {
-  return status && typeof status !== 'string' ? status.type : null
 }
 
 export function isClosedStatus(status: Status | string | null | undefined): boolean {

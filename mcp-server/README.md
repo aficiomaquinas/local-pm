@@ -35,6 +35,9 @@ This MCP server provides AI models with full access to Local PM functionality:
 - `move_ticket` - Move ticket between statuses (todo, in_progress, done)
 - `delete_ticket` - Delete a ticket
 
+### Epics
+- `get_epic` - Get an epic with the tickets that roll up into it and its rollup progress
+
 ### Board View
 - `get_board` - Get Kanban board view for a project (tickets grouped by status)
 
@@ -302,6 +305,8 @@ Lists tickets with optional filtering.
 - `project` (string, optional): Filter by project ID
 - `team` (string, optional): Filter by team ID
 - `assigneeId` (string, optional): Filter by assignee (member) ID
+- `epicId` (string, optional): Only tickets that roll up into this epic
+- `isEpic` (boolean, optional): `true` for epics only, `false` for non-epic tickets only
 - `status` (string, optional): Filter by status (todo, in_progress, done)
 - `limit` (number, optional): Max results (default: 50)
 - `page` (number, optional): Page number (default: 1)
@@ -323,6 +328,8 @@ Creates a new ticket.
 - `team` (string, optional): Assigned team ID
 - `assignee` (string, optional): Assignee member ID — use `list_members` to find one
 - `subtasks` (array, optional): Array of subtask objects with `title` and optional `completed` fields
+- `isEpic` (boolean, optional): Create it as an epic
+- `epic` (string, optional): ID of the epic it rolls up into
 
 ### update_ticket
 Updates an existing ticket.
@@ -332,6 +339,15 @@ Updates an existing ticket.
 - `title` (string, optional): New title
 - `description` (string, optional): New description
 - `team` (string, optional): New team ID
+- `isEpic` (boolean, optional): Turn the ticket into an epic, or back into a normal ticket
+- `epic` (string, optional): ID of the epic it rolls up into, or `null` to take it out
+
+### get_epic
+Gets an epic together with its children and rollup progress. Cancelled children are excluded
+from the percentage. Fails if the ticket is not marked as an epic.
+
+**Parameters:**
+- `id` (string, required): Ticket ID of the epic
 
 ### move_ticket
 Moves a ticket to a different status.

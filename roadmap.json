@@ -308,7 +308,7 @@
       "slug": "epics-milestones",
       "title": "Epics / milestones",
       "tier": 1,
-      "status": "todo",
+      "status": "done",
       "effort": "M",
       "summary": "Parent-child ticket hierarchy, or a milestones collection, with rollup progress on the parent.",
       "rationale": "Plane calls them Modules, Jira calls them epics. Subtasks today are a flat array of strings on one ticket — not a hierarchy.",
@@ -321,9 +321,9 @@
         "src/collections/Tickets.ts",
         "src/components/kanban/"
       ],
-      "startedAt": null,
-      "completedAt": null,
-      "notes": "Decide early: promote the existing `subtasks[]` array to real tickets, or keep both concepts."
+      "startedAt": "2026-09-21",
+      "completedAt": "2026-09-21",
+      "notes": "PR #30. Shipped as a one-level parent/child hierarchy between real tickets, named \"epic\". Kept the flat subtasks[] array untouched, so the two concepts coexist: subtasks are a checklist inside one ticket, an epic is a container of real tickets. Schema: isEpic (checkbox, indexed) and epic (self-relationship, indexed) on tickets. beforeChange rejects self-parenting, a non-epic parent, a cross-project parent, nested epics, and demoting an epic that still has children; afterDelete releases children rather than orphaning them. That detach must run outside the delete request transaction — a null-set issued with the delete req is reported as applied but never persists. Rollup lives in src/lib/epic.ts (pure, unit-tested): cancelled children stay in the total but leave the denominator, matching how Linear scores project progress. UI: an Epic section in TicketBody, so it appears on both the full ticket page and the board side peek, with progress bar, child list, add/remove with a 10s undo, and promote/demote; board cards mark epics and show a child its parent key; the ticket form gained an epic fieldset. MCP: epic/isEpic on create_ticket and update_ticket, epicId/isEpic filters and include fields on list_tickets and get_board, and a new get_epic returning the epic, its children and rollup progress. Migration: none needed — isEpic defaults false and epic is unset, so existing tickets are unaffected. Deliberately left out: epic grouping/filtering on the board (belongs with task 10), epic progress on the board card (the board pages 20 tickets per column, so any rollup computed there would be wrong)."
     },
     {
       "id": 10,
@@ -1322,6 +1322,26 @@
       "startedAt": null,
       "completedAt": null,
       "notes": "Found while doing task 6. The enum appears four times. Replace it with a free string plus a description pointing at get_board for the workspace workflow, or add a list_statuses tool (already wanted by task 48) and reference that."
+    },
+    {
+      "id": 58,
+      "slug": "flaky-e2e-suite",
+      "title": "Stabilise the flaky end-to-end suite",
+      "tier": 2,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Two specs fail intermittently under full-suite load: the 20-concurrent-creates regression test, and the comment composer mention-picker tests on their first cold Next compile.",
+      "rationale": "npm run verify is the gate for every task in this file, so a suite that fails roughly one run in two trains contributors to rerun until green and hides real breakage. Confirmed pre-existing on 2026-09-21: a full run on clean main failed e2e/regressions.spec.ts \"20 CONCURRENT creates all get distinct ids\", the same test that failed on an unrelated feature branch, while both pass every time in isolation. The comment specs fail only on the run that pays for the first /tickets/[id] dev compile, which suggests they type into the composer before the page is interactive.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "e2e/regressions.spec.ts",
+        "e2e/comments.spec.ts",
+        "playwright.config.ts"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Found while verifying task 9. Two likely angles: the concurrency test races a remote Mongo cluster and may need a retry or a longer expect window; the comment specs should wait for the composer to be interactive rather than typing straight after goto. Do not paper over either with a blanket retries setting until the cause is understood."
     }
   ]
 }
