@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Repeat,
   UserRound,
   Users,
 } from 'lucide-react'
@@ -28,6 +29,7 @@ const WIDTH_KEY = 'local-pm:sidebar-width'
 export const NAV_ITEMS = [
   { href: '/board', label: 'Board', icon: LayoutDashboard, chord: 'g v' },
   { href: '/my-tickets', label: 'My tickets', icon: UserRound, chord: 'g m' },
+  { href: '/cycles', label: 'Cycles', icon: Repeat, chord: 'g c' },
   { href: '/projects', label: 'Projects', icon: FolderKanban, chord: 'g p' },
   { href: '/teams', label: 'Teams', icon: Users, chord: 'g t' },
 ]

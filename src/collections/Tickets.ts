@@ -102,6 +102,15 @@ export const Tickets: CollectionConfig = {
       },
     },
     {
+      name: 'cycle',
+      type: 'relationship',
+      relationTo: 'cycles',
+      index: true,
+      admin: {
+        description: 'The cycle this ticket is committed to, when the project runs cycles',
+      },
+    },
+    {
       name: 'assignee',
       type: 'relationship',
       relationTo: 'members',

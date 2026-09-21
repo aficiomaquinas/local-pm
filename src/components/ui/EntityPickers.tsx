@@ -1,11 +1,13 @@
 'use client'
 
 import { useCallback } from 'react'
-import { FolderKanban, Users } from 'lucide-react'
+import { FolderKanban, Repeat, Users } from 'lucide-react'
 import { EntitySelect, type EntityOption } from './EntitySelect'
 import { projectIcon } from './EntityMark'
 import { statusMeta } from '@/lib/status'
-import type { Member, Project, Team, Ticket } from '@/payload-types'
+import { CYCLE_STATE_META, cycleState } from '@/lib/cycle-display'
+import { formatDateRange } from '@/lib/format'
+import type { Cycle, Member, Project, Team, Ticket } from '@/payload-types'
 
 const PROJECT_SORTS = [
   { value: 'name', label: 'A–Z' },
@@ -29,6 +31,11 @@ const TICKET_SORTS = [
   { value: '-createdAt', label: 'Newest' },
   { value: 'title', label: 'A–Z' },
   { value: 'ticketId', label: 'Key' },
+]
+
+const CYCLE_SORTS = [
+  { value: '-number', label: 'Latest' },
+  { value: 'number', label: 'Earliest' },
 ]
 
 export function projectOption(project: Project): EntityOption {
@@ -68,6 +75,23 @@ export function ticketOption(ticket: Ticket): EntityOption {
     icon: meta.icon,
     tone: meta.tone,
   }
+}
+
+export function cycleOption(cycle: Cycle): EntityOption {
+  const meta = CYCLE_STATE_META[cycleState(cycle)]
+  return {
+    value: cycle.id,
+    label: cycle.name,
+    hint: formatDateRange(cycle.startsAt, cycle.endsAt),
+    icon: meta.icon,
+    tone: meta.tone,
+  }
+}
+
+export const NO_CYCLE_OPTION: EntityOption = {
+  value: '',
+  label: 'No cycle',
+  icon: Repeat,
 }
 
 type SharedProps = {
@@ -159,6 +183,36 @@ export function MemberSelect({
       where={{ active: 'true' }}
       searchPlaceholder="Search people"
       placeholder={props.placeholder ?? 'No assignee'}
+      {...props}
+    />
+  )
+}
+
+export function CycleSelect({
+  onChange,
+  selected,
+  where,
+  allLabel,
+  ...props
+}: SharedProps & {
+  onChange: (value: string, cycle: Cycle | null) => void
+  selected?: Cycle | null
+  where?: Record<string, string | null | undefined>
+  allLabel?: string
+}) {
+  const toOption = useCallback(cycleOption, [])
+  return (
+    <EntitySelect<Cycle>
+      collection="cycles"
+      searchField="name"
+      sortOptions={CYCLE_SORTS}
+      toOption={toOption}
+      onChange={onChange}
+      selectedOption={selected !== undefined ? (selected ? cycleOption(selected) : null) : undefined}
+      emptyOption={allLabel ? { ...NO_CYCLE_OPTION, label: allLabel } : NO_CYCLE_OPTION}
+      where={where}
+      searchPlaceholder="Search cycles"
+      placeholder={props.placeholder ?? 'No cycle'}
       {...props}
     />
   )

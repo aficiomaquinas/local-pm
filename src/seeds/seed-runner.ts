@@ -315,6 +315,7 @@ async function seed() {
   console.log('Clearing existing data...')
   await payload.delete({ collection: 'comments', where: {} })
   await payload.delete({ collection: 'tickets', where: {} })
+  await payload.delete({ collection: 'cycles', where: {} })
   await payload.delete({ collection: 'members', where: {} })
   await payload.delete({ collection: 'projects', where: {} })
   await payload.delete({ collection: 'teams', where: {} })

@@ -27,6 +27,7 @@ Do not invent alternatives.
 | Chord | Destination |
 |---|---|
 | `G` `B` | Backlog |
+| `G` `C` | Cycles |
 | `G` `M` | My tickets |
 | `G` `I` | Inbox / notifications |
 | `G` `P` | Projects |

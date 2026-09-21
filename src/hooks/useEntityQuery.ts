@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { appendTicketSearch } from '@/lib/ticket-search'
 
-export type EntityCollection = 'projects' | 'teams' | 'tickets' | 'members'
+export type EntityCollection = 'projects' | 'teams' | 'tickets' | 'members' | 'cycles'
 
 export interface EntityQueryOptions {
   collection: EntityCollection

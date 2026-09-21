@@ -43,6 +43,7 @@ export const TRACKED_FIELDS = [
   'assignee',
   'project',
   'team',
+  'cycle',
   'dueDate',
   'description',
   'labels',
@@ -59,6 +60,7 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
   assignee: 'Assignee',
   project: 'Project',
   team: 'Team',
+  cycle: 'Cycle',
   dueDate: 'Due date',
   description: 'Description',
   labels: 'Labels',
@@ -174,7 +176,13 @@ function comparable(field: TrackedField, value: unknown): string {
     const date = new Date(value as string)
     return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10)
   }
-  if (field === 'assignee' || field === 'project' || field === 'team' || field === 'status')
+  if (
+    field === 'assignee' ||
+    field === 'project' ||
+    field === 'team' ||
+    field === 'status' ||
+    field === 'cycle'
+  )
     return idOf(value) ?? ''
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value.trim()
