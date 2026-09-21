@@ -176,6 +176,7 @@ test.describe('initiative rollup in the app', () => {
 
     await page.goto(`/initiatives/${initiative.id}?tab=projects`)
     await page.getByLabel('Add a project').click()
+    await page.getByPlaceholder('Search projects').fill(added.prefix)
     await page.getByRole('option', { name: new RegExp(added.prefix) }).first().click()
 
     await expect

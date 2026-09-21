@@ -16,6 +16,7 @@ const base = {
   assignee: null,
   project: 'p1',
   team: null,
+  startDate: null,
   dueDate: null,
   labels: [],
   blockedBy: [],
@@ -143,6 +144,19 @@ describe('diffTicket', () => {
     expect(diffTicket(before, after)[0]).toMatchObject({ from: '2026-09-20', to: '2026-09-25' })
   })
 
+  it('tracks a start date the same way it tracks a due date', () => {
+    const events = diffTicket(base, { ...base, startDate: '2026-09-20T09:00:00.000Z' })
+    expect(events).toEqual([
+      { action: 'changed', field: 'startDate', from: null, to: '2026-09-20' },
+    ])
+  })
+
+  it('reports moving both ends of a range as two events', () => {
+    const before = { ...base, startDate: '2026-09-01', dueDate: '2026-09-20' }
+    const after = { ...base, startDate: '2026-09-08', dueDate: '2026-09-25' }
+    expect(diffTicket(before, after).map((e) => e.field)).toEqual(['startDate', 'dueDate'])
+  })
+
   it('reports a description edit without leaking its contents', () => {
     const events = diffTicket(base, { ...base, description: { root: { children: [] } } })
     expect(events).toEqual([
@@ -182,6 +196,12 @@ describe('describeEvent', () => {
     expect(describeEvent({ action: 'changed', field: 'dueDate', from: '2026-09-20', to: null })).toBe(
       'cleared due date (was 2026-09-20)',
     )
+  })
+
+  it('names the start date in words a reader recognises', () => {
+    expect(
+      describeEvent({ action: 'changed', field: 'startDate', from: null, to: '2026-09-20' }),
+    ).toBe('set start date to 2026-09-20')
   })
 
   it('phrases a description edit without values', () => {
