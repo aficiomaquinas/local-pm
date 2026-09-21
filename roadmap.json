@@ -353,7 +353,7 @@
       "slug": "start-and-target-dates",
       "title": "Start date and target date",
       "tier": 1,
-      "status": "todo",
+      "status": "done",
       "effort": "S",
       "summary": "Add start and target dates to tickets and projects alongside the existing `dueDate`.",
       "rationale": "Prerequisite for any timeline view. Tickets currently have a single day-only due date and projects have no dates at all.",
@@ -363,11 +363,16 @@
       ],
       "touches": [
         "src/collections/Tickets.ts",
-        "src/collections/Projects.ts"
+        "src/collections/Projects.ts",
+        "src/lib/dates.ts",
+        "src/components/ui/DatePicker.tsx",
+        "src/components/tickets/",
+        "src/components/projects/",
+        "mcp-server/src/index.ts"
       ],
-      "startedAt": null,
-      "completedAt": null,
-      "notes": ""
+      "startedAt": "2026-09-21",
+      "completedAt": "2026-09-21",
+      "notes": "Shipped on feat/start-and-target-dates. SHAPE, and why it is not literally start+target on both: the incumbents were checked first. Linear gives projects a start date and a target date and gives issues only a due date; Jira gives issues a start date and a due date; Plane runs start+target on issues. Tickets therefore gained startDate and keep the existing dueDate as the end of the range - adding a targetDate beside dueDate would have put two fields with the same job on one form, and a rename would have cost a migration for no gain. Projects, which had no dates at all, gained both startDate and targetDate, which is the pair Linear and Asana portfolios use. Task 16 gets one bar per ticket (startDate to dueDate) and one per project (startDate to targetDate), which is what it needs. NO MIGRATION: all three fields are optional and additive, so existing installs read as empty until someone fills them in. All are indexed, since a timeline view queries on them. ORDERING RULE: src/lib/dates.ts is pure and holds toDay (UTC day, the same normalisation the activity differ already used), dateOrderError and pendingDateOrderError, plus the TICKET_DATES and PROJECT_DATES specs so the wording is identical on the client and the server. A reversed range is rejected in beforeChange on both collections with an APIError carrying a public message that names the fix - \"Target date is before the start date. Choose a target date on or after 2026-08-28.\" A PATCH is merged against originalDoc before checking, so pulling a due date back behind a stored start date fails, and clearing the start date in the same request lets the same due date through. Equal dates are a valid one-day range. The same function drives the client-side check on both forms, inline plus error summary. Inline edits on the two detail views go through useOptimisticPatch, so a rejected date reverts visibly and the server message lands in the toast rather than being swallowed. ACTIVITY: startDate joins TRACKED_FIELDS; the dueDate day-comparison special case became a DAY_FIELDS set covering both, so a timestamp change within the same day still records nothing. SURFACES: start date on the ticket form and ticket detail; start and target on the project form and project detail, where the aside also reports the span in days; a sortable Target column on the projects list, with the sort in the URL like the others. The board card was deliberately left alone - it is at its metadata budget per 05-board-and-dnd.md, and the ticket table was left at seven columns for the same reason. MCP parity: startDate on create_ticket/update_ticket, startDate and targetDate on create_project/update_project, startDate added to the include enums of list_tickets and get_board, README updated. TWO FIXES THE WORK FORCED: DatePicker committed on every blur even when the value had not changed, so tabbing between two pickers fired a redundant PATCH that raced the real one and Mongo returned a write conflict - it now only calls onChange when the normalised value actually differs. And its icon buttons were both called \"Choose a date from the calendar\", which was unambiguous while a form had one picker and is not now, so they take an optional label and read \"Choose the start date from the calendar\". Verified: npm run verify exit 0 - typecheck, 266 Vitest, 148 Playwright, with E2E_PORT pinned to 3033 so it could not collide with the sessions on tasks 8 and 10. 14 new specs in e2e/dates.spec.ts and 25 unit tests in tests/dates.test.ts. Deliberately left out: no overdue or at-risk treatment for a start date that has passed with the ticket still unstarted (nothing consumes it yet); no date filtering on the ticket list; no cascade when a date moves on a ticket other tickets depend on, which belongs with task 16."
     },
     {
       "id": 12,
@@ -1364,6 +1369,25 @@
       "startedAt": null,
       "completedAt": null,
       "notes": "Raised from task 54 on 2026-09-21. The default source URI in playwright.config.ts and e2e/global-setup.ts is already mongodb://localhost:27018/local-pm, so the wiring assumes a local instance; this machine has nothing listening on 27018 and .env points DATABASE_URI at mongodb+srv Atlas. Options worth weighing: mongodb-memory-server as a devDependency (no install step, but it downloads a binary on first run), a documented docker compose service, or simply documenting the expectation and failing with a clear message when nothing is listening. Whichever is chosen, keep E2E_DATABASE_URI as the explicit override."
+    },
+    {
+      "id": 61,
+      "slug": "concurrent-patches-return-a-write-conflict",
+      "title": "Two quick inline edits on one record can return a 500",
+      "tier": 2,
+      "status": "todo",
+      "effort": "S",
+      "summary": "Two PATCHes to the same record landing within a few hundred milliseconds make Mongo report a write conflict and the second request fails with a 500.",
+      "rationale": "Every detail view autosaves per field through useOptimisticPatch. A user who changes status and then priority quickly is issuing exactly this pattern, and the second edit silently reverts with a raw error in the toast.",
+      "dependsOn": [],
+      "unblocks": [],
+      "touches": [
+        "src/hooks/useOptimisticPatch.ts",
+        "src/collections/"
+      ],
+      "startedAt": null,
+      "completedAt": null,
+      "notes": "Found while building task 11. Reproduced with two date patches on one project: the server logs \"Write conflict during plan execution and yielding is disabled\" as a TransientTransactionError and returns 500. Worth weighing: retrying a TransientTransactionError on the server, coalescing patches per record in the hook so a second change queues behind the first, or both. The hook already reverts and toasts on failure, so the user does not lose data - but the message is a raw Mongo string, which fails the error copy rule in 07-feedback-and-errors.md."
     }
   ]
 }

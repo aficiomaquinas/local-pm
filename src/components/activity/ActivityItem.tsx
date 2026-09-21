@@ -2,6 +2,7 @@
 
 import {
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   CircleDot,
   CornerDownRight,
@@ -38,6 +39,7 @@ const FIELD_ICONS: Record<TrackedField, IconType> = {
   project: FolderClosed,
   team: Users,
   cycle: Repeat,
+  startDate: CalendarRange,
   dueDate: CalendarDays,
   description: FileText,
   labels: Tag,

@@ -17,7 +17,7 @@ import { Menu } from '@/components/ui/Menu'
 import { RowSkeletonList, useDelayedFlag } from '@/components/ui/Skeleton'
 import { ProjectStatusBadge } from '@/components/ui/StateIndicator'
 import { projectStatusOptions } from '@/lib/status'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatDateCompact } from '@/lib/format'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/Toast'
 import { Kbd } from '@/components/ui/Kbd'
@@ -27,7 +27,15 @@ const PAGE_SIZE = 20
 const SEARCH_DEBOUNCE_MS = 300
 const MIN_SEARCH = 1
 
-type SortKey = 'name' | '-name' | 'createdAt' | '-createdAt' | 'prefix' | '-prefix'
+type SortKey =
+  | 'name'
+  | '-name'
+  | 'createdAt'
+  | '-createdAt'
+  | 'prefix'
+  | '-prefix'
+  | 'targetDate'
+  | '-targetDate'
 
 interface Pagination {
   page: number
@@ -81,7 +89,16 @@ export function ProjectsList({
       setQuery(params.get('q') ?? '')
       const value = params.get('sort') ?? '-createdAt'
       setSort(
-        ['name', '-name', 'createdAt', '-createdAt', 'prefix', '-prefix'].includes(value)
+        [
+          'name',
+          '-name',
+          'createdAt',
+          '-createdAt',
+          'prefix',
+          '-prefix',
+          'targetDate',
+          '-targetDate',
+        ].includes(value)
           ? (value as SortKey)
           : '-createdAt',
       )
@@ -193,6 +210,8 @@ export function ProjectsList({
         '-createdAt': 'Newest first',
         prefix: 'Prefix A–Z',
         '-prefix': 'Prefix Z–A',
+        targetDate: 'Target date, soonest first',
+        '-targetDate': 'Target date, latest first',
       })[sort],
     [sort],
   )
@@ -212,7 +231,7 @@ export function ProjectsList({
     syncUrl({ q: merged.q, status: merged.status, sort: merged.sort }, push)
   }
 
-  const toggleSort = (key: 'name' | 'prefix' | 'createdAt') => {
+  const toggleSort = (key: 'name' | 'prefix' | 'createdAt' | 'targetDate') => {
     const next: SortKey = sort === key ? (`-${key}` as SortKey) : (key as SortKey)
     setFilters({ sort: next })
   }
@@ -442,6 +461,14 @@ export function ProjectsList({
                   >
                     Created
                   </Th>
+                  <Th
+                    sortable
+                    sortDirection={sortDirection('targetDate')}
+                    onSort={() => toggleSort('targetDate')}
+                    width="11rem"
+                  >
+                    Target
+                  </Th>
                   <Th width="4rem">
                     <span className="sr-only">Actions</span>
                   </Th>
@@ -476,6 +503,11 @@ export function ProjectsList({
                     </Td>
                     <Td className="tabular text-text-muted">
                       <span className="whitespace-nowrap">{formatDate(project.createdAt)}</span>
+                    </Td>
+                    <Td className="tabular text-text-muted">
+                      <span className="whitespace-nowrap">
+                        {project.targetDate ? formatDateCompact(project.targetDate) : '—'}
+                      </span>
                     </Td>
                     <Td align="right">
                       <span

@@ -219,10 +219,25 @@ export function TicketBody({
             </Field>
           )}
 
+          <Field label="Start date" optional hint="Type YYYY-MM-DD, or pick a day.">
+            {({ id, describedBy }) => (
+              <DatePicker
+                id={id}
+                label="Start date"
+                aria-describedby={describedBy}
+                value={ticket.startDate ? ticket.startDate.slice(0, 10) : ''}
+                onChange={(next) =>
+                  patch({ startDate: next || null } as Partial<Ticket>, 'the start date')
+                }
+              />
+            )}
+          </Field>
+
           <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
             {({ id, describedBy }) => (
               <DatePicker
                 id={id}
+                label="Due date"
                 aria-describedby={describedBy}
                 value={ticket.dueDate ? ticket.dueDate.slice(0, 10) : ''}
                 onChange={(next) =>

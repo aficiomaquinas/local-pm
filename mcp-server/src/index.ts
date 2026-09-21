@@ -523,6 +523,14 @@ const tools: Tool[] = [
           description: 'Hex color code (e.g., #6366f1)',
           default: '#6366f1',
         },
+        startDate: {
+          type: 'string',
+          description: 'Start date in ISO format (YYYY-MM-DD). Must not fall after targetDate.',
+        },
+        targetDate: {
+          type: 'string',
+          description: 'Target completion date in ISO format (YYYY-MM-DD)',
+        },
       },
       required: ['name', 'prefix'],
     },
@@ -557,6 +565,14 @@ const tools: Tool[] = [
         color: {
           type: 'string',
           description: 'New hex color code',
+        },
+        startDate: {
+          type: 'string',
+          description: 'New start date in ISO format (use null to clear). Must not fall after targetDate.',
+        },
+        targetDate: {
+          type: 'string',
+          description: 'New target date in ISO format (use null to clear)',
         },
       },
       required: ['id'],
@@ -1014,7 +1030,7 @@ const tools: Tool[] = [
           description: 'Additional fields to include in the response. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'cycle', 'priority', 'startDate', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -1089,6 +1105,10 @@ const tools: Tool[] = [
           description: 'Ticket priority',
           enum: ['no_priority', 'urgent', 'high', 'medium', 'low'],
           default: 'no_priority',
+        },
+        startDate: {
+          type: 'string',
+          description: 'Start date in ISO format (YYYY-MM-DD). Must not fall after dueDate.',
         },
         dueDate: {
           type: 'string',
@@ -1171,6 +1191,10 @@ const tools: Tool[] = [
           type: 'string',
           description: 'New ticket priority',
           enum: ['no_priority', 'urgent', 'high', 'medium', 'low'],
+        },
+        startDate: {
+          type: 'string',
+          description: 'New start date in ISO format (use null to clear). Must not fall after dueDate.',
         },
         dueDate: {
           type: 'string',
@@ -1270,7 +1294,7 @@ const tools: Tool[] = [
           description: 'Additional ticket fields to include. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'cycle', 'priority', 'startDate', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -1518,6 +1542,8 @@ async function handleToolCall(
         status: toPayloadValue(args.status as string) || 'ACTIVE',
         icon: args.icon || 'folder',
         color: args.color || '#6366f1',
+        startDate: args.startDate || null,
+        targetDate: args.targetDate || null,
       });
     }
     case 'update_project': {
@@ -1528,6 +1554,8 @@ async function handleToolCall(
       if (args.status) updates.status = toPayloadValue(args.status as string);
       if (args.icon) updates.icon = args.icon;
       if (args.color) updates.color = args.color;
+      if (args.startDate !== undefined) updates.startDate = args.startDate;
+      if (args.targetDate !== undefined) updates.targetDate = args.targetDate;
       return apiRequest(`/projects/${id}`, 'PATCH', updates);
     }
     case 'delete_project': {
@@ -1800,7 +1828,7 @@ async function handleToolCall(
       };
 
       const defaultFields = ['id', 'title', 'status', 'project'];
-      const optionalFields = ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'cycle', 'priority', 'startDate', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'];
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
@@ -1853,6 +1881,7 @@ async function handleToolCall(
           (await resolveStatusId(args.status as string, args.projectId as string | undefined)) ||
           (await defaultStatusId(args.projectId as string | undefined)),
         priority: toPayloadValue(args.priority as string) || 'NO_PRIORITY',
+        startDate: args.startDate || null,
         dueDate: args.dueDate || null,
         labels: (await resolveLabelIds(args.labels)) ?? [],
         subtasks: args.subtasks || [],
@@ -1871,6 +1900,7 @@ async function handleToolCall(
       if (args.cycle !== undefined) updates.cycle = args.cycle;
       if (args.status) updates.status = await resolveStatusId(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
+      if (args.startDate !== undefined) updates.startDate = args.startDate;
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
       if (args.labels !== undefined) updates.labels = await resolveLabelIds(args.labels);
       if (args.subtasks) updates.subtasks = args.subtasks;
@@ -1905,7 +1935,7 @@ async function handleToolCall(
       const tickets = response.docs || [];
 
       const defaultFields = ['id', 'title', 'status', 'project'];
-      const optionalFields = ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'cycle', 'priority', 'startDate', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'epic', 'isEpic', 'sortOrder', 'createdAt', 'updatedAt'];
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
