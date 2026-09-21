@@ -34,6 +34,8 @@ export interface ActivityEvent {
   field: string | null
   from: string | null
   to: string | null
+  fromId?: string | null
+  toId?: string | null
 }
 
 export const TRACKED_FIELDS = [
@@ -44,6 +46,7 @@ export const TRACKED_FIELDS = [
   'project',
   'team',
   'cycle',
+  'estimate',
   'dueDate',
   'description',
   'labels',
@@ -62,6 +65,7 @@ export const FIELD_LABELS: Record<TrackedField, string> = {
   project: 'Project',
   team: 'Team',
   cycle: 'Cycle',
+  estimate: 'Estimate',
   dueDate: 'Due date',
   description: 'Description',
   labels: 'Labels',
@@ -206,6 +210,15 @@ function comparable(field: TrackedField, value: unknown): string {
   return String(value)
 }
 
+const RECORD_FIELDS = new Set<TrackedField>([
+  'status',
+  'assignee',
+  'project',
+  'team',
+  'cycle',
+  'epic',
+])
+
 export function diffTicket(
   before: Record<string, unknown> | null | undefined,
   after: Record<string, unknown> | null | undefined,
@@ -219,12 +232,19 @@ export function diffTicket(
     if (!(field in after)) continue
     if (comparable(field, before[field]) === comparable(field, after[field])) continue
 
-    events.push({
+    const event: ActivityEvent = {
       action: 'changed',
       field,
       from: displayValue(field, before[field]),
       to: displayValue(field, after[field]),
-    })
+    }
+
+    if (RECORD_FIELDS.has(field)) {
+      event.fromId = idOf(before[field])
+      event.toId = idOf(after[field])
+    }
+
+    events.push(event)
   }
 
   return events

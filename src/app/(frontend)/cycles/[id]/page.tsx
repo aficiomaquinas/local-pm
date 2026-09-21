@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { CycleDetail } from '@/components/cycles/CycleDetail'
 import { cycleSettingsOf } from '@/lib/cycle-service'
+import { loadBurndown, snapshotOf } from '@/lib/burndown-service'
 import { cycleProgress } from '@/lib/cycles'
 import { CycleAutomation } from '@/types/enums'
 import type { Cycle, Project } from '@/payload-types'
@@ -56,12 +57,15 @@ export default async function CyclePage({ params }: CyclePageProps) {
     )
 
     const settings = cycleSettingsOf(project)
+    const burndown = await loadBurndown(payload, cycle, project)
 
     return (
       <CycleDetail
         cycle={{ ...cycle, project: project.id }}
         project={project}
         progress={progress}
+        burndown={burndown}
+        frozen={Boolean(snapshotOf(cycle))}
         closable={settings.enabled && settings.automation === CycleAutomation.MANUAL}
       />
     )

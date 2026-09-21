@@ -172,6 +172,20 @@ export const LABEL_COLOR_OPTIONS = [
   { label: 'Red', value: LabelColor.RED },
 ]
 
+export enum EstimateScale {
+  LINEAR = 'LINEAR',
+  EXPONENTIAL = 'EXPONENTIAL',
+  FIBONACCI = 'FIBONACCI',
+  TSHIRT = 'TSHIRT',
+}
+
+export const ESTIMATE_SCALE_OPTIONS = [
+  { label: 'Linear — 1, 2, 3, 4, 5', value: EstimateScale.LINEAR },
+  { label: 'Fibonacci — 1, 2, 3, 5, 8, 13', value: EstimateScale.FIBONACCI },
+  { label: 'Exponential — 1, 2, 4, 8, 16', value: EstimateScale.EXPONENTIAL },
+  { label: 'T-shirt — XS, S, M, L, XL', value: EstimateScale.TSHIRT },
+]
+
 export const LEGACY_LABEL_COLORS: Record<string, LabelColor> = {
   '#64748b': LabelColor.SLATE,
   '#6366f1': LabelColor.INDIGO,

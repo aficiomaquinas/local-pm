@@ -15,6 +15,8 @@ import {
   type CyclePlan,
   type IsoDate,
 } from './cycles'
+import { loadBurndown } from './burndown-service'
+import type { BurndownSeries } from './burndown'
 
 export interface CycleSettings {
   enabled: boolean
@@ -196,6 +198,8 @@ async function closeCycleDoc(
       ? await nextOpenCycleId(payload, projectId, cycle.number, toIsoDate(now) as IsoDate)
       : null
 
+  const snapshot = await snapshotBeforeRollover(payload, cycle, projectId, now)
+
   let moved = 0
 
   if (settings.rollover !== CycleRollover.NONE) {
@@ -215,12 +219,39 @@ async function closeCycleDoc(
   await payload.update({
     collection: 'cycles',
     id: String(cycle.id),
-    data: { completedAt: now.toISOString(), rolledOver: moved },
+    data: {
+      completedAt: now.toISOString(),
+      rolledOver: moved,
+      ...(snapshot ? { progressSnapshot: snapshot as unknown as Record<string, unknown> } : {}),
+    },
     depth: 0,
     overrideAccess: true,
   })
 
   return moved
+}
+
+async function snapshotBeforeRollover(
+  payload: Payload,
+  cycle: Cycle,
+  projectId: string,
+  now: Date,
+): Promise<BurndownSeries | null> {
+  try {
+    const project = (await payload.findByID({
+      collection: 'projects',
+      id: projectId,
+      depth: 0,
+      overrideAccess: true,
+    })) as Project
+
+    return await loadBurndown(payload, cycle, project, {
+      live: true,
+      today: toIsoDate(now) as IsoDate,
+    })
+  } catch {
+    return null
+  }
 }
 
 async function incompleteTicketIds(payload: Payload, cycleId: string): Promise<string[]> {

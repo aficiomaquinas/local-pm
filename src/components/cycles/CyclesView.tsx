@@ -8,6 +8,8 @@ import { cn } from '@/lib/cn'
 import { formatDateRange } from '@/lib/format'
 import { CYCLE_STATE_META, cycleState, cycleTiming } from '@/lib/cycle-display'
 import type { CycleProgress, CycleState } from '@/lib/cycles'
+import type { VelocitySummary } from '@/lib/burndown'
+import { VelocityChart } from '@/components/charts/VelocityChart'
 import { Badge } from '@/components/ui/Badge'
 import { Button, LinkButton } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -31,10 +33,12 @@ const STATE_GROUPS: { state: CycleState; heading: string }[] = [
 export function CyclesView({
   project,
   summaries,
+  velocity = null,
   manual,
 }: {
   project: Project | null
   summaries: CycleSummary[]
+  velocity?: VelocitySummary | null
   manual: boolean
 }) {
   const router = useRouter()
@@ -142,6 +146,8 @@ export function CyclesView({
           </EmptyState>
         ) : (
           <div className="flex flex-col gap-8">
+            {velocity && velocity.entries.length > 0 && <VelocityChart velocity={velocity} />}
+
             {STATE_GROUPS.map(({ state, heading }) => {
               const rows = summaries.filter(
                 (summary) => cycleState(summary.cycle, today ?? undefined) === state,

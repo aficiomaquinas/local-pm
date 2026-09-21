@@ -3,7 +3,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, FileText, LayoutDashboard, ListChecks, Pencil, Repeat, Trash2 } from 'lucide-react'
+import {
+  ArrowLeft,
+  Diamond,
+  FileText,
+  LayoutDashboard,
+  ListChecks,
+  Pencil,
+  Repeat,
+  Trash2,
+} from 'lucide-react'
 import { initiativeStatusMeta } from '@/lib/status'
 import { EntityMark, initiativeIcon } from '@/components/ui/EntityMark'
 import { cn } from '@/lib/cn'
@@ -25,6 +34,7 @@ import { useToast } from '@/components/ui/Toast'
 import { RichTextDisplay } from '@/components/ui/RichTextEditor'
 import { TicketsTable } from '@/components/tickets/TicketsTable'
 import { CycleSettings } from '@/components/cycles/CycleSettings'
+import { EstimateSettings } from '@/components/projects/EstimateSettings'
 import type { Initiative, Project } from '@/payload-types'
 
 export interface ProjectStats {
@@ -34,7 +44,7 @@ export interface ProjectStats {
   done: number
 }
 
-const TAB_IDS = ['overview', 'tickets', 'cycles'] as const
+const TAB_IDS = ['overview', 'tickets', 'cycles', 'estimates'] as const
 type TabId = (typeof TAB_IDS)[number]
 
 export function ProjectDetail({
@@ -182,6 +192,7 @@ export function ProjectDetail({
             { id: 'overview', label: 'Overview', icon: FileText },
             { id: 'tickets', label: 'Tickets', icon: ListChecks, count: stats.total },
             { id: 'cycles', label: 'Cycles', icon: Repeat },
+            { id: 'estimates', label: 'Estimates', icon: Diamond },
           ]}
         />
       </header>
@@ -321,6 +332,10 @@ export function ProjectDetail({
 
         <TabPanel id="cycles" idPrefix="project" active={tab === 'cycles'}>
           <CycleSettings project={project} />
+        </TabPanel>
+
+        <TabPanel id="estimates" idPrefix="project" active={tab === 'estimates'}>
+          <EstimateSettings project={project} />
         </TabPanel>
       </div>
 
