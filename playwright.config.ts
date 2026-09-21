@@ -49,6 +49,7 @@ export default defineConfig({
       PAYLOAD_SECRET: process.env.PAYLOAD_SECRET ?? 'e2e-secret-not-for-production',
       NEXT_PUBLIC_SERVER_URL: BASE_URL,
       LOCAL_PM_REQUIRE_AUTH: 'false',
+      LOCAL_PM_DISABLE_CYCLE_CRON: 'true',
       MONGO_SERVER_SELECTION_TIMEOUT_MS: '30000',
     },
   },

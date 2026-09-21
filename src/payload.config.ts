@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { Activity } from './collections/Activity'
 import { Attachments } from './collections/Attachments'
 import { Comments } from './collections/Comments'
+import { Cycles } from './collections/Cycles'
 import { LabelGroups } from './collections/LabelGroups'
 import { Labels } from './collections/Labels'
 import { Members } from './collections/Members'
@@ -15,6 +16,7 @@ import { Statuses } from './collections/Statuses'
 import { Teams } from './collections/Teams'
 import { Tickets } from './collections/Tickets'
 import { Users } from './collections/Users'
+import { CYCLE_CRON, CYCLE_QUEUE, cycleCronEnabled, cycleRolloverTask } from './jobs/cycle-rollover'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -31,6 +33,7 @@ export default buildConfig({
     Teams,
     Members,
     Statuses,
+    Cycles,
     LabelGroups,
     Labels,
     Tickets,
@@ -38,6 +41,13 @@ export default buildConfig({
     Attachments,
     Activity,
   ],
+  jobs: {
+    tasks: [cycleRolloverTask],
+    deleteJobOnComplete: true,
+    autoRun: cycleCronEnabled()
+      ? [{ cron: CYCLE_CRON, queue: CYCLE_QUEUE, limit: 10 }]
+      : [],
+  },
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

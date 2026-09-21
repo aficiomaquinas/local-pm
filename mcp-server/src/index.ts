@@ -188,6 +188,20 @@ interface PaginatedResponse<T> {
   };
 }
 
+function toCycleDate(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value;
+}
+
+function cycleStateOf(cycle: Record<string, unknown>): string {
+  if (cycle.completedAt) return 'completed';
+  const today = new Date().toISOString().slice(0, 10);
+  const startsAt = typeof cycle.startsAt === 'string' ? cycle.startsAt.slice(0, 10) : '';
+  const endsAt = typeof cycle.endsAt === 'string' ? cycle.endsAt.slice(0, 10) : '';
+  if (startsAt && today < startsAt) return 'upcoming';
+  if (endsAt && today > endsAt) return 'completed';
+  return 'active';
+}
+
 function formatPaginatedResponse<T>(
   response: {
     docs: T[];
@@ -279,6 +293,26 @@ function slimMember(member: unknown): SlimMember | string | null {
   return null;
 }
 
+interface SlimCycle {
+  id: string;
+  name: string;
+  number: number;
+}
+
+function slimCycle(cycle: unknown): SlimCycle | string | null {
+  if (!cycle) return null;
+  if (typeof cycle === 'string') return cycle;
+  if (typeof cycle === 'object' && cycle !== null) {
+    const c = cycle as Record<string, unknown>;
+    return {
+      id: c.id as string,
+      name: c.name as string,
+      number: c.number as number,
+    };
+  }
+  return null;
+}
+
 function slimBlockedBy(blockedBy: unknown): string[] | null {
   if (!blockedBy) return null;
   if (!Array.isArray(blockedBy)) return null;
@@ -305,6 +339,8 @@ function slimTicket(ticket: Record<string, unknown>, fieldsToInclude: Set<string
       filtered[field] = slimTeam(value);
     } else if (field === 'assignee') {
       filtered[field] = slimMember(value);
+    } else if (field === 'cycle') {
+      filtered[field] = slimCycle(value);
     } else if (field === 'blockedBy') {
       filtered[field] = slimBlockedBy(value);
     } else if (field === 'labels') {
@@ -586,6 +622,160 @@ const tools: Tool[] = [
   },
 
   {
+    name: 'list_cycles',
+    description: 'List cycles (time-boxed sprints) in Local PM. Cycles belong to a project and are numbered sequentially. Filter by project and by state.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Only return cycles belonging to this project ID',
+        },
+        state: {
+          type: 'string',
+          description: 'Filter by cycle state, derived from the dates and whether the cycle was closed',
+          enum: ['active', 'upcoming', 'completed'],
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of cycles to return (default: 20)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1)',
+        },
+        include: {
+          type: 'array',
+          description: 'Additional fields to include. By default id, name, number, startsAt, endsAt, completedAt and state are returned.',
+          items: {
+            type: 'string',
+            enum: ['goal', 'rolledOver', 'project', 'createdAt', 'updatedAt'],
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'get_cycle',
+    description: 'Get a single cycle by ID, including how many tickets it holds and how many are done',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The cycle ID',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'create_cycle',
+    description: 'Create a cycle on a project. Normally cycles are provisioned automatically — use this only to add one by hand.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'The project ID this cycle belongs to',
+        },
+        number: {
+          type: 'number',
+          description: 'Sequential cycle number within the project. Must be unused.',
+        },
+        startsAt: {
+          type: 'string',
+          description: 'First day of the cycle, as YYYY-MM-DD',
+        },
+        endsAt: {
+          type: 'string',
+          description: 'Last day of the cycle, inclusive, as YYYY-MM-DD',
+        },
+        name: {
+          type: 'string',
+          description: 'Display name. Defaults to "Cycle <number>".',
+        },
+        goal: {
+          type: 'string',
+          description: 'Optional one-line goal for the cycle',
+        },
+      },
+      required: ['project', 'number', 'startsAt', 'endsAt'],
+    },
+  },
+  {
+    name: 'update_cycle',
+    description: 'Update a cycle name, goal or dates',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The cycle ID to update',
+        },
+        name: {
+          type: 'string',
+          description: 'New display name',
+        },
+        goal: {
+          type: 'string',
+          description: 'New goal for the cycle',
+        },
+        startsAt: {
+          type: 'string',
+          description: 'New first day, as YYYY-MM-DD',
+        },
+        endsAt: {
+          type: 'string',
+          description: 'New last day, inclusive, as YYYY-MM-DD',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_cycle',
+    description: 'Delete a cycle. Tickets in it are not deleted — they are left without a cycle.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The cycle ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'close_cycle',
+    description: 'Close a cycle now and roll its unfinished tickets on according to the project rollover setting (next cycle, backlog, or leave them).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The cycle ID to close',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'reconcile_cycles',
+    description: 'Provision any missing cycles and, for projects set to automatic rollover, close the cycles whose end date has passed. Idempotent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Limit the run to one project. Omit to reconcile every project with cycles enabled.',
+        },
+      },
+    },
+  },
+
+  {
     name: 'list_members',
     description: 'List the people tickets can be assigned to. By default returns only basic fields (id, name, active). Use "include" to request email, team or timestamps. Members are distinct from login accounts: a member is a person work is assigned to.',
     inputSchema: {
@@ -725,6 +915,10 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Filter by assignee (member) ID',
         },
+        cycleId: {
+          type: 'string',
+          description: 'Filter by cycle ID. Use list_cycles to find one.',
+        },
         status: {
           type: 'string',
           description: 'Filter by status',
@@ -748,7 +942,7 @@ const tools: Tool[] = [
           description: 'Additional fields to include in the response. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -793,6 +987,10 @@ const tools: Tool[] = [
         assignee: {
           type: 'string',
           description: 'Assignee member ID (optional). Use list_members to find one.',
+        },
+        cycle: {
+          type: 'string',
+          description: 'Cycle ID to commit this ticket to (optional). Use list_cycles to find one.',
         },
         status: {
           type: 'string',
@@ -864,6 +1062,10 @@ const tools: Tool[] = [
         assignee: {
           type: 'string',
           description: 'New assignee member ID (use null to unassign)',
+        },
+        cycle: {
+          type: 'string',
+          description: 'New cycle ID (use null to take the ticket out of its cycle)',
         },
         status: {
           type: 'string',
@@ -965,7 +1167,7 @@ const tools: Tool[] = [
           description: 'Additional ticket fields to include. By default only id, title, status, and project are returned.',
           items: {
             type: 'string',
-            enum: ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
+            enum: ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'],
           },
         },
       },
@@ -1293,6 +1495,96 @@ async function handleToolCall(
       return apiRequest(`/teams/${args.id}`, 'DELETE');
     }
 
+    case 'list_cycles': {
+      const limit = (args.limit as number) || 20;
+      const page = (args.page as number) || 1;
+      const includeFields = (args.include as string[]) || [];
+
+      let query = `?limit=${limit}&page=${page}&depth=0&sort=-number`;
+      if (args.projectId) {
+        query += `&where[project][equals]=${args.projectId}`;
+      }
+
+      const response = await apiRequest(`/cycles${query}`) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const defaultFields = ['id', 'name', 'number', 'startsAt', 'endsAt', 'completedAt'];
+      const optionalFields = ['goal', 'rolledOver', 'project', 'createdAt', 'updatedAt'];
+      const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
+
+      const wanted = args.state as string | undefined;
+      const filteredDocs = response.docs
+        .map(cycle => {
+          const filtered: Record<string, unknown> = {};
+          for (const field of fieldsToInclude) {
+            if (field in cycle) {
+              filtered[field] = cycle[field];
+            }
+          }
+          filtered.state = cycleStateOf(cycle);
+          return filtered;
+        })
+        .filter(cycle => !wanted || cycle.state === wanted);
+
+      return formatPaginatedResponse({
+        ...response,
+        docs: filteredDocs,
+      });
+    }
+    case 'get_cycle': {
+      const cycle = await apiRequest(`/cycles/${args.id}?depth=1`) as Record<string, unknown>;
+      const tickets = await apiRequest(
+        `/tickets?where[cycle][equals]=${args.id}&limit=1000&depth=1`,
+      ) as { docs: Array<Record<string, unknown>>; totalDocs: number };
+
+      const done = tickets.docs.filter(ticket => {
+        const status = ticket.status as { type?: string } | null;
+        return status?.type === 'COMPLETED';
+      }).length;
+
+      return {
+        ...cycle,
+        state: cycleStateOf(cycle),
+        ticketCount: tickets.totalDocs,
+        ticketsDone: done,
+      };
+    }
+    case 'create_cycle': {
+      return apiRequest('/cycles', 'POST', {
+        project: args.project,
+        number: args.number,
+        name: args.name || `Cycle ${args.number}`,
+        startsAt: toCycleDate(args.startsAt as string),
+        endsAt: toCycleDate(args.endsAt as string),
+        goal: args.goal || null,
+      });
+    }
+    case 'update_cycle': {
+      const { id, startsAt, endsAt, ...rest } = args;
+      const updates: Record<string, unknown> = { ...rest };
+      if (startsAt) updates.startsAt = toCycleDate(startsAt as string);
+      if (endsAt) updates.endsAt = toCycleDate(endsAt as string);
+      return apiRequest(`/cycles/${id}`, 'PATCH', updates);
+    }
+    case 'delete_cycle': {
+      return apiRequest(`/cycles/${args.id}`, 'DELETE');
+    }
+    case 'close_cycle': {
+      return apiRequest(`/cycles/${args.id}/close`, 'POST');
+    }
+    case 'reconcile_cycles': {
+      return apiRequest('/cycles/reconcile', 'POST', args.projectId ? { project: args.projectId } : {});
+    }
+
     case 'list_members': {
       const limit = (args.limit as number) || 20;
       const page = (args.page as number) || 1;
@@ -1377,6 +1669,9 @@ async function handleToolCall(
       if (args.assigneeId) {
         query += `&where[assignee][equals]=${args.assigneeId}`;
       }
+      if (args.cycleId) {
+        query += `&where[cycle][equals]=${args.cycleId}`;
+      }
       if (args.status) {
         query += `&where[status][equals]=${await resolveStatusId(args.status as string, args.projectId as string | undefined)}`;
       }
@@ -1396,7 +1691,7 @@ async function handleToolCall(
       };
 
       const defaultFields = ['id', 'title', 'status', 'project'];
-      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 
@@ -1417,6 +1712,7 @@ async function handleToolCall(
         project: args.project,
         team: args.team || null,
         assignee: args.assignee || null,
+        cycle: args.cycle || null,
         status:
           (await resolveStatusId(args.status as string, args.projectId as string | undefined)) ||
           (await defaultStatusId(args.projectId as string | undefined)),
@@ -1434,6 +1730,7 @@ async function handleToolCall(
       if (args.description !== undefined) updates.description = args.description;
       if (args.team !== undefined) updates.team = args.team;
       if (args.assignee !== undefined) updates.assignee = args.assignee;
+      if (args.cycle !== undefined) updates.cycle = args.cycle;
       if (args.status) updates.status = await resolveStatusId(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.dueDate !== undefined) updates.dueDate = args.dueDate;
@@ -1468,7 +1765,7 @@ async function handleToolCall(
       const tickets = response.docs || [];
 
       const defaultFields = ['id', 'title', 'status', 'project'];
-      const optionalFields = ['description', 'team', 'assignee', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
+      const optionalFields = ['description', 'team', 'assignee', 'cycle', 'priority', 'dueDate', 'labels', 'subtasks', 'blockedBy', 'sortOrder', 'createdAt', 'updatedAt'];
 
       const fieldsToInclude = new Set([...defaultFields, ...includeFields.filter(f => optionalFields.includes(f))]);
 

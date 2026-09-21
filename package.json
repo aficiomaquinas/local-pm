@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run test && npm run test:e2e",
     "migrate:statuses": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx src/migrations/configurable-statuses.ts",
-    "migrate:labels": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx src/migrations/shared-labels.ts"
+    "migrate:labels": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx src/migrations/shared-labels.ts",
+    "migrate:cycles": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx src/migrations/cycles.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

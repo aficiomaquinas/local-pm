@@ -11,7 +11,13 @@ export const metadata = { title: 'Board · local-pm' }
 const TICKETS_PER_COLUMN = 20
 
 interface BoardPageProps {
-  searchParams: Promise<{ project?: string; team?: string; assignee?: string; q?: string }>
+  searchParams: Promise<{
+    project?: string
+    team?: string
+    assignee?: string
+    cycle?: string
+    q?: string
+  }>
 }
 
 export default async function BoardPage({ searchParams }: BoardPageProps) {
@@ -19,6 +25,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
   const projectFilter = params.project || null
   const teamFilter = params.team || null
   const assigneeFilter = params.assignee || null
+  const cycleFilter = params.cycle || null
   const query = (params.q || '').trim()
 
   const payload = await getPayload({ config })
@@ -29,6 +36,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
     if (projectFilter) conditions.project = { equals: projectFilter }
     if (teamFilter) conditions.team = { equals: teamFilter }
     if (assigneeFilter) conditions.assignee = { equals: assigneeFilter }
+    if (cycleFilter) conditions.cycle = { equals: cycleFilter }
     if (query) Object.assign(conditions, ticketSearchWhere(query))
     return conditions
   }

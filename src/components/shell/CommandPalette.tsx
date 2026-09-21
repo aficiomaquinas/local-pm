@@ -6,6 +6,7 @@ import {
   CornerDownLeft,
   FolderKanban,
   LayoutDashboard,
+  Repeat,
   Search,
   Ticket,
   UserRound,
@@ -105,6 +106,14 @@ export function CommandPalette({
         shortcut: 'g m',
         group: 'Navigate',
         run: () => router.push('/my-tickets'),
+      },
+      {
+        id: 'nav.cycles',
+        label: 'Go to Cycles',
+        icon: Repeat,
+        shortcut: 'g c',
+        group: 'Navigate',
+        run: () => router.push('/cycles'),
       },
       {
         id: 'nav.projects',

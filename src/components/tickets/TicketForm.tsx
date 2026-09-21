@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { ErrorSummary, Field, Input } from '@/components/ui/Field'
 import {
+  CycleSelect,
   MemberSelect,
   ProjectSelect,
   TeamSelect,
@@ -24,7 +25,7 @@ import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { useTicketDraft } from '@/hooks/useTicketDraft'
 import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard'
-import type { Label, Member, Project, Team, Ticket } from '@/payload-types'
+import type { Cycle, Label, Member, Project, Team, Ticket } from '@/payload-types'
 import { useWorkflow } from '@/components/shell/WorkflowProvider'
 import { statusIdOf } from '@/lib/workflow'
 import { labelsOf } from '@/lib/labels'
@@ -43,6 +44,7 @@ interface FormState {
   projectId: string
   teamId: string
   assigneeId: string
+  cycleId: string
   dueDate: string
   labels: Label[]
   subtasks: { title: string; completed: boolean }[]
@@ -65,6 +67,7 @@ function emptyForm(projectId: string, status: string): FormState {
     projectId,
     teamId: '',
     assigneeId: '',
+    cycleId: '',
     dueDate: '',
     labels: [],
     subtasks: [],
@@ -81,6 +84,7 @@ function fromTicket(ticket: Ticket): FormState {
     projectId: typeof ticket.project === 'string' ? ticket.project : (ticket.project?.id ?? ''),
     teamId: typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? ''),
     assigneeId: typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
+    cycleId: typeof ticket.cycle === 'string' ? ticket.cycle : (ticket.cycle?.id ?? ''),
     dueDate: ticket.dueDate ? ticket.dueDate.slice(0, 10) : '',
     labels: labelsOf(ticket),
     subtasks: (ticket.subtasks ?? []).map((s) => ({
@@ -104,6 +108,7 @@ export function TicketForm({
   project,
   team,
   assignee,
+  cycle,
   defaultProjectId,
   defaultStatus,
   returnTo,
@@ -112,6 +117,7 @@ export function TicketForm({
   project?: Project | null
   team?: Team | null
   assignee?: Member | null
+  cycle?: Cycle | null
   defaultProjectId?: string | null
   defaultStatus?: string
   returnTo?: string
@@ -132,6 +138,7 @@ export function TicketForm({
         ...emptyForm(defaultProjectId ?? '', defaultStatus ?? fallbackStatusId),
         teamId: team?.id ?? '',
         assigneeId: assignee?.id ?? '',
+        cycleId: cycle?.id ?? '',
       }
 
   const [form, setForm] = useState<FormState>(initialState)
@@ -147,6 +154,7 @@ export function TicketForm({
   const [selectedProject, setSelectedProject] = useState<Project | null>(project ?? null)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(team ?? null)
   const [selectedAssignee, setSelectedAssignee] = useState<Member | null>(assignee ?? null)
+  const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(cycle ?? null)
 
   const summaryRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
@@ -227,6 +235,7 @@ export function TicketForm({
         priority: form.priority,
         project: form.projectId,
         team: form.teamId || null,
+        cycle: form.cycleId || null,
         assignee: form.assigneeId || null,
         labels: form.labels.map((label) => label.id),
         subtasks: form.subtasks,
@@ -346,7 +355,7 @@ export function TicketForm({
               <Button
                 onClick={() => {
                   if (draft.recovered) {
-                    setForm(draft.recovered)
+                    setForm({ ...draft.recovered, cycleId: draft.recovered.cycleId ?? '' })
                     setSelectedProject(null)
                     setSelectedTeam(null)
                     setSelectedAssignee(null)
@@ -468,6 +477,24 @@ export function TicketForm({
                 />
               )}
             </Field>
+
+            {form.projectId && (
+              <Field label="Cycle" optional>
+                {({ id }) => (
+                  <CycleSelect
+                    id={id}
+                    value={form.cycleId}
+                    selected={selectedCycle}
+                    where={{ project: form.projectId }}
+                    aria-label="Cycle"
+                    onChange={(next, doc) => {
+                      set('cycleId', next)
+                      setSelectedCycle(doc)
+                    }}
+                  />
+                )}
+              </Field>
+            )}
 
             <Field label="Status">
               {({ id }) => (

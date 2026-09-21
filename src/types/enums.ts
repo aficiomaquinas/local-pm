@@ -114,6 +114,46 @@ export const PROJECT_COLORS = [
   '#3b82f6',
 ]
 
+export enum CycleRollover {
+  NEXT = 'NEXT',
+  BACKLOG = 'BACKLOG',
+  NONE = 'NONE',
+}
+
+export enum CycleAutomation {
+  AUTOMATIC = 'AUTOMATIC',
+  MANUAL = 'MANUAL',
+}
+
+export const CYCLE_ROLLOVER_OPTIONS = [
+  { label: 'Move to the next cycle', value: CycleRollover.NEXT },
+  { label: 'Move back to the backlog', value: CycleRollover.BACKLOG },
+  { label: 'Leave in the closed cycle', value: CycleRollover.NONE },
+]
+
+export const CYCLE_AUTOMATION_OPTIONS = [
+  { label: 'Automatic', value: CycleAutomation.AUTOMATIC },
+  { label: 'Manual', value: CycleAutomation.MANUAL },
+]
+
+export const CYCLE_START_DAY_OPTIONS = [
+  { label: 'Monday', value: 1 },
+  { label: 'Tuesday', value: 2 },
+  { label: 'Wednesday', value: 3 },
+  { label: 'Thursday', value: 4 },
+  { label: 'Friday', value: 5 },
+  { label: 'Saturday', value: 6 },
+  { label: 'Sunday', value: 0 },
+]
+
+export const CYCLE_LENGTH_OPTIONS = [
+  { label: '1 week', value: 1 },
+  { label: '2 weeks', value: 2 },
+  { label: '3 weeks', value: 3 },
+  { label: '4 weeks', value: 4 },
+  { label: '6 weeks', value: 6 },
+  { label: '8 weeks', value: 8 },
+]
 export enum LabelColor {
   SLATE = 'SLATE',
   INDIGO = 'INDIGO',

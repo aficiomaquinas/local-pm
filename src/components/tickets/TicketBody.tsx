@@ -15,7 +15,7 @@ import { DatePicker } from '@/components/ui/DatePicker'
 import { Expandable } from '@/components/ui/Expandable'
 import { Field } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
-import { MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import { CycleSelect, MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { DependencyGraph } from '@/components/kanban/DependencyGraph'
@@ -81,6 +81,8 @@ export function TicketBody({
   const assignee = typeof ticket.assignee === 'object' ? ticket.assignee : null
   const assigneeId =
     typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? '')
+  const cycle = typeof ticket.cycle === 'object' ? ticket.cycle : null
+  const cycleId = typeof ticket.cycle === 'string' ? ticket.cycle : (ticket.cycle?.id ?? '')
   const description = (ticket.description as unknown as string) || ''
   const subtasks = ticket.subtasks ?? []
   const labels = labelsOf(ticket)
@@ -222,6 +224,21 @@ export function TicketBody({
               />
             )}
           </Field>
+
+          {project && (
+            <Field label="Cycle" optional>
+              {({ id }) => (
+                <CycleSelect
+                  id={id}
+                  value={cycleId}
+                  selected={cycle}
+                  where={{ project: project.id }}
+                  aria-label="Cycle"
+                  onChange={(next) => patch({ cycle: next || null } as Partial<Ticket>, 'the cycle')}
+                />
+              )}
+            </Field>
+          )}
 
           <Field label="Due date" optional hint="Type YYYY-MM-DD, or pick a day.">
             {({ id, describedBy }) => (
