@@ -14,6 +14,11 @@ test.beforeAll(async ({ request }) => {
   })
   expect(customStatus.ok()).toBe(true)
   customStatusId = (await customStatus.json()).doc.id
+  const otherProject = await seedProject(request, 'Other workflow')
+  const otherStatus = await request.post('/api/statuses', {
+    data: { name: 'UX Review', type: 'STARTED', order: 2500, project: otherProject.projectId },
+  })
+  expect(otherStatus.ok()).toBe(true)
 })
 
 test('saved project views restore custom workflow columns without reloading', async ({ page }) => {
@@ -49,7 +54,7 @@ test('a draft restores its custom status and submitting from the editor creates 
   )
   await page.locator('.ql-editor').fill('Ready for another look.')
   await page.locator('.ql-editor').press('Control+Enter')
-  await expect(page).toHaveURL(/\/board/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(title)
   const result = await request.get('/api/tickets', {
     params: { 'where[title][equals]': title, depth: 0 },
   })
