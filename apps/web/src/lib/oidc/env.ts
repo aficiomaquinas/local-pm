@@ -100,7 +100,13 @@ export function getAgentClientIdClaim(): AgentClientIdClaim {
   return 'azp'
 }
 
-/** Expected `aud` for agent tokens (jwks mode); empty = skip aud check (§13). */
+/**
+ * Expected `aud` for token verification in jwks mode (§13, amended by REQ-006:
+ * REQUIRED in jwks mode — an unconfigured audience silently skipped `aud`
+ * validation; verification fail-fasts at first use instead). Keep it in sync
+ * with what the issuer mints: for dex/static clients the client_id, for RFC
+ * 8707 resource-indicator IdPs the resource URI carried as `aud`.
+ */
 export function getAudience(): string {
   return read('AUDIENCE')
 }

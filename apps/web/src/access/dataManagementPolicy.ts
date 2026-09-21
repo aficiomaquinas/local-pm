@@ -2,6 +2,8 @@ import type { Access, PayloadRequest } from 'payload'
 import { status as httpStatus } from 'http-status'
 import { APIError } from 'payload'
 
+import { isMasterUser } from './actorPolicy'
+
 /**
  * SPC-004 §4e access policy — NORMATIVE (xref REQ-002, ADR-002, SPC-001 §6).
  *
@@ -15,8 +17,21 @@ import { APIError } from 'payload'
  *   - no user at all is denied (deny-by-default, same decision as SPC-001 §6);
  *   - a request carrying `role: 'superadmin'` claims is allowed
  *     (post-ADR-002 OIDC claims);
- *   - the master user, pre-claims (ADR-002 pending), IS the superadmin
- *     identity and is allowed.
+ *   - a request carrying `roles: ['superadmin']` (SPC-006 spelling) is
+ *     allowed;
+ *   - a roles-bearing doc WITH an OIDC identity pair (`identitySub`, §8) is
+ *     a mirror — claims-only: without a superadmin marker it is DENIED;
+ *   - a roles-bearing doc WITHOUT an identity pair is the LOCAL master user
+ *     (first-register E-7, whose schema default is `roles: ['human']`): its
+ *     grant resolves through the master-user identity. Pre-REQ-006 this
+ *     shape was denied outright (roles-array branch) — an operator
+ *     lock-out on Data Management, verified live and fixed here;
+ *   - a role-less request is allowed ONLY when it carries the master-user
+ *     identity (`isMasterUser`, SPC-001 §6) — the legacy master user created
+ *     via first-register (E-7) predates claims and keeps access. Any other
+ *     role-less authenticated principal is DENIED (REQ-006: deny-by-default —
+ *     a bare "authenticated" is not an authorization marker; the pre-REQ-006
+ *     `return true` let any such principal run full import/export).
  *
  * Applied to four collection surfaces — `exports.read`, `exports.create`,
  * `imports.read`, `imports.create` — plus, transitively through those access
@@ -35,8 +50,25 @@ export const dataManagementAccess: Access = ({ req }) => {
   // roles `roles` (array of superadmin|human|agent, re-derived per login),
   // so superadmin must be recognized on that marker too.
   const roles = (user as { roles?: unknown }).roles
-  if (Array.isArray(roles)) return roles.includes('superadmin')
-  return true // master user, pre-claims
+  if (Array.isArray(roles)) {
+    if (roles.includes('superadmin')) return true
+    // REQ-006: a roles-bearing doc WITH an OIDC identity pair is a mirror
+    // (upsert always stamps identityIss/identitySub, §8) — claims-only:
+    // no superadmin marker → denied. A roles-bearing doc WITHOUT an
+    // identity pair is the LOCAL master user (first-register E-7): its
+    // privilege resolves through the master-user identity instead of the
+    // absent superadmin marker (fixes the pre-REQ-006 lock-out where
+    // roles:['human'] from the schema default denied the operator).
+    const identitySub = (user as { identitySub?: unknown }).identitySub
+    if (typeof identitySub === 'string' && identitySub) return false
+    return isMasterUser(user)
+  }
+  // REQ-006 deny-by-default: role-less is no longer a blanket grant — the
+  // grant resolves through the master-user identity (isMasterUser, SPC-001
+  // §6) instead of an unconditional true. The one-shot first-register master
+  // (E-7) keeps access; agent-marked role-less principals are excluded; any
+  // future tightening of the identity model propagates here automatically.
+  return isMasterUser(user)
 }
 
 /**

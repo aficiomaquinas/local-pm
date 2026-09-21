@@ -53,6 +53,10 @@ function enableOidc(overrides: Record<string, string> = {}): void {
   process.env['OIDC_ISSUER'] = 'https://idp.local.test'
   process.env['OIDC_CLIENT_ID'] = 'local-pm-web'
   process.env['OIDC_CLIENT_SECRET'] = 'web-secret'
+  // REQ-006 (deny-by-default): jwks mode REQUIRES an audience — default the
+  // harness to the client_id (dex/static-client shape; id_tokens carry aud =
+  // client_id); cases override explicitly.
+  process.env['OIDC_AUDIENCE'] = 'local-pm-web'
   for (const [k, v] of Object.entries(overrides)) process.env[k] = v
 }
 
