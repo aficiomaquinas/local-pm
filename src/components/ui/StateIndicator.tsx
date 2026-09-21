@@ -7,6 +7,7 @@ import {
   statusMeta,
   statusTypeMeta,
   projectStatusMeta,
+  initiativeStatusMeta,
   type StateMeta,
 } from '@/lib/status'
 import type { Status } from '@/payload-types'
@@ -72,6 +73,21 @@ export function ProjectStatusBadge({
   className?: string
 }) {
   const meta = projectStatusMeta(status)
+  return (
+    <Badge tone={meta.tone} icon={meta.icon} className={className}>
+      {meta.label}
+    </Badge>
+  )
+}
+
+export function InitiativeStatusBadge({
+  status,
+  className,
+}: {
+  status: string | null | undefined
+  className?: string
+}) {
+  const meta = initiativeStatusMeta(status)
   return (
     <Badge tone={meta.tone} icon={meta.icon} className={className}>
       {meta.label}

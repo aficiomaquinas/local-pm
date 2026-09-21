@@ -7,6 +7,7 @@ import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { TicketPriority } from '@/types/enums'
 import { ticketPriorityOptions, statusOptions } from '@/lib/status'
+import { normalizeEstimate } from '@/lib/estimates'
 import { useToast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -19,6 +20,7 @@ import {
   TeamSelect,
   TicketSelect,
 } from '@/components/ui/EntityPickers'
+import { EstimateSelect, estimatesFor } from '@/components/ui/EstimatePicker'
 import { LabelChips, LabelSelect } from '@/components/ui/LabelPicker'
 import { Select } from '@/components/ui/Select'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
@@ -46,6 +48,7 @@ interface FormState {
   teamId: string
   assigneeId: string
   cycleId: string
+  estimate: number | null
   startDate: string
   dueDate: string
   labels: Label[]
@@ -78,6 +81,7 @@ function emptyForm(projectId: string, status: string): FormState {
     teamId: '',
     assigneeId: '',
     cycleId: '',
+    estimate: null,
     startDate: '',
     dueDate: '',
     labels: [],
@@ -98,6 +102,7 @@ function fromTicket(ticket: Ticket): FormState {
     teamId: typeof ticket.team === 'string' ? ticket.team : (ticket.team?.id ?? ''),
     assigneeId: typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? ''),
     cycleId: typeof ticket.cycle === 'string' ? ticket.cycle : (ticket.cycle?.id ?? ''),
+    estimate: normalizeEstimate(ticket.estimate),
     startDate: ticket.startDate ? ticket.startDate.slice(0, 10) : '',
     dueDate: ticket.dueDate ? ticket.dueDate.slice(0, 10) : '',
     labels: labelsOf(ticket),
@@ -179,6 +184,7 @@ export function TicketForm({
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(team ?? null)
   const [selectedAssignee, setSelectedAssignee] = useState<Member | null>(assignee ?? null)
   const [selectedCycle, setSelectedCycle] = useState<Cycle | null>(cycle ?? null)
+  const estimates = estimatesFor(selectedProject)
 
   const summaryRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
@@ -265,6 +271,7 @@ export function TicketForm({
         project: form.projectId,
         team: form.teamId || null,
         cycle: form.cycleId || null,
+        estimate: form.estimate,
         assignee: form.assigneeId || null,
         labels: form.labels.map((label) => label.id),
         subtasks: form.subtasks,
@@ -509,6 +516,20 @@ export function TicketForm({
                 />
               )}
             </Field>
+
+            {estimates.enabled && (
+              <Field label="Estimate" optional>
+                {({ id }) => (
+                  <EstimateSelect
+                    id={id}
+                    value={form.estimate}
+                    settings={estimates}
+                    aria-label="Estimate"
+                    onChange={(next) => set('estimate', next)}
+                  />
+                )}
+              </Field>
+            )}
 
             {form.projectId && (
               <Field label="Cycle" optional>

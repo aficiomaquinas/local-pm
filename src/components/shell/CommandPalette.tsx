@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Repeat,
   Search,
+  Target,
   Ticket,
   UserRound,
   Users,
@@ -124,6 +125,14 @@ export function CommandPalette({
         run: () => router.push('/projects'),
       },
       {
+        id: 'nav.initiatives',
+        label: 'Go to Initiatives',
+        icon: Target,
+        shortcut: 'g n',
+        group: 'Navigate',
+        run: () => router.push('/initiatives'),
+      },
+      {
         id: 'nav.teams',
         label: 'Go to Teams',
         icon: Users,
@@ -182,11 +191,14 @@ export function CommandPalette({
           if (!response.ok) throw new Error('Search failed')
           return response.json()
         }
-        const [tickets, projects, teams] = await Promise.all([
+        const [tickets, projects, initiatives, teams] = await Promise.all([
           fetch('/api/tickets?' + ticketParams, {
             signal: controller.signal,
           }).then(read),
           fetch(`/api/projects?limit=5&where[name][like]=${encoded}`, {
+            signal: controller.signal,
+          }).then(read),
+          fetch(`/api/initiatives?limit=5&depth=0&where[name][like]=${encoded}`, {
             signal: controller.signal,
           }).then(read),
           fetch(`/api/teams?limit=5&where[name][like]=${encoded}`, {
@@ -210,6 +222,13 @@ export function CommandPalette({
             icon: FolderKanban,
             group: 'Projects',
             run: () => router.push(`/projects/${p.id}`),
+          })),
+          ...(initiatives.docs ?? []).map((i: SearchDoc) => ({
+            id: `initiative.${i.id}`,
+            label: i.name ?? 'Untitled',
+            icon: Target,
+            group: 'Initiatives',
+            run: () => router.push(`/initiatives/${i.id}`),
           })),
           ...(teams.docs ?? []).map((t: SearchDoc) => ({
             id: `team.${t.id}`,

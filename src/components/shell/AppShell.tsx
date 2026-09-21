@@ -88,6 +88,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     run: () => router.push('/projects'),
   })
   useShortcut({
+    id: 'nav.initiatives',
+    keys: 'g n',
+    description: 'Go to Initiatives',
+    group: 'Navigate',
+    scope: 'global',
+    run: () => router.push('/initiatives'),
+  })
+  useShortcut({
     id: 'nav.teams',
     keys: 'g t',
     description: 'Go to Teams',

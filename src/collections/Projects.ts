@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, PayloadRequest } from 'payload'
 import { APIError } from 'payload'
 import {
   ProjectStatus,
@@ -9,9 +9,11 @@ import {
   CycleRollover,
   CYCLE_AUTOMATION_OPTIONS,
   CYCLE_ROLLOVER_OPTIONS,
+  ESTIMATE_SCALE_OPTIONS,
 } from '@/types/enums'
 import { collectionAccess } from '@/lib/access'
 import { PROJECT_DATES, pendingDateOrderError } from '@/lib/dates'
+import { DEFAULT_ESTIMATE_SCALE } from '@/lib/estimates'
 import {
   DEFAULT_CYCLE_LENGTH_WEEKS,
   DEFAULT_CYCLE_START_DAY,
@@ -20,6 +22,33 @@ import {
   MAX_UPCOMING_CYCLES,
   MIN_CYCLE_LENGTH_WEEKS,
 } from '@/lib/cycles'
+
+async function detachFromInitiatives(req: PayloadRequest, id: string | number): Promise<void> {
+  const target = String(id)
+
+  const holders = await req.payload.find({
+    req,
+    collection: 'initiatives',
+    where: { projects: { in: [target] } },
+    limit: 500,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  for (const initiative of holders.docs) {
+    const remaining = (initiative.projects ?? [])
+      .map((entry) => (typeof entry === 'object' ? String(entry.id) : String(entry)))
+      .filter((projectId) => projectId !== target)
+
+    await req.payload.update({
+      collection: 'initiatives',
+      id: initiative.id,
+      data: { projects: remaining },
+      depth: 0,
+      overrideAccess: true,
+    })
+  }
+}
 
 export const Projects: CollectionConfig = {
   slug: 'projects',
@@ -35,6 +64,11 @@ export const Projects: CollectionConfig = {
         const dateError = pendingDateOrderError(PROJECT_DATES, data, originalDoc)
         if (dateError) throw new APIError(dateError, 400, null, true)
         return data
+      },
+    ],
+    afterDelete: [
+      async ({ req, id }) => {
+        await detachFromInitiatives(req, id)
       },
     ],
   },
@@ -182,6 +216,34 @@ export const Projects: CollectionConfig = {
           max: MAX_UPCOMING_CYCLES,
           admin: {
             description: 'How many future cycles to keep provisioned ahead of the active one',
+          },
+        },
+      ],
+    },
+    {
+      name: 'estimates',
+      type: 'group',
+      admin: {
+        description: 'Effort estimates for tickets in this project',
+      },
+      fields: [
+        {
+          name: 'enabled',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description:
+              'Turn estimates on for this project. Off by default, and cycle charts count tickets instead.',
+          },
+        },
+        {
+          name: 'scale',
+          type: 'select',
+          options: ESTIMATE_SCALE_OPTIONS,
+          defaultValue: DEFAULT_ESTIMATE_SCALE,
+          admin: {
+            description:
+              'How estimates are written. Changing it relabels existing estimates without rewriting them.',
           },
         },
       ],

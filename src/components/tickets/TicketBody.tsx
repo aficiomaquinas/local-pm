@@ -16,6 +16,7 @@ import { Expandable } from '@/components/ui/Expandable'
 import { Field } from '@/components/ui/Field'
 import { Select } from '@/components/ui/Select'
 import { CycleSelect, MemberSelect, TeamSelect, TicketSelect } from '@/components/ui/EntityPickers'
+import { EstimateSelect, estimatesFor } from '@/components/ui/EstimatePicker'
 import { TicketKey } from '@/components/ui/EntityMark'
 import { RichTextDisplay, RichTextEditor } from '@/components/ui/RichTextEditor'
 import { DependencyGraph } from '@/components/kanban/DependencyGraph'
@@ -62,6 +63,7 @@ export function TicketBody({
     typeof ticket.assignee === 'string' ? ticket.assignee : (ticket.assignee?.id ?? '')
   const cycle = typeof ticket.cycle === 'object' ? ticket.cycle : null
   const cycleId = typeof ticket.cycle === 'string' ? ticket.cycle : (ticket.cycle?.id ?? '')
+  const estimates = estimatesFor(project)
   const description = (ticket.description as unknown as string) || ''
   const subtasks = ticket.subtasks ?? []
   const labels = labelsOf(ticket)
@@ -214,6 +216,22 @@ export function TicketBody({
                   where={{ project: project.id }}
                   aria-label="Cycle"
                   onChange={(next) => patch({ cycle: next || null } as Partial<Ticket>, 'the cycle')}
+                />
+              )}
+            </Field>
+          )}
+
+          {estimates.enabled && (
+            <Field label="Estimate" optional>
+              {({ id }) => (
+                <EstimateSelect
+                  id={id}
+                  value={ticket.estimate}
+                  settings={estimates}
+                  aria-label="Estimate"
+                  onChange={(next) =>
+                    patch({ estimate: next } as Partial<Ticket>, 'the estimate')
+                  }
                 />
               )}
             </Field>

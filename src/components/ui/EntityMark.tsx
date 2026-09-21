@@ -42,6 +42,10 @@ export function projectIcon(name: string | null | undefined): LucideIcon {
   return PROJECT_ICON_MAP[name ?? 'folder'] ?? Folder
 }
 
+export function initiativeIcon(name: string | null | undefined): LucideIcon {
+  return PROJECT_ICON_MAP[name ?? 'target'] ?? Target
+}
+
 const SIZE = {
   sm: { box: 'size-6 rounded-sm', icon: 'size-3.5' },
   md: { box: 'size-8 rounded-md', icon: 'size-4' },

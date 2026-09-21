@@ -17,7 +17,7 @@ import {
   PriorityNone,
   PriorityUrgent,
 } from '@/components/ui/icons/Priority'
-import { ProjectStatus, StatusType, TicketPriority } from '@/types/enums'
+import { InitiativeStatus, ProjectStatus, StatusType, TicketPriority } from '@/types/enums'
 import { statusTypeOf } from '@/lib/workflow'
 import type { Status } from '@/payload-types'
 
@@ -181,6 +181,40 @@ export function projectStatusMeta(status: string | null | undefined): StateMeta 
   return PROJECT_STATUS_META[status as ProjectStatus] ?? PROJECT_STATUS_META[ProjectStatus.ACTIVE]
 }
 
+export const INITIATIVE_STATUS_META: Record<InitiativeStatus, StateMeta> = {
+  [InitiativeStatus.PLANNED]: {
+    value: InitiativeStatus.PLANNED,
+    label: 'Planned',
+    icon: CircleDashed,
+    tone: 'neutral',
+  },
+  [InitiativeStatus.ACTIVE]: {
+    value: InitiativeStatus.ACTIVE,
+    label: 'Active',
+    icon: CircleDot,
+    tone: 'success',
+  },
+  [InitiativeStatus.COMPLETED]: {
+    value: InitiativeStatus.COMPLETED,
+    label: 'Completed',
+    icon: Check,
+    tone: 'info',
+  },
+  [InitiativeStatus.CANCELLED]: {
+    value: InitiativeStatus.CANCELLED,
+    label: 'Cancelled',
+    icon: XCircle,
+    tone: 'neutral',
+  },
+}
+
+export function initiativeStatusMeta(status: string | null | undefined): StateMeta {
+  return (
+    INITIATIVE_STATUS_META[status as InitiativeStatus] ??
+    INITIATIVE_STATUS_META[InitiativeStatus.PLANNED]
+  )
+}
+
 export const BLOCKED_META: StateMeta = {
   value: 'BLOCKED',
   label: 'Blocked',
@@ -208,6 +242,15 @@ export function ticketPriorityOptions(): StateSelectOption[] {
 
 export function projectStatusOptions(): StateSelectOption[] {
   return Object.values(PROJECT_STATUS_META).map((meta) => ({
+    value: meta.value,
+    label: meta.label,
+    icon: meta.icon,
+    tone: meta.tone,
+  }))
+}
+
+export function initiativeStatusOptions(): StateSelectOption[] {
+  return Object.values(INITIATIVE_STATUS_META).map((meta) => ({
     value: meta.value,
     label: meta.label,
     icon: meta.icon,

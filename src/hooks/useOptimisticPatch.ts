@@ -10,7 +10,7 @@ export function useOptimisticPatch<T extends { id: string }>({
   record,
   onApply,
 }: {
-  collection: 'tickets' | 'projects' | 'teams' | 'cycles'
+  collection: 'tickets' | 'projects' | 'teams' | 'cycles' | 'initiatives'
   record: T
 
   onApply: (next: T) => void

@@ -11,6 +11,7 @@ import {
 const BASE_URL = process.env.LOCAL_PM_URL || 'http://localhost:3010';
 
 const STATUS_MAP: Record<string, string> = {
+  planned: 'PLANNED',
   active: 'ACTIVE',
   on_hold: 'ON_HOLD',
   completed: 'COMPLETED',
@@ -21,6 +22,22 @@ const STATUS_MAP: Record<string, string> = {
   medium: 'MEDIUM',
   low: 'LOW',
 };
+
+const TSHIRT_POINTS: Record<string, number> = { xs: 1, s: 2, m: 3, l: 5, xl: 8 };
+
+function resolveEstimate(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (typeof value === 'string') {
+    const size = TSHIRT_POINTS[value.trim().toLowerCase()];
+    if (size) return size;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  return rounded > 0 ? Math.min(rounded, 1000) : null;
+}
 
 interface StatusDoc {
   id: string;
@@ -367,6 +384,119 @@ function rollupEpic(children: Array<Record<string, unknown>>): EpicRollup {
   };
 }
 
+
+interface InitiativeProjectRollup {
+  id: string;
+  name: string;
+  prefix: string | null;
+  total: number;
+  done: number;
+  cancelled: number;
+  started: number;
+  percent: number;
+}
+
+interface InitiativeRollup {
+  projects: number;
+  total: number;
+  done: number;
+  cancelled: number;
+  started: number;
+  open: number;
+  counted: number;
+  percent: number;
+}
+
+function initiativeProjectIds(initiative: Record<string, unknown>): string[] {
+  const projects = initiative.projects;
+  if (!Array.isArray(projects)) return [];
+
+  const seen = new Set<string>();
+  for (const entry of projects) {
+    if (!entry) continue;
+    seen.add(typeof entry === 'object' ? String((entry as { id: unknown }).id) : String(entry));
+  }
+  return [...seen];
+}
+
+async function countTickets(projectId: string, statusIds?: string[]): Promise<number> {
+  if (statusIds && statusIds.length === 0) return 0;
+  let query = `?limit=0&depth=0&where[project][equals]=${projectId}`;
+  if (statusIds) query += `&where[status][in]=${statusIds.join(',')}`;
+  const response = (await apiRequest(`/tickets${query}`)) as { totalDocs?: number };
+  return response.totalDocs ?? 0;
+}
+
+async function rollupInitiativeProjects(
+  projects: Array<Record<string, unknown>>
+): Promise<InitiativeProjectRollup[]> {
+  const statuses = await loadStatuses();
+
+  return Promise.all(
+    projects.map(async (project) => {
+      const id = String(project.id);
+      const scope = statusesForProject(statuses, id);
+      const idsOfType = (type: string) =>
+        scope.filter((status) => status.type === type).map((status) => status.id);
+
+      const [total, done, cancelled, started] = await Promise.all([
+        countTickets(id),
+        countTickets(id, idsOfType('COMPLETED')),
+        countTickets(id, idsOfType('CANCELLED')),
+        countTickets(id, idsOfType('STARTED')),
+      ]);
+
+      const counted = total - cancelled;
+
+      return {
+        id,
+        name: (project.name as string) ?? id,
+        prefix: (project.prefix as string) ?? null,
+        total,
+        done,
+        cancelled,
+        started,
+        percent: counted > 0 ? Math.round((done / counted) * 100) : 0,
+      };
+    })
+  );
+}
+
+function rollupInitiative(projects: InitiativeProjectRollup[]): InitiativeRollup {
+  let total = 0;
+  let done = 0;
+  let cancelled = 0;
+  let started = 0;
+
+  for (const project of projects) {
+    total += project.total;
+    done += project.done;
+    cancelled += project.cancelled;
+    started += project.started;
+  }
+
+  const counted = total - cancelled;
+
+  return {
+    projects: projects.length,
+    total,
+    done,
+    cancelled,
+    started,
+    open: counted - done,
+    counted,
+    percent: counted > 0 ? Math.round((done / counted) * 100) : 0,
+  };
+}
+
+async function loadInitiative(id: string): Promise<Record<string, unknown>> {
+  return (await apiRequest(`/initiatives/${id}?depth=1`)) as Record<string, unknown>;
+}
+
+async function setInitiativeProjects(id: string, projectIds: string[]): Promise<unknown> {
+  return apiRequest(`/initiatives/${id}`, 'PATCH', { projects: projectIds });
+}
+
 interface SlimEpic {
   id: string;
   ticketId: string | null;
@@ -574,6 +704,23 @@ const tools: Tool[] = [
           type: 'string',
           description: 'New target date in ISO format (use null to clear)',
         },
+        estimates: {
+          type: 'object',
+          description:
+            'Effort estimate settings. Turning estimates on makes the cycle burndown and velocity charts count points rather than tickets.',
+          properties: {
+            enabled: {
+              type: 'boolean',
+              description: 'Whether tickets in this project carry an estimate',
+            },
+            scale: {
+              type: 'string',
+              description:
+                'How estimates are written. T-shirt sizes map onto the fibonacci values, so every scale still sums.',
+              enum: ['linear', 'fibonacci', 'exponential', 'tshirt'],
+            },
+          },
+        },
       },
       required: ['id'],
     },
@@ -595,6 +742,182 @@ const tools: Tool[] = [
         },
       },
       required: ['id'],
+    },
+  },
+
+  {
+    name: 'list_initiatives',
+    description: 'List initiatives — the layer above projects that rolls several of them up under one objective. Returns id, name, status, targetDate, projectCount, color and icon by default.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'string',
+          description: 'Filter by status',
+          enum: ['planned', 'active', 'completed', 'cancelled'],
+        },
+        project: {
+          type: 'string',
+          description: 'Only initiatives that contain this project id',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of initiatives to return (default: 20)',
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (1-indexed, default: 1)',
+        },
+        include: {
+          type: 'array',
+          description: 'Additional fields to include in the response',
+          items: {
+            type: 'string',
+            enum: ['description', 'lead', 'projects', 'createdAt', 'updatedAt'],
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'get_initiative',
+    description: 'Get one initiative with its projects and rolled-up ticket progress. Cancelled tickets stay in the total but leave the denominator, so percent reflects work that can still be finished.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The initiative ID',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'create_initiative',
+    description: 'Create an initiative. Projects can be attached now or added later with add_project_to_initiative.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'What this initiative is trying to achieve',
+        },
+        description: {
+          type: 'string',
+          description: 'Initiative description (supports HTML for rich text)',
+        },
+        status: {
+          type: 'string',
+          description: 'Initiative status',
+          enum: ['planned', 'active', 'completed', 'cancelled'],
+          default: 'planned',
+        },
+        projects: {
+          type: 'array',
+          description: 'Project ids this initiative rolls up',
+          items: { type: 'string' },
+        },
+        lead: {
+          type: 'string',
+          description: 'Member id accountable for this initiative',
+        },
+        targetDate: {
+          type: 'string',
+          description: 'The date this initiative is aiming at (ISO 8601)',
+        },
+        icon: {
+          type: 'string',
+          description: 'Icon name: target, rocket, flag, star, zap, layers, briefcase, megaphone, heart, cloud',
+          default: 'target',
+        },
+        color: {
+          type: 'string',
+          description: 'Hex color code (e.g., #6366f1)',
+          default: '#6366f1',
+        },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'update_initiative',
+    description: 'Update an initiative. Passing "projects" replaces the whole list — use add_project_to_initiative or remove_project_from_initiative to change one membership.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The initiative ID to update',
+        },
+        name: { type: 'string', description: 'New name' },
+        description: { type: 'string', description: 'New description' },
+        status: {
+          type: 'string',
+          description: 'New status',
+          enum: ['planned', 'active', 'completed', 'cancelled'],
+        },
+        projects: {
+          type: 'array',
+          description: 'Replaces the full list of project ids',
+          items: { type: 'string' },
+        },
+        lead: { type: 'string', description: 'New lead member id, or empty string to clear it' },
+        targetDate: { type: 'string', description: 'New target date (ISO 8601), or empty string to clear it' },
+        icon: { type: 'string', description: 'New icon name' },
+        color: { type: 'string', description: 'New hex color code' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'delete_initiative',
+    description: 'Delete an initiative. The projects inside it are kept — only the grouping is removed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The initiative ID to delete',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'add_project_to_initiative',
+    description: 'Add one project to an initiative, leaving its other projects alone. A project can belong to several initiatives.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The initiative ID',
+        },
+        project: {
+          type: 'string',
+          description: 'The project ID to add',
+        },
+      },
+      required: ['id', 'project'],
+    },
+  },
+  {
+    name: 'remove_project_from_initiative',
+    description: 'Remove one project from an initiative. The project itself and its tickets are untouched.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The initiative ID',
+        },
+        project: {
+          type: 'string',
+          description: 'The project ID to remove',
+        },
+      },
+      required: ['id', 'project'],
     },
   },
 
@@ -825,6 +1148,45 @@ const tools: Tool[] = [
         },
       },
       required: ['id'],
+    },
+  },
+  {
+    name: 'get_cycle_burndown',
+    description:
+      'Day-by-day burndown for a cycle: scope, completed and remaining work per day, against the ideal line. Rebuilt from the ticket history, so scope added or removed mid-cycle shows on the day it happened. A closed cycle reads from the snapshot frozen when it closed. Counts points when the project has estimates enabled, tickets otherwise.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'The cycle ID',
+        },
+        live: {
+          type: 'boolean',
+          description:
+            'Recompute a closed cycle from the current history instead of reading its frozen snapshot (default: false)',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'get_velocity',
+    description:
+      'What each closed cycle in a project committed to against what it finished, plus the average completed and the share of committed work delivered. Counts points when the project has estimates enabled, tickets otherwise.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'The project ID',
+        },
+        window: {
+          type: 'number',
+          description: 'How many recent closed cycles to include (default: 6)',
+        },
+      },
+      required: ['projectId'],
     },
   },
   {
@@ -1094,6 +1456,11 @@ const tools: Tool[] = [
           type: 'string',
           description: 'Cycle ID to commit this ticket to (optional). Use list_cycles to find one.',
         },
+        estimate: {
+          type: ['number', 'string'],
+          description:
+            'Effort estimate, as a point value or a t-shirt size (xs, s, m, l, xl). Only meaningful when the project has estimates enabled.',
+        },
         status: {
           type: 'string',
           description: 'Ticket status',
@@ -1181,6 +1548,11 @@ const tools: Tool[] = [
         cycle: {
           type: 'string',
           description: 'New cycle ID (use null to take the ticket out of its cycle)',
+        },
+        estimate: {
+          type: ['number', 'string'],
+          description:
+            'New effort estimate, as a point value or a t-shirt size (xs, s, m, l, xl). Use null to clear it.',
         },
         status: {
           type: 'string',
@@ -1556,6 +1928,19 @@ async function handleToolCall(
       if (args.color) updates.color = args.color;
       if (args.startDate !== undefined) updates.startDate = args.startDate;
       if (args.targetDate !== undefined) updates.targetDate = args.targetDate;
+      if (args.estimates !== undefined) {
+        const requested = args.estimates as { enabled?: boolean; scale?: string };
+        const current = (await apiRequest(`/projects/${id}?depth=0`)) as {
+          estimates?: { enabled?: boolean; scale?: string };
+        };
+        updates.estimates = {
+          enabled: requested.enabled ?? current.estimates?.enabled ?? false,
+          scale:
+            (requested.scale ? requested.scale.toUpperCase() : undefined) ??
+            current.estimates?.scale ??
+            'FIBONACCI',
+        };
+      }
       return apiRequest(`/projects/${id}`, 'PATCH', updates);
     }
     case 'delete_project': {
@@ -1569,6 +1954,133 @@ async function handleToolCall(
         }
       }
       return apiRequest(`/projects/${id}`, 'DELETE');
+    }
+
+    case 'list_initiatives': {
+      const limit = (args.limit as number) || 20;
+      const page = (args.page as number) || 1;
+      const includeFields = (args.include as string[]) || [];
+      let query = `?limit=${limit}&page=${page}&depth=1`;
+      if (args.status) {
+        query += `&where[status][equals]=${toPayloadValue(args.status as string)}`;
+      }
+      if (args.project) {
+        query += `&where[projects][in]=${args.project}`;
+      }
+
+      const response = (await apiRequest(`/initiatives${query}`)) as {
+        docs: Array<Record<string, unknown>>;
+        totalDocs: number;
+        limit: number;
+        totalPages: number;
+        page: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+        nextPage?: number | null;
+        prevPage?: number | null;
+      };
+
+      const defaultFields = ['id', 'name', 'status', 'targetDate', 'color', 'icon'];
+      const optionalFields = ['description', 'lead', 'projects', 'createdAt', 'updatedAt'];
+      const fieldsToInclude = new Set([
+        ...defaultFields,
+        ...includeFields.filter((f) => optionalFields.includes(f)),
+      ]);
+
+      const docs = response.docs.map((initiative) => {
+        const filtered: Record<string, unknown> = {};
+        for (const field of fieldsToInclude) {
+          if (field === 'projects') {
+            filtered.projects = initiativeProjectIds(initiative);
+          } else if (field === 'lead') {
+            filtered.lead = slimMember(initiative.lead);
+          } else if (field in initiative) {
+            filtered[field] = initiative[field];
+          }
+        }
+        filtered.projectCount = initiativeProjectIds(initiative).length;
+        return filtered;
+      });
+
+      return formatPaginatedResponse({ ...response, docs });
+    }
+    case 'get_initiative': {
+      const initiative = await loadInitiative(args.id as string);
+      const projects = Array.isArray(initiative.projects)
+        ? (initiative.projects.filter(
+            (entry) => entry && typeof entry === 'object'
+          ) as Array<Record<string, unknown>>)
+        : [];
+
+      const perProject = await rollupInitiativeProjects(projects);
+
+      return {
+        initiative: {
+          id: initiative.id,
+          name: initiative.name,
+          status: initiative.status,
+          targetDate: initiative.targetDate ?? null,
+          lead: slimMember(initiative.lead),
+          color: initiative.color ?? null,
+          icon: initiative.icon ?? null,
+        },
+        progress: rollupInitiative(perProject),
+        projects: perProject,
+      };
+    }
+    case 'create_initiative': {
+      return apiRequest('/initiatives', 'POST', {
+        name: args.name,
+        description: args.description || null,
+        status: toPayloadValue(args.status as string) || 'PLANNED',
+        projects: (args.projects as string[]) || [],
+        lead: args.lead || null,
+        targetDate: args.targetDate || null,
+        icon: args.icon || 'target',
+        color: args.color || '#6366f1',
+      });
+    }
+    case 'update_initiative': {
+      const updates: Record<string, unknown> = {};
+      if (args.name) updates.name = args.name;
+      if (args.description !== undefined) updates.description = args.description;
+      if (args.status) updates.status = toPayloadValue(args.status as string);
+      if (args.projects !== undefined) updates.projects = args.projects;
+      if (args.lead !== undefined) updates.lead = args.lead || null;
+      if (args.targetDate !== undefined) updates.targetDate = args.targetDate || null;
+      if (args.icon) updates.icon = args.icon;
+      if (args.color) updates.color = args.color;
+      return apiRequest(`/initiatives/${args.id}`, 'PATCH', updates);
+    }
+    case 'delete_initiative': {
+      return apiRequest(`/initiatives/${args.id}`, 'DELETE');
+    }
+    case 'add_project_to_initiative': {
+      const initiative = await loadInitiative(args.id as string);
+      const current = initiativeProjectIds(initiative);
+      const project = args.project as string;
+
+      if (current.includes(project)) {
+        throw new Error(
+          `Project ${project} is already in initiative "${initiative.name}".`
+        );
+      }
+
+      return setInitiativeProjects(args.id as string, [...current, project]);
+    }
+    case 'remove_project_from_initiative': {
+      const initiative = await loadInitiative(args.id as string);
+      const current = initiativeProjectIds(initiative);
+      const project = args.project as string;
+
+      if (!current.includes(project)) {
+        throw new Error(`Project ${project} is not in initiative "${initiative.name}".`);
+      }
+
+      return setInitiativeProjects(
+        args.id as string,
+        current.filter((id) => id !== project)
+      );
     }
 
     case 'list_teams': {
@@ -1711,6 +2223,13 @@ async function handleToolCall(
     }
     case 'close_cycle': {
       return apiRequest(`/cycles/${args.id}/close`, 'POST');
+    }
+    case 'get_cycle_burndown': {
+      return apiRequest(`/cycles/${args.id}/burndown${args.live ? '?live=true' : ''}`);
+    }
+    case 'get_velocity': {
+      const window = args.window ? `&window=${args.window}` : '';
+      return apiRequest(`/cycles/velocity?project=${args.projectId}${window}`);
     }
     case 'reconcile_cycles': {
       return apiRequest('/cycles/reconcile', 'POST', args.projectId ? { project: args.projectId } : {});
@@ -1877,6 +2396,7 @@ async function handleToolCall(
         team: args.team || null,
         assignee: args.assignee || null,
         cycle: args.cycle || null,
+        estimate: resolveEstimate(args.estimate),
         status:
           (await resolveStatusId(args.status as string, args.projectId as string | undefined)) ||
           (await defaultStatusId(args.projectId as string | undefined)),
@@ -1898,6 +2418,7 @@ async function handleToolCall(
       if (args.team !== undefined) updates.team = args.team;
       if (args.assignee !== undefined) updates.assignee = args.assignee;
       if (args.cycle !== undefined) updates.cycle = args.cycle;
+      if (args.estimate !== undefined) updates.estimate = resolveEstimate(args.estimate);
       if (args.status) updates.status = await resolveStatusId(args.status as string);
       if (args.priority) updates.priority = toPayloadValue(args.priority as string);
       if (args.startDate !== undefined) updates.startDate = args.startDate;

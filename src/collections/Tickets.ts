@@ -4,6 +4,7 @@ import { TicketPriority, TICKET_PRIORITY_OPTIONS } from '@/types/enums'
 import { collectionAccess } from '@/lib/access'
 import { diffTicket, idOf } from '@/lib/activity'
 import { TICKET_DATES, pendingDateOrderError } from '@/lib/dates'
+import { MAX_ESTIMATE, normalizeEstimate } from '@/lib/estimates'
 
 export const Tickets: CollectionConfig = {
   slug: 'tickets',
@@ -19,6 +20,10 @@ export const Tickets: CollectionConfig = {
         if (operation === 'create' && data?.project) {
           const ticketId = await generateTicketId(req, data.project as string)
           data.ticketId = ticketId
+        }
+
+        if (data?.estimate !== undefined) {
+          data.estimate = normalizeEstimate(data.estimate)
         }
 
         if (data?.blockedBy !== undefined) {
@@ -144,6 +149,16 @@ export const Tickets: CollectionConfig = {
       index: true,
       admin: {
         description: 'Shared labels drawn from the workspace label set',
+      },
+    },
+    {
+      name: 'estimate',
+      type: 'number',
+      min: 0,
+      max: MAX_ESTIMATE,
+      admin: {
+        description:
+          'How much work this is, in points. The project picks the scale it is shown in; t-shirt sizes are stored as their point value so they still add up.',
       },
     },
     {
@@ -458,6 +473,8 @@ async function writeEvents(
         field: event.field,
         from: event.from,
         to: event.to,
+        fromId: event.fromId ?? null,
+        toId: event.toId ?? null,
         actor,
       },
     })

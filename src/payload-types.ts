@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     projects: Project;
+    initiatives: Initiative;
     teams: Team;
     members: Member;
     statuses: Status;
@@ -89,6 +90,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
+    initiatives: InitiativesSelect<false> | InitiativesSelect<true>;
     teams: TeamsSelect<false> | TeamsSelect<true>;
     members: MembersSelect<false> | MembersSelect<true>;
     statuses: StatusesSelect<false> | StatusesSelect<true>;
@@ -303,9 +305,128 @@ export interface Project {
     upcomingCount?: number | null;
   };
   /**
+   * Effort estimates for tickets in this project
+   */
+  estimates?: {
+    /**
+     * Turn estimates on for this project. Off by default, and cycle charts count tickets instead.
+     */
+    enabled?: boolean | null;
+    /**
+     * How estimates are written. Changing it relabels existing estimates without rewriting them.
+     */
+    scale?: ('LINEAR' | 'FIBONACCI' | 'EXPONENTIAL' | 'TSHIRT') | null;
+  };
+  /**
    * Auto-incremented counter for ticket IDs
    */
   ticketCounter?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * A layer above projects that rolls several of them up into one objective
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiatives".
+ */
+export interface Initiative {
+  id: string;
+  /**
+   * What this initiative is trying to achieve
+   */
+  name: string;
+  /**
+   * The objective, its scope, and how success is judged
+   */
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Where this initiative sits in its life
+   */
+  status: 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  /**
+   * The projects this initiative rolls up. A project can belong to several initiatives.
+   */
+  projects?: (string | Project)[] | null;
+  /**
+   * The person accountable for this initiative
+   */
+  lead?: (string | null) | Member;
+  /**
+   * The date this initiative is aiming at
+   */
+  targetDate?: string | null;
+  /**
+   * Icon to represent the initiative
+   */
+  icon?:
+    | ('target' | 'rocket' | 'flag' | 'star' | 'zap' | 'layers' | 'briefcase' | 'megaphone' | 'heart' | 'cloud')
+    | null;
+  /**
+   * Colour theme for the initiative
+   */
+  color?:
+    | (
+        | '#6366f1'
+        | '#8b5cf6'
+        | '#a855f7'
+        | '#d946ef'
+        | '#ec4899'
+        | '#ef4444'
+        | '#f97316'
+        | '#f59e0b'
+        | '#eab308'
+        | '#22c55e'
+        | '#14b8a6'
+        | '#06b6d4'
+        | '#3b82f6'
+      )
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * People that tickets can be assigned to.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: string;
+  /**
+   * Display name — what shows on cards and in pickers
+   */
+  name: string;
+  /**
+   * Optional. Used to tell two people with the same name apart.
+   */
+  email?: string | null;
+  /**
+   * The team this person belongs to
+   */
+  team?: (string | null) | Team;
+  /**
+   * Inactive people keep their existing assignments but drop out of the assignee pickers.
+   */
+  active?: boolean | null;
+  /**
+   * The login account this person signs in with. Set it and "My tickets" works for them.
+   */
+  user?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -343,37 +464,6 @@ export interface Team {
    * Color for team identification
    */
   color?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * People that tickets can be assigned to.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "members".
- */
-export interface Member {
-  id: string;
-  /**
-   * Display name — what shows on cards and in pickers
-   */
-  name: string;
-  /**
-   * Optional. Used to tell two people with the same name apart.
-   */
-  email?: string | null;
-  /**
-   * The team this person belongs to
-   */
-  team?: (string | null) | Team;
-  /**
-   * Inactive people keep their existing assignments but drop out of the assignee pickers.
-   */
-  active?: boolean | null;
-  /**
-   * The login account this person signs in with. Set it and "My tickets" works for them.
-   */
-  user?: (string | null) | User;
   updatedAt: string;
   createdAt: string;
 }
@@ -448,6 +538,18 @@ export interface Cycle {
    * Set when the cycle was closed and its incomplete work rolled over
    */
   completedAt?: string | null;
+  /**
+   * The burndown as it stood when the cycle closed. Frozen so the chart keeps reading the same afterwards, whatever happens to the tickets later.
+   */
+  progressSnapshot?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   /**
    * How many tickets moved out of this cycle when it closed
    */
@@ -580,6 +682,10 @@ export interface Ticket {
    */
   labels?: (string | Label)[] | null;
   /**
+   * How much work this is, in points. The project picks the scale it is shown in; t-shirt sizes are stored as their point value so they still add up.
+   */
+  estimate?: number | null;
+  /**
    * When work on this ticket is meant to begin
    */
   startDate?: string | null;
@@ -703,6 +809,14 @@ export interface Activity {
    * The value, or comment text, as it read after the change
    */
   to?: string | null;
+  /**
+   * The id behind `from`, when the value was a record. Lets reports replay history exactly instead of matching on a name that may since have changed.
+   */
+  fromId?: string | null;
+  /**
+   * The id behind `to`, when the value was a record
+   */
+  toId?: string | null;
   /**
    * Who made the change. Empty when nobody was signed in.
    */
@@ -844,6 +958,10 @@ export interface PayloadLockedDocument {
         value: string | Project;
       } | null)
     | ({
+        relationTo: 'initiatives';
+        value: string | Initiative;
+      } | null)
+    | ({
         relationTo: 'teams';
         value: string | Team;
       } | null)
@@ -975,7 +1093,29 @@ export interface ProjectsSelect<T extends boolean = true> {
         automation?: T;
         upcomingCount?: T;
       };
+  estimates?:
+    | T
+    | {
+        enabled?: T;
+        scale?: T;
+      };
   ticketCounter?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "initiatives_select".
+ */
+export interface InitiativesSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  status?: T;
+  projects?: T;
+  lead?: T;
+  targetDate?: T;
+  icon?: T;
+  color?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1029,6 +1169,7 @@ export interface CyclesSelect<T extends boolean = true> {
   endsAt?: T;
   goal?: T;
   completedAt?: T;
+  progressSnapshot?: T;
   rolledOver?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1074,6 +1215,7 @@ export interface TicketsSelect<T extends boolean = true> {
   assignee?: T;
   blockedBy?: T;
   labels?: T;
+  estimate?: T;
   startDate?: T;
   dueDate?: T;
   isEpic?: T;
@@ -1135,6 +1277,8 @@ export interface ActivitySelect<T extends boolean = true> {
   field?: T;
   from?: T;
   to?: T;
+  fromId?: T;
+  toId?: T;
   actor?: T;
   updatedAt?: T;
   createdAt?: T;
