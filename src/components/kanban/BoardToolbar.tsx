@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { Plus, Search, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Search, X, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useShortcut } from '@/lib/shortcuts'
 import { useEntityDoc } from '@/hooks/useEntityDoc'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Badge'
 import { Kbd } from '@/components/ui/Kbd'
 import { MemberSelect, ProjectSelect, TeamSelect } from '@/components/ui/EntityPickers'
+import { SavedBoardViews } from './SavedBoardViews'
 import type { Member, Project, Team } from '@/payload-types'
 
 export interface BoardFilters {
@@ -23,12 +24,17 @@ export function BoardToolbar({
   onChange,
   resultCount,
   onCreateTicket,
+  hasProjects = true,
+  refreshing = false,
 }: {
   filters: BoardFilters
   onChange: (next: Partial<BoardFilters>) => void
   resultCount: number
+  hasProjects?: boolean
+  refreshing?: boolean
   onCreateTicket: () => void
 }) {
+  const [showFilters, setShowFilters] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const selectedProject = useEntityDoc<Project>('projects', filters.projectId)
@@ -70,11 +76,20 @@ export function BoardToolbar({
   }, [filters.query, onChange])
 
   return (
-    <div className="flex flex-none flex-col gap-3 border-b border-border-subtle px-6 py-3 max-md:px-4">
+    <div className="flex flex-none flex-col gap-3 border-b border-border-subtle bg-bg px-6 py-4 max-md:px-4">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold text-text">Board</h1>
+          <p className="mt-1 text-sm text-text-muted">A clear view of what is next.</p>
+        </div>
+        {hasProjects && (
+          <Button variant="primary" icon={Plus} onClick={onCreateTicket} shortcut="c">
+            New ticket
+          </Button>
+        )}
+      </div>
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="mr-1 shrink-0 text-xl font-semibold text-text">Board</h1>
-
-        <label className="relative flex h-8 min-w-44 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 md:max-w-72">
+        <label className="relative flex h-8 min-w-0 flex-1 items-center gap-2 rounded-sm border border-border bg-surface px-2.5 max-sm:basis-full md:max-w-80">
           <Search className="size-4 shrink-0 text-text-muted" aria-hidden />
           <span className="sr-only">Search tickets on this board</span>
           <input
@@ -82,49 +97,63 @@ export function BoardToolbar({
             type="search"
             value={filters.query}
             onChange={(e) => onChange({ query: e.target.value })}
-            placeholder="Search tickets"
+            placeholder="Search by title or ticket key"
             className="min-w-0 flex-1 bg-transparent text-base text-text outline-none max-sm:text-md"
           />
           <Kbd raw="/" className="max-sm:hidden" />
         </label>
 
-        <ProjectSelect
-          id="board-project-filter"
-          aria-label="Filter by project"
-          value={filters.projectId ?? ''}
-          allLabel="All projects"
-          className="w-44 max-sm:w-full"
-          onChange={(next) => onChange({ projectId: next || null })}
-        />
-
-        <TeamSelect
-          id="board-team-filter"
-          aria-label="Filter by team"
-          value={filters.teamId ?? ''}
-          allLabel="All teams"
-          className="w-40 max-sm:w-full"
-          onChange={(next) => onChange({ teamId: next || null })}
-        />
-
-        <MemberSelect
-          id="board-assignee-filter"
-          aria-label="Filter by assignee"
-          value={filters.assigneeId ?? ''}
-          allLabel="Anyone"
-          placeholder="Anyone"
-          className="w-40 max-sm:w-full"
-          onChange={(next) => onChange({ assigneeId: next || null })}
-        />
-
         <Button
-          variant="primary"
-          icon={Plus}
-          onClick={onCreateTicket}
-          className="ml-auto max-sm:w-full"
-          shortcut="c"
+          variant="secondary"
+          icon={SlidersHorizontal}
+          className="sm:hidden"
+          aria-expanded={showFilters}
+          aria-controls="board-filters"
+          onClick={() => setShowFilters((value) => !value)}
         >
-          New ticket
+          Filters{hasFilters ? ' · On' : ''}
         </Button>
+        <div
+          id="board-filters"
+          className={cn(
+            'flex flex-wrap items-center gap-2 max-sm:w-full',
+            !showFilters && 'max-sm:hidden',
+          )}
+        >
+          <ProjectSelect
+            id="board-project-filter"
+            aria-label="Filter by project"
+            value={filters.projectId ?? ''}
+            allLabel="All projects"
+            className="w-40 max-sm:w-full"
+            onChange={(next) => onChange({ projectId: next || null })}
+          />
+
+          <TeamSelect
+            id="board-team-filter"
+            aria-label="Filter by team"
+            value={filters.teamId ?? ''}
+            allLabel="All teams"
+            className="w-40 max-sm:w-full"
+            onChange={(next) => onChange({ teamId: next || null })}
+          />
+
+          <MemberSelect
+            id="board-assignee-filter"
+            aria-label="Filter by assignee"
+            value={filters.assigneeId ?? ''}
+            allLabel="Anyone"
+            placeholder="Anyone"
+            className="w-40 max-sm:w-full"
+            onChange={(next) => onChange({ assigneeId: next || null })}
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs tabular text-text-muted" role="status">
+            {refreshing ? 'Updating…' : resultCount + (resultCount === 1 ? ' ticket' : ' tickets')}
+          </span>
+          <SavedBoardViews filters={filters} onChange={onChange} />
+        </div>
       </div>
 
       <div className={cn('flex flex-wrap items-center gap-2', !hasFilters && 'hidden')}>
@@ -160,7 +189,11 @@ export function BoardToolbar({
           </Chip>
         )}
         {filters.query && (
-          <Chip tone="accent" onRemove={() => onChange({ query: '' })} removeLabel="Clear the search">
+          <Chip
+            tone="accent"
+            onRemove={() => onChange({ query: '' })}
+            removeLabel="Clear the search"
+          >
             Search: {filters.query}
           </Chip>
         )}
@@ -169,9 +202,7 @@ export function BoardToolbar({
           variant="ghost"
           size="sm"
           icon={X}
-          onClick={() =>
-            onChange({ projectId: null, teamId: null, assigneeId: null, query: '' })
-          }
+          onClick={() => onChange({ projectId: null, teamId: null, assigneeId: null, query: '' })}
         >
           Clear all
         </Button>

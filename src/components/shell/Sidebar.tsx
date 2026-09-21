@@ -39,9 +39,13 @@ function clampWidth(value: number): number {
 
 export function Sidebar({
   collapsed,
+  mobile = false,
+  onNavigate,
   onToggleCollapsed,
 }: {
   collapsed: boolean
+  mobile?: boolean
+  onNavigate?: () => void
   onToggleCollapsed: () => void
 }) {
   const pathname = usePathname()
@@ -108,7 +112,7 @@ export function Sidebar({
   return (
     <div
       className="relative flex h-full shrink-0 flex-col border-r border-border-subtle bg-bg-subtle"
-      style={{ width: collapsed ? SIDEBAR_RAIL : width }}
+      style={{ width: mobile ? '100%' : collapsed ? SIDEBAR_RAIL : width }}
     >
       <div
         className={cn(
@@ -118,6 +122,7 @@ export function Sidebar({
       >
         <Link
           href="/board"
+          onClick={onNavigate}
           aria-label="local-pm, go to board"
           className="flex min-w-0 items-center rounded-sm outline-offset-4"
         >
@@ -131,7 +136,7 @@ export function Sidebar({
               size="sm"
               iconOnly
               icon={PanelLeftClose}
-              aria-label="Collapse sidebar"
+              aria-label={mobile ? 'Close navigation' : 'Collapse sidebar'}
               onClick={onToggleCollapsed}
               className="ml-auto"
             />
@@ -159,10 +164,12 @@ export function Sidebar({
           <Tooltip content="New ticket" side="right">
             <Link
               href="/tickets/new"
+              onClick={onNavigate}
               aria-label="New ticket"
+              title="New ticket (Ctrl/⌘ + Alt + N)"
               className={cn(
-                'flex size-9 items-center justify-center rounded-sm bg-accent text-accent-fg shadow-e1',
-                'transition-colors duration-micro ease-standard hover:bg-accent-hover',
+                'flex size-9 items-center justify-center rounded-sm border border-border bg-surface text-text',
+                'transition-colors duration-micro ease-standard hover:bg-surface-hover',
               )}
             >
               <Plus className="size-5" aria-hidden />
@@ -171,19 +178,22 @@ export function Sidebar({
         ) : (
           <Link
             href="/tickets/new"
+            onClick={onNavigate}
             className={cn(
-              'flex h-9 items-center gap-2 rounded-sm bg-accent px-3 text-base font-medium text-accent-fg shadow-e1',
-              'transition-colors duration-micro ease-standard hover:bg-accent-hover',
+              'flex h-9 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-base font-medium text-text',
+              'transition-colors duration-micro ease-standard hover:bg-surface-hover',
             )}
           >
             <Plus className="size-4 shrink-0" aria-hidden />
             New ticket
-            <Kbd keys="c" tone="inverse" className="ml-auto" />
           </Link>
         )}
       </div>
 
-      <nav aria-label="Main" className={cn('min-h-0 flex-1 overflow-y-auto', collapsed ? 'px-2' : 'px-3')}>
+      <nav
+        aria-label="Main"
+        className={cn('min-h-0 flex-1 overflow-y-auto', collapsed ? 'px-2' : 'px-3')}
+      >
         {!collapsed && (
           <h2 className="px-2.5 pb-1.5 pt-1 text-2xs font-medium uppercase tracking-[0.06em] text-text-muted">
             Workspace
@@ -197,8 +207,9 @@ export function Sidebar({
             const link = (
               <Link
                 href={item.href}
+                onClick={onNavigate}
                 aria-current={active ? 'page' : undefined}
-                tabIndex={index === focusIndex ? 0 : -1}
+                aria-label={collapsed ? item.label : undefined}
                 onFocus={() => setFocusIndex(index)}
                 className={cn(
                   'group relative flex h-9 items-center rounded-sm text-base',
@@ -243,10 +254,7 @@ export function Sidebar({
       </nav>
 
       <div
-        className={cn(
-          'flex-none border-t border-border-subtle py-2',
-          collapsed ? 'px-2' : 'px-3',
-        )}
+        className={cn('flex-none border-t border-border-subtle py-2', collapsed ? 'px-2' : 'px-3')}
       >
         {collapsed ? (
           <Tooltip content="Keyboard shortcuts" side="right">
@@ -274,7 +282,7 @@ export function Sidebar({
         )}
       </div>
 
-      {!collapsed && (
+      {!collapsed && !mobile && (
         <div
           role="separator"
           aria-orientation="vertical"

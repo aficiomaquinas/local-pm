@@ -10,7 +10,9 @@ function withDatabase(uri: string, dbName: string): string {
 
 export default async function globalSetup() {
   const sourceUri = process.env.DATABASE_URI ?? 'mongodb://localhost:27018/local-pm'
-  const e2eUri = process.env.E2E_DATABASE_URI ?? withDatabase(sourceUri, 'local-pm-e2e')
+  const e2eUri =
+    process.env.E2E_DATABASE_URI ??
+    withDatabase(sourceUri, 'local-pm-e2e-' + (process.env.E2E_PORT ?? 3020))
 
   if (e2eUri === sourceUri) {
     throw new Error('Refusing to seed statuses into the working database.')

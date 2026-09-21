@@ -19,6 +19,11 @@ A lightweight, self-hosted project management tool with a built-in MCP (Model Co
 - **Attachments** - Drop, paste or pick files into a comment; images render inline, everything else becomes a link
 - **MCP Server** - AI-native project management via Model Context Protocol
 - **Self-Hosted** - Your data stays on your machine
+- **A guided start** - A first-project welcome screen and an always-available getting-started guide
+- **Find work quickly** - Search titles or ticket keys from the board, ticket lists, or command palette
+- **Saved board views** - Name a set of filters and return to it later on the same browser
+- **Recoverable ticket drafts** - Restore unfinished new tickets while the browser tab remains open
+- **Responsive navigation** - Visible mobile navigation, keyboard-accessible drawers, and touch-sized controls
 - **Docker Ready** - One command deployment
 
 ## Screenshots
@@ -300,9 +305,11 @@ npm run test:e2e    # playwright — full browser E2E
 npm run verify      # all three
 ```
 
-E2E tests run against their **own database** (`local-pm-e2e`, derived from
-`DATABASE_URI`) on their own port, and refuse to start if that would resolve to
-the same database as your working one. First run needs browsers:
+E2E tests run against their **own database** (`local-pm-e2e-<port>`, derived from
+`DATABASE_URI`). Set `E2E_PORT` to choose a port (default 3020). The build directory
+and test artifacts also include the port, and the suite refuses to attach to an
+already-running server. Use separate worktrees and different ports for concurrent
+sessions. First run needs browsers:
 
 ```bash
 npx playwright install chromium

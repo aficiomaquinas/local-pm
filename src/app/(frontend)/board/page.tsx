@@ -3,12 +3,12 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { resolveWorkflow } from '@/lib/workflow'
 import type { Where } from 'payload'
+import { ticketSearchWhere } from '@/lib/ticket-search'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Board · local-pm' }
 
 const TICKETS_PER_COLUMN = 20
-const MIN_SEARCH = 3
 
 interface BoardPageProps {
   searchParams: Promise<{ project?: string; team?: string; assignee?: string; q?: string }>
@@ -29,7 +29,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
     if (projectFilter) conditions.project = { equals: projectFilter }
     if (teamFilter) conditions.team = { equals: teamFilter }
     if (assigneeFilter) conditions.assignee = { equals: assigneeFilter }
-    if (query.length >= MIN_SEARCH) conditions.title = { like: query }
+    if (query) Object.assign(conditions, ticketSearchWhere(query))
     return conditions
   }
 

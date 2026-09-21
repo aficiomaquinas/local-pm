@@ -7,6 +7,7 @@ export function useEntityDoc<T extends { id: string }>(
   collection: EntityCollection,
   id: string | null | undefined,
   seed?: T | null,
+  depth = 0,
 ): T | null {
   const [doc, setDoc] = useState<T | null>(seed ?? null)
 
@@ -23,7 +24,7 @@ export function useEntityDoc<T extends { id: string }>(
     const controller = new AbortController()
     void (async () => {
       try {
-        const response = await fetch(`/api/${collection}/${id}?depth=0`, {
+        const response = await fetch(`/api/${collection}/${id}?depth=${depth}`, {
           signal: controller.signal,
         })
         if (!response.ok) return
@@ -32,7 +33,7 @@ export function useEntityDoc<T extends { id: string }>(
     })()
 
     return () => controller.abort()
-  }, [collection, id, seed])
+  }, [collection, id, seed, depth])
 
-  return doc
+  return doc?.id === id ? doc : null
 }

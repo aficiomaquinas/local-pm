@@ -1,6 +1,10 @@
+'use client'
+
+import { useId } from 'react'
 import { cn } from '@/lib/cn'
 
 export function LogoMark({ className }: { className?: string }) {
+  const gradientId = useId()
   return (
     <svg
       viewBox="0 0 32 32"
@@ -10,13 +14,13 @@ export function LogoMark({ className }: { className?: string }) {
       role="presentation"
     >
       <defs>
-        <linearGradient id="local-pm-mark" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="var(--indigo-9)" />
           <stop offset="100%" stopColor="var(--indigo-11)" />
         </linearGradient>
       </defs>
 
-      <rect width="32" height="32" rx="9" fill="url(#local-pm-mark)" />
+      <rect width="32" height="32" rx="9" fill={'url(#' + gradientId + ')'} />
 
       <g fill="#fff">
         <rect x="7" y="9" width="4.5" height="14" rx="2.25" opacity="0.65" />

@@ -87,7 +87,9 @@ export function TeamFormDialog({
       const saved = await response.json()
       onSaved((saved.doc ?? saved) as Team, !team)
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Something went wrong saving this team.')
+      setFormError(
+        error instanceof Error ? error.message : 'Something went wrong saving this team.',
+      )
       requestAnimationFrame(() => summaryRef.current?.focus())
     } finally {
       setSubmitting(false)
@@ -139,7 +141,7 @@ export function TeamFormDialog({
             </p>
           </div>
 
-          <Field label="Name" required error={showNameError ? nameError : null}>
+          <Field id="team-form-name" label="Name" required error={showNameError ? nameError : null}>
             {({ describedBy, invalid }) => (
               <Input
                 id="team-form-name"
