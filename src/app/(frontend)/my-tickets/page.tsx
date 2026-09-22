@@ -2,6 +2,7 @@ import { headers as getHeaders } from 'next/headers'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { MyTickets, type SignedInUser } from '@/components/tickets/MyTickets'
+import { scopedLocalArgs } from '@/lib/rbac'
 import type { Member } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,7 @@ export default async function MyTicketsPage() {
       where: { user: { equals: user.id } },
       limit: 1,
       depth: 0,
+      ...scopedLocalArgs(user),
     })
     member = found.docs[0] ?? null
   }

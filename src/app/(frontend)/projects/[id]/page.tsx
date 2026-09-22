@@ -15,9 +15,10 @@ interface ProjectPageProps {
 
 export async function generateMetadata({ params }: ProjectPageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const project = await payload.findByID({ collection: 'projects', id, depth: 0 })
+    const project = await payload.findByID({ collection: 'projects', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `${project.name} · local-pm` }
   } catch {
     return { title: 'Project · local-pm' }

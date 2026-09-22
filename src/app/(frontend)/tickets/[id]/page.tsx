@@ -12,9 +12,10 @@ interface TicketPageProps {
 
 export async function generateMetadata({ params }: TicketPageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const ticket = await payload.findByID({ collection: 'tickets', id, depth: 0 })
+    const ticket = await payload.findByID({ collection: 'tickets', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `${ticket.ticketId ?? 'Ticket'} · ${ticket.title} · local-pm` }
   } catch {
     return { title: 'Ticket · local-pm' }

@@ -13,9 +13,10 @@ interface EditInitiativePageProps {
 
 export async function generateMetadata({ params }: EditInitiativePageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const initiative = await payload.findByID({ collection: 'initiatives', id, depth: 0 })
+    const initiative = await payload.findByID({ collection: 'initiatives', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `Edit ${initiative.name} · local-pm` }
   } catch {
     return { title: 'Edit initiative · local-pm' }

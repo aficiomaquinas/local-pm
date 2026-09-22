@@ -17,9 +17,10 @@ interface CyclePageProps {
 
 export async function generateMetadata({ params }: CyclePageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const cycle = await payload.findByID({ collection: 'cycles', id, depth: 0 })
+    const cycle = await payload.findByID({ collection: 'cycles', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `${cycle.name} · local-pm` }
   } catch {
     return { title: 'Cycle · local-pm' }

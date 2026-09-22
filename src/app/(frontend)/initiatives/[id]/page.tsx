@@ -15,9 +15,10 @@ interface InitiativePageProps {
 
 export async function generateMetadata({ params }: InitiativePageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const initiative = await payload.findByID({ collection: 'initiatives', id, depth: 0 })
+    const initiative = await payload.findByID({ collection: 'initiatives', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `${initiative.name} · local-pm` }
   } catch {
     return { title: 'Initiative · local-pm' }

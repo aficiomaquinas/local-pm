@@ -1,4 +1,3 @@
-import type { User } from 'payload'
 import { requireAuthEnabled } from '@/lib/access'
 
 /**
@@ -18,9 +17,9 @@ export const authRequired = requireAuthEnabled
  * Spread it LAST, after collection/where/depth, so it can never be clobbered:
  *   payload.find({ collection: 'tickets', where, ...scopedLocalArgs(user) })
  */
-export function scopedLocalArgs(
-  user: User | null | undefined,
-): { user: User | undefined; overrideAccess: false } | Record<string, never> {
+export function scopedLocalArgs<TUser extends object>(
+  user: TUser | null | undefined,
+): { user: TUser | undefined; overrideAccess: false } | Record<string, never> {
   if (!requireAuthEnabled()) return {}
   return { user: user ?? undefined, overrideAccess: false }
 }

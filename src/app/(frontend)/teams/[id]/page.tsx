@@ -15,9 +15,10 @@ interface TeamPageProps {
 
 export async function generateMetadata({ params }: TeamPageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const team = await payload.findByID({ collection: 'teams', id, depth: 0 })
+    const team = await payload.findByID({ collection: 'teams', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `${team.name} · local-pm` }
   } catch {
     return { title: 'Team · local-pm' }

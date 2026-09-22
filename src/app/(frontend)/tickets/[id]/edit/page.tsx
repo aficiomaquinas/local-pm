@@ -14,9 +14,10 @@ interface EditTicketPageProps {
 
 export async function generateMetadata({ params }: EditTicketPageProps) {
   const { id } = await params
+  const user = authRequired() ? await requireUser() : null
   try {
     const payload = await getPayload({ config })
-    const ticket = await payload.findByID({ collection: 'tickets', id, depth: 0 })
+    const ticket = await payload.findByID({ collection: 'tickets', id, depth: 0, ...scopedLocalArgs(user) })
     return { title: `Edit ${ticket.ticketId ?? ticket.title} · local-pm` }
   } catch {
     return { title: 'Edit ticket · local-pm' }
