@@ -163,7 +163,7 @@ export interface User {
    */
   name?: string | null;
   /**
-   * admin may delete records and manage accounts; member may read and write; agent is an automated caller and should hold an API key rather than a password. Defaults to admin so the first account created can administer the install.
+   * admin may delete records and manage accounts; member may read and write; agent is an automated caller and should hold an API key rather than a password. The FIRST account created is promoted to admin automatically; every later account defaults to member.
    */
   role: 'admin' | 'member' | 'agent';
   updatedAt: string;
