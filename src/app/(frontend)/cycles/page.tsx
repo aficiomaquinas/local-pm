@@ -6,7 +6,8 @@ import { cycleProgress, sortCycles } from '@/lib/cycles'
 import { loadVelocity } from '@/lib/burndown-service'
 import { VELOCITY_WINDOW } from '@/lib/burndown'
 import { CycleAutomation } from '@/types/enums'
-import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs, hasNoProjectGrants } from '@/lib/rbac'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import type { Cycle, Project } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +22,15 @@ export default async function CyclesPage({ searchParams }: CyclesPageProps) {
   const { project: requested } = await searchParams
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: no usable session → sign-in gate; orphan → no-projects
+  // gate. Cycles are project-scoped, so both shapes would only deny below.
+  if (authRequired() && !user) {
+    return <SignedOutGate title="Cycles" />
+  }
+  if (authRequired() && (await hasNoProjectGrants(user))) {
+    return <SignedOutGate title="Cycles" orphan />
+  }
 
   const authedArgs: Record<string, unknown> = {}
   if (authRequired()) {

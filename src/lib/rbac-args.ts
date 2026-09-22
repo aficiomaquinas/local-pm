@@ -23,3 +23,14 @@ export function scopedLocalArgs<TUser extends object>(
   if (!requireAuthEnabled()) return {}
   return { user: user ?? undefined, overrideAccess: false }
 }
+
+/**
+ * Type shape for the `SignedOutGate` RSC guard (my-tickets pattern). Importing
+ * the component type itself would drag client-component deps (lucide icons,
+ * LinkButton) into unit tests that only need the contract; this keeps the
+ * gate's props structural and test-friendly.
+ */
+export type SignedOutPageProps = {
+  title: string
+  orphan?: boolean
+}

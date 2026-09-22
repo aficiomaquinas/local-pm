@@ -1,4 +1,5 @@
 import { TeamDetail } from '@/components/teams/TeamDetail'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { notFound } from 'next/navigation'
@@ -16,6 +17,7 @@ interface TeamPageProps {
 export async function generateMetadata({ params }: TeamPageProps) {
   const { id } = await params
   const user = authRequired() ? await requireUser() : null
+  if (authRequired() && !user) return { title: 'Team · local-pm' }
   try {
     const payload = await getPayload({ config })
     const team = await payload.findByID({ collection: 'teams', id, depth: 0, ...scopedLocalArgs(user) })
@@ -30,6 +32,12 @@ export default async function TeamPage({ params, searchParams }: TeamPageProps) 
   const { tab } = await searchParams
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: no usable session → sign-in gate (rootAccess.read
+  // would deny the lookup inside the RSC otherwise → crash).
+  if (authRequired() && !user) {
+    return <SignedOutGate title="Team" />
+  }
 
   try {
     const team = await payload.findByID({

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ProjectForm } from '@/components/projects/ProjectForm'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,12 @@ export default async function EditProjectPage({ params }: EditProjectPageProps) 
   const { id } = await params
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: no usable session → sign-in gate before the scoped
+  // findByID (which would only deny and land in the notFound catch).
+  if (authRequired() && !user) {
+    return <SignedOutGate title="Edit project" />
+  }
 
   try {
     const project = await payload.findByID({

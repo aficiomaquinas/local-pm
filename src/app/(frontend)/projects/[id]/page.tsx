@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ProjectDetail } from '@/components/projects/ProjectDetail'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import { StatusType } from '@/types/enums'
 import { resolveWorkflow } from '@/lib/workflow'
 import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
@@ -16,6 +17,7 @@ interface ProjectPageProps {
 export async function generateMetadata({ params }: ProjectPageProps) {
   const { id } = await params
   const user = authRequired() ? await requireUser() : null
+  if (authRequired() && !user) return { title: 'Project · local-pm' }
   try {
     const payload = await getPayload({ config })
     const project = await payload.findByID({ collection: 'projects', id, depth: 0, ...scopedLocalArgs(user) })
@@ -30,6 +32,13 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const { tab } = await searchParams
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: without a usable session the scoped lookup below would
+  // deny inside the RSC (crash) or resolve to a misleading 404 — show the
+  // sign-in gate instead.
+  if (authRequired() && !user) {
+    return <SignedOutGate title="Project" />
+  }
 
   try {
     // With auth on, collectionAccess on projects runs (overrideAccess false):

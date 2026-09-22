@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { Access, Payload, TypedUser, Where } from 'payload'
 import {
   requireAuthEnabled,
@@ -15,7 +17,39 @@ import {
   initiativesAccess,
   attachmentsAccess,
 } from '@/lib/access'
-import { authRequired, scopedLocalArgs } from '@/lib/rbac-args'
+import { authRequired, scopedLocalArgs, type SignedOutPageProps } from '@/lib/rbac-args'
+import { hasNoProjectGrants } from '@/lib/rbac'
+
+/**
+ * Mocks for the page-guard helpers (SignedOutGate RSC crash class, review
+ * round 2). `@payload-config` and `payload.getPayload` are replaced so
+ * hasNoProjectGrants can run without a database; the members store is a
+ * plain object keyed by user id (null = no linked Member document).
+ */
+const rbacMock = vi.hoisted(() => ({
+  memberships: {} as Record<string, { projects: string[] } | null>,
+}))
+
+vi.mock('@payload-config', () => ({
+  default: {
+    collections: { members: {} },
+    globals: {},
+    db: { defaultIDType: 'text' },
+  },
+}))
+
+vi.mock('payload', () => ({
+  getPayload: async () => ({
+    find: async (args: Record<string, unknown>) => {
+      const a = args as { collection?: string; where?: { user?: { equals?: string } } }
+      if (a.collection !== 'members') return { docs: [] }
+      const userId = a.where?.user?.equals
+      const grants = userId ? rbacMock.memberships[String(userId)] : undefined
+      if (!grants) return { docs: [] }
+      return { docs: [{ id: `m-${userId}`, projects: grants.projects, projectRole: 'member' }] }
+    },
+  }),
+}))
 import { Users } from '@/collections/Users'
 import { Initiatives } from '@/collections/Initiatives'
 import { Attachments } from '@/collections/Attachments'
@@ -544,5 +578,127 @@ describe('members self-profile + field-level grants (Anas #35 point 3)', () => {
     expect(
       await call(membersAccess.create, member, { data: { user: String(member.id) } }),
     ).toBe(true)
+  })
+})
+
+/**
+ * SignedOutGate render guards (review round 2, RSC crash class). Under auth on,
+ * every page resolves `user` FIRST and answers `authRequired() && !user` with
+ * the sign-in empty state instead of running a user-less scoped Local-API
+ * query (payload throws Forbidden inside the RSC → route error boundary).
+ * Pages under test: board, / (redirect), projects, teams, initiatives, cycles
+ * lists + projects/[id], projects/[id]/edit, teams/[id], tickets/[id],
+ * tickets/[id]/edit, tickets/new, cycles/[id], initiatives/[id],
+ * initiatives/[id]/edit (+ their generateMetadata).
+ */
+const FRONTEND_PAGES = (rel: string) =>
+  readFileSync(fileURLToPath(new URL(`../src/app/(frontend)/${rel}`, import.meta.url)), 'utf8')
+
+const GUARD_PAGES = [
+  'board/page.tsx',
+  'projects/page.tsx',
+  'teams/page.tsx',
+  'initiatives/page.tsx',
+  'cycles/page.tsx',
+  'projects/[id]/page.tsx',
+  'projects/[id]/edit/page.tsx',
+  'teams/[id]/page.tsx',
+  'tickets/[id]/page.tsx',
+  'tickets/[id]/edit/page.tsx',
+  'tickets/new/page.tsx',
+  'cycles/[id]/page.tsx',
+  'initiatives/[id]/page.tsx',
+  'initiatives/[id]/edit/page.tsx',
+] as const
+
+/** All generateMetadata carrying a scoped lookup must early-return without a user. */
+const METADATA_PAGES = [
+  'projects/[id]/page.tsx',
+  'teams/[id]/page.tsx',
+  'tickets/[id]/page.tsx',
+  'tickets/[id]/edit/page.tsx',
+  'cycles/[id]/page.tsx',
+  'initiatives/[id]/page.tsx',
+  'initiatives/[id]/edit/page.tsx',
+] as const
+
+describe('page render guards — SignedOutGate (auth-on anonymous / stale cookie)', () => {
+  beforeEach(() => {
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'true'
+    for (const key of Object.keys(rbacMock.memberships)) delete rbacMock.memberships[key]
+  })
+
+  it('every guarded page resolves the user and gates BEFORE any scoped query', () => {
+    for (const rel of GUARD_PAGES) {
+      const src = FRONTEND_PAGES(rel)
+      expect(src, `${rel} resolves a user`).toMatch(/authRequired\(\) \? await requireUser\(\) : null/)
+      expect(src, `${rel} gates on the user before querying`).toMatch(
+        /if \(authRequired\(\) && !user\) \{\s*\n\s*return <SignedOutGate/,
+      )
+    }
+  })
+
+  it('generateMetadata on [id] pages returns early without a session (no scoped lookup)', () => {
+    for (const rel of METADATA_PAGES) {
+      const src = FRONTEND_PAGES(rel)
+      expect(src, `${rel} generateMetadata`).toMatch(
+        /if \(authRequired\(\) && !user\) return \{ title:/,
+      )
+    }
+  })
+
+  it('my-tickets keeps its own session shape (the pattern source, unchanged)', () => {
+    const src = FRONTEND_PAGES('my-tickets/page.tsx')
+    expect(src).toMatch(/const \{ user \} = await payload\.auth\(/)
+    expect(src).toMatch(/if \(user\) \{/)
+  })
+
+  it('orphan gating: board and every project-scoped list render the no-grants gate', () => {
+    for (const rel of ['board/page.tsx', 'projects/page.tsx', 'cycles/page.tsx'] as const) {
+      expect(FRONTEND_PAGES(rel), `${rel} orphan gate`).toMatch(
+        /hasNoProjectGrants\(user\)\)\)/,
+      )
+    }
+    // teams + initiatives need a Member document at all (rootAccess), so their
+    // pages gate orphans through the same helper as well.
+    for (const rel of ['teams/page.tsx', 'initiatives/page.tsx'] as const) {
+      expect(FRONTEND_PAGES(rel), `${rel} orphan gate`).toMatch(
+        /hasNoProjectGrants\(user\)\)\)/,
+      )
+    }
+  })
+
+  it('hasNoProjectGrants: true for a member with zero projects, false otherwise', async () => {
+    const orphan = { id: 'orphan1', role: 'member' } as unknown as Parameters<
+      typeof hasNoProjectGrants
+    >[0]
+    const member = { id: 'member1', role: 'member' } as unknown as Parameters<
+      typeof hasNoProjectGrants
+    >[0]
+    const admin = { id: 'admin1', role: 'admin' } as unknown as Parameters<
+      typeof hasNoProjectGrants
+    >[0]
+
+    // No Member document → no grants.
+    expect(await hasNoProjectGrants(orphan)).toBe(true)
+
+    // Member with zero linked projects → still no grants.
+    rbacMock.memberships['orphan1'] = { projects: [] }
+    expect(await hasNoProjectGrants(orphan)).toBe(true)
+
+    // Real grants → false.
+    rbacMock.memberships['member1'] = { projects: ['proj1'] }
+    expect(await hasNoProjectGrants(member)).toBe(false)
+
+    // Install admin and anonymous never count as orphan.
+    expect(await hasNoProjectGrants(admin)).toBe(false)
+    expect(await hasNoProjectGrants(null)).toBe(false)
+  })
+
+  it('SignedOutPageProps keeps the gate contract structural (title + orphan)', () => {
+    const gate: SignedOutPageProps = { title: 'Board' }
+    const orphanGate: SignedOutPageProps = { title: 'Board', orphan: true }
+    expect(gate.title).toBe('Board')
+    expect(orphanGate.orphan).toBe(true)
   })
 })

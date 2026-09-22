@@ -1,10 +1,11 @@
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { resolveWorkflow } from '@/lib/workflow'
 import type { Where } from 'payload'
 import { ticketSearchWhere } from '@/lib/ticket-search'
-import { requireUser, projectScopeWhere, authRequired, scopedLocalArgs } from '@/lib/rbac'
+import { requireUser, projectScopeWhere, authRequired, scopedLocalArgs, hasNoProjectGrants } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Board · local-pm' }
@@ -31,7 +32,21 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
 
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: with auth on but no usable session (no cookie, stale
+  // cookie, first visit), render the sign-in empty state instead of letting a
+  // user-less scoped query run — collectionAccess would throw inside the RSC
+  // and surface as the route error boundary.
+  if (authRequired() && !user) {
+    return <SignedOutGate title="Board" />
+  }
+
   const scope = authRequired() ? await projectScopeWhere(user) : null
+
+  // Orphan: signed in but holding no project grants. Same gate, no-crash copy.
+  if (authRequired() && (await hasNoProjectGrants(user))) {
+    return <SignedOutGate title="Board" orphan />
+  }
 
   // A deep link into a project outside this membership resolves to nothing,
   // not to a leak: the scope narrows whatever the URL asked for.

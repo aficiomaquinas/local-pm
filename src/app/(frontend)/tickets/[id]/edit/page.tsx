@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 import type { Cycle, Member, Project, Team } from '@/payload-types'
 
@@ -15,6 +16,7 @@ interface EditTicketPageProps {
 export async function generateMetadata({ params }: EditTicketPageProps) {
   const { id } = await params
   const user = authRequired() ? await requireUser() : null
+  if (authRequired() && !user) return { title: 'Edit ticket · local-pm' }
   try {
     const payload = await getPayload({ config })
     const ticket = await payload.findByID({ collection: 'tickets', id, depth: 0, ...scopedLocalArgs(user) })
@@ -29,6 +31,12 @@ export default async function EditTicketPage({ params, searchParams }: EditTicke
   const { returnTo } = await searchParams
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: no usable session → sign-in gate before the scoped
+  // findByID.
+  if (authRequired() && !user) {
+    return <SignedOutGate title="Edit ticket" />
+  }
 
   try {
     const ticket = await payload.findByID({

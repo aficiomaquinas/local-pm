@@ -3,6 +3,7 @@ import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
 import { resolveWorkflow } from '@/lib/workflow'
 import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
+import { SignedOutGate } from '@/components/ui/SignedOutGate'
 import type { Cycle, Project, Team, Member } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +25,12 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
   const projectId = params.project || null
   const payload = await getPayload({ config })
   const user = authRequired() ? await requireUser() : null
+
+  // my-tickets pattern: no usable session → sign-in gate; the prefetches below
+  // would deny inside the RSC otherwise → crash.
+  if (authRequired() && !user) {
+    return <SignedOutGate title="New ticket" />
+  }
 
   const authedArgs: Record<string, unknown> = {}
   if (authRequired()) {

@@ -21,7 +21,7 @@ export async function requireUser(): Promise<User | null> {
  * both live in rbac-args.ts (import-safe without next/headers); rbac.ts
  * re-exports them so pages keep a single import site.
  */
-export { authRequired, scopedLocalArgs } from '@/lib/rbac-args'
+export { authRequired, scopedLocalArgs, type SignedOutPageProps } from '@/lib/rbac-args'
 
 /**
  * Under auth-on, an install admin (Users.role === 'admin') sees every
@@ -75,6 +75,17 @@ export async function projectScopeWhere(
   if (ids.includes('*')) return null
   if (ids.length === 0) return { [field]: { in: [] } }
   return { [field]: { in: ids } }
+}
+
+/**
+ * Page-side orphan check: true when an authenticated account holds no project
+ * grants at all — no Member document, or one linking zero projects. Always
+ * false for install admins. Pages answer it with the SignedOutGate orphan
+ * empty state instead of running queries that can only deny.
+ */
+export async function hasNoProjectGrants(user: User | TypedUser | null): Promise<boolean> {
+  if (!user || isInstallAdmin(user)) return false
+  return (await visibleProjectIds(user)).length === 0
 }
 
 /**
