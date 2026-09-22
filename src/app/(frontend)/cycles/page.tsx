@@ -6,7 +6,7 @@ import { cycleProgress, sortCycles } from '@/lib/cycles'
 import { loadVelocity } from '@/lib/burndown-service'
 import { VELOCITY_WINDOW } from '@/lib/burndown'
 import { CycleAutomation } from '@/types/enums'
-import { accessOpen, requireUser } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 import type { Cycle, Project } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -20,8 +20,13 @@ interface CyclesPageProps {
 export default async function CyclesPage({ searchParams }: CyclesPageProps) {
   const { project: requested } = await searchParams
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
-  const authedArgs = accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }
+  const user = authRequired() ? await requireUser() : null
+
+  const authedArgs: Record<string, unknown> = {}
+  if (authRequired()) {
+    authedArgs.user = user ?? undefined
+    authedArgs.overrideAccess = false
+  }
 
   const project = await resolveProject(payload, requested, authedArgs)
 

@@ -2,7 +2,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { TicketForm } from '@/components/tickets/TicketForm'
 import { resolveWorkflow } from '@/lib/workflow'
-import { accessOpen, requireUser } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 import type { Cycle, Project, Team, Member } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -23,8 +23,13 @@ export default async function NewTicketPage({ searchParams }: NewTicketPageProps
   const params = await searchParams
   const projectId = params.project || null
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
-  const authedArgs = accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }
+  const user = authRequired() ? await requireUser() : null
+
+  const authedArgs: Record<string, unknown> = {}
+  if (authRequired()) {
+    authedArgs.user = user ?? undefined
+    authedArgs.overrideAccess = false
+  }
 
   const workflow = await resolveWorkflow(payload, projectId)
   const requested = params.status ?? ''

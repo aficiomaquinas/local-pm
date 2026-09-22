@@ -7,8 +7,8 @@ import { requireAuthEnabled } from '@/lib/access'
 /**
  * Resolve the signed-in account inside an RSC the same way the REST layer
  * does. Local-API calls never authenticate on their own; every page that
- * reads a collection with collectionAccess must pass `user` plus
- * `overrideAccess: false` or the rules never run.
+ * reads a collection with collectionAccess must attach `scopedLocalArgs(user)`
+ * (or `user` plus `overrideAccess: false`) or the rules never run.
  */
 export async function requireUser(): Promise<User | null> {
   const payload = await getPayload({ config })
@@ -17,10 +17,11 @@ export async function requireUser(): Promise<User | null> {
 }
 
 /**
- * True when access control is inactive — pages keep their pre-RBAC behaviour
- * and skip membership resolution entirely.
+ * Canonical page-side flag and the single spread boundary for Local-API args:
+ * both live in rbac-args.ts (import-safe without next/headers); rbac.ts
+ * re-exports them so pages keep a single import site.
  */
-export const accessOpen = requireAuthEnabled
+export { authRequired, scopedLocalArgs } from '@/lib/rbac-args'
 
 /**
  * Under auth-on, an install admin (Users.role === 'admin') sees every

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { ProjectForm } from '@/components/projects/ProjectForm'
-import { accessOpen, requireUser } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,14 +24,14 @@ export async function generateMetadata({ params }: EditProjectPageProps) {
 export default async function EditProjectPage({ params }: EditProjectPageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
+  const user = authRequired() ? await requireUser() : null
 
   try {
     const project = await payload.findByID({
       collection: 'projects',
       id,
       depth: 0,
-      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+      ...scopedLocalArgs(user),
     })
     if (!project) notFound()
     return <ProjectForm project={project} />

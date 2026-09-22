@@ -4,7 +4,7 @@ import config from '@payload-config'
 import { InitiativeDetail } from '@/components/initiatives/InitiativeDetail'
 import { rollupProjects } from '@/lib/initiative-stats'
 import { projectRefsOf } from '@/lib/initiative'
-import { accessOpen, requireUser } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 import type { Initiative } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -27,14 +27,14 @@ export async function generateMetadata({ params }: InitiativePageProps) {
 export default async function InitiativePage({ params }: InitiativePageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
+  const user = authRequired() ? await requireUser() : null
 
   try {
     const initiative = (await payload.findByID({
       collection: 'initiatives',
       id,
       depth: 1,
-      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+      ...scopedLocalArgs(user),
     })) as Initiative
     if (!initiative) notFound()
 

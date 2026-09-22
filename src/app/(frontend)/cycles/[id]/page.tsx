@@ -6,7 +6,7 @@ import { cycleSettingsOf } from '@/lib/cycle-service'
 import { loadBurndown, snapshotOf } from '@/lib/burndown-service'
 import { cycleProgress } from '@/lib/cycles'
 import { CycleAutomation } from '@/types/enums'
-import { accessOpen, requireUser } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 import type { Cycle, Project } from '@/payload-types'
 
 export const dynamic = 'force-dynamic'
@@ -29,8 +29,13 @@ export async function generateMetadata({ params }: CyclePageProps) {
 export default async function CyclePage({ params }: CyclePageProps) {
   const { id } = await params
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
-  const authedArgs = accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }
+  const user = authRequired() ? await requireUser() : null
+
+  const authedArgs: Record<string, unknown> = {}
+  if (authRequired()) {
+    authedArgs.user = user ?? undefined
+    authedArgs.overrideAccess = false
+  }
 
   try {
     const cycle = (await payload.findByID({

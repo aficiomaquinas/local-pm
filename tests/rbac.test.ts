@@ -13,7 +13,12 @@ import {
   rootAccess,
   membersAccess,
   initiativesAccess,
+  attachmentsAccess,
 } from '@/lib/access'
+import { authRequired, scopedLocalArgs } from '@/lib/rbac-args'
+import { Users } from '@/collections/Users'
+import { Initiatives } from '@/collections/Initiatives'
+import { Attachments } from '@/collections/Attachments'
 
 const call = async (fn: Access, user: unknown, extra: Record<string, unknown> = {}) =>
   (fn as (args: Record<string, unknown>) => unknown)({ req: reqFor(user), ...extra })
@@ -359,5 +364,185 @@ describe('typed user helper contract (#13 — no falsy Forbidden traps)', () => 
       expect(result).not.toBe(undefined)
       expect(result).not.toBe(null)
     }
+  })
+})
+
+describe('scopedLocalArgs — the one Local-API spread boundary (BUG-2 regression)', () => {
+  beforeEach(() => {
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'true'
+  })
+
+  it('with auth on: attaches the user and forces collectionAccess to run', () => {
+    const user = { id: 'u1', collection: 'users' } as unknown as Parameters<typeof scopedLocalArgs>[0]
+    expect(scopedLocalArgs(user)).toStrictEqual({ user, overrideAccess: false })
+  })
+
+  it('with auth on: even a null user forces overrideAccess:false (fail closed)', () => {
+    const result = scopedLocalArgs(null)
+    expect(result).toStrictEqual({ user: undefined, overrideAccess: false })
+    expect('overrideAccess' in result && result.overrideAccess === false).toBe(true)
+  })
+
+  it('with auth off: contributes nothing — pages keep pre-RBAC behaviour', () => {
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'false'
+    const user = { id: 'u1' } as unknown as Parameters<typeof scopedLocalArgs>[0]
+    expect(scopedLocalArgs(user)).toStrictEqual({})
+    expect(scopedLocalArgs(null)).toStrictEqual({})
+  })
+
+  it('authRequired is true exactly when the flag is on (renamed from accessOpen)', () => {
+    delete process.env.LOCAL_PM_REQUIRE_AUTH
+    expect(authRequired()).toBe(false)
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'true'
+    expect(authRequired()).toBe(true)
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'false'
+    expect(authRequired()).toBe(false)
+  })
+})
+
+describe('Users collection — default member, first account administers (#35 follow-up)', () => {
+  it('defaults the role to member, never admin', () => {
+    const roleField = Users.fields.find(
+      (field) => 'name' in field && (field as { name?: string }).name === 'role',
+    ) as { defaultValue?: string }
+    expect(roleField.defaultValue).toBe('member')
+  })
+
+  it('promotes the FIRST created account to admin via beforeChange', async () => {
+    const promote = Users.hooks!.beforeChange![0] as unknown as (args: {
+      operation: string
+      data: Record<string, unknown>
+      req: { payload: Payload }
+    }) => Promise<void>
+
+    const payloadWith = (totalDocs: number): Payload =>
+      ({
+        find: async (args: Record<string, unknown>) => {
+          expect(args.collection).toBe('users')
+          expect(args.overrideAccess).toBe(true)
+          return { totalDocs, docs: [] }
+        },
+      }) as unknown as Payload
+
+    // Empty install: the bootstrap account is promoted.
+    const first = { email: 'first@local.test', role: 'member' }
+    await promote({ operation: 'create', data: first, req: { payload: payloadWith(0) } })
+    expect(first.role).toBe('admin')
+
+    // Install already has accounts: the role the caller asked for stands.
+    const second = { email: 'second@local.test', role: 'member' }
+    await promote({ operation: 'create', data: second, req: { payload: payloadWith(7) } })
+    expect(second.role).toBe('member')
+  })
+
+  it('never queries or mutates on update operations', async () => {
+    const promote = Users.hooks!.beforeChange![0] as unknown as (args: {
+      operation: string
+      data: Record<string, unknown>
+      req: { payload: Payload }
+    }) => Promise<void>
+    const boom = {
+      find: async () => {
+        throw new Error('must not query on update')
+      },
+    } as unknown as Payload
+    const data = { role: 'member' }
+    await promote({ operation: 'update', data, req: { payload: boom } })
+    expect(data.role).toBe('member')
+  })
+})
+
+describe('collection wiring — declared access sets, not the weak fallback', () => {
+  it('initiatives and attachments declare the task-41 access sets', () => {
+    expect(Initiatives.access).toBe(initiativesAccess)
+    expect(Attachments.access).toBe(attachmentsAccess)
+  })
+
+  it('attachments are all-or-nothing: member reads/writes, delete is install-admin', async () => {
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'true'
+    const member = memberWith('member1', [P1], 'member')
+    asMemberUser(member)
+    expect(await call(attachmentsAccess.read, member)).toBe(true)
+    expect(await call(attachmentsAccess.create, member)).toBe(true)
+    expect(await call(attachmentsAccess.delete, member, { id: 'a1' })).toBe(false)
+    expect(
+      await call(attachmentsAccess.delete, { id: 'admin1', role: 'admin' }, { id: 'a1' }),
+    ).toBe(true)
+  })
+})
+
+describe('members self-profile + field-level grants (Anas #35 point 3)', () => {
+  beforeEach(() => {
+    process.env.LOCAL_PM_REQUIRE_AUTH = 'true'
+  })
+
+  it('a member may complete their own profile row (team/user fields) but never touch grants', async () => {
+    const member = memberWith('member1', [P1], 'member')
+    asMemberUser(member)
+
+    // Own-row update, grants untouched: allowed.
+    expect(
+      await call(membersAccess.update, member, {
+        id: 'gp1',
+        data: { team: 'team9' },
+        originalDoc: { id: 'gp1', user: String(member.id) },
+      }),
+    ).toBe(true)
+
+    // Own-row update that slips in a grant field: denied regardless.
+    expect(
+      await call(membersAccess.update, member, {
+        id: 'gp1',
+        data: { team: 'team9', projects: [P1, P2] },
+        originalDoc: { id: 'gp1', user: String(member.id) },
+      }),
+    ).toBe(false)
+    expect(
+      await call(membersAccess.update, member, {
+        id: 'gp1',
+        data: { projectRole: 'admin' },
+        originalDoc: { id: 'gp1', user: 'someone-else' },
+      }),
+    ).toBe(false)
+  })
+
+  it('a member cannot PATCH their own projectRole or projects (field-level)', async () => {
+    const member = memberWith('member1', [P1], 'member')
+    asMemberUser(member)
+
+    expect(
+      await call(membersAccess.update, member, {
+        id: 'gp1',
+        data: { projectRole: 'admin' },
+        originalDoc: { id: 'gp1', user: String(member.id) },
+      }),
+    ).toBe(false)
+
+    expect(
+      await call(membersAccess.update, member, {
+        id: 'gp1',
+        data: { projects: [P2] },
+        originalDoc: { id: 'gp1', user: String(member.id) },
+      }),
+    ).toBe(false)
+
+    // No doc / no linked account: deny.
+    expect(
+      await call(membersAccess.update, member, { id: 'gp1', data: { projectRole: 'admin' } }),
+    ).toBe(false)
+  })
+
+  it('install admin keeps full members update; self-profile create unchanged', async () => {
+    const admin = { id: 'admin1', role: 'admin' }
+    expect(
+      await call(membersAccess.update, admin, { id: 'gp1', data: { projectRole: 'admin' } }),
+    ).toBe(true)
+    expect(await call(membersAccess.update, admin, { id: 'gp1', data: { team: 't' } })).toBe(true)
+
+    const member = memberWith('member1', [], 'member')
+    asMemberUser(member)
+    expect(
+      await call(membersAccess.create, member, { data: { user: String(member.id) } }),
+    ).toBe(true)
   })
 })

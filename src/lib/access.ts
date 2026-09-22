@@ -3,6 +3,13 @@ import type { Access, Payload, PayloadRequest, TypedUser, Where } from 'payload'
 export const requireAuthEnabled = (): boolean => process.env.LOCAL_PM_REQUIRE_AUTH === 'true'
 
 /**
+ * Canonical name for requireAuthEnabled: true when the install requires
+ * authentication ("auth on"). Every access rule reads this; `accessOpen` was
+ * retired because it read as the opposite of what it returns.
+ */
+export const authRequired = requireAuthEnabled
+
+/**
  * Project-role tiers carried by Members.projectRole.
  * Viewer reads, member reads and writes, admin also deletes inside the project.
  */
@@ -396,12 +403,20 @@ export const rootAccess: Record<string, Access> = {
   },
 }
 
+/**
+ * Attachments: all-or-nothing under auth on — every authenticated member may
+ * read and write, deletes stay with the install admin. Files live on tickets
+ * a member can already reach; per-project attachment scoping does not exist.
+ */
 export const attachmentsAccess: Record<string, Access> = rootAccess
 
 /**
- * Members: profile directory. Auth on: install-admin manages everything; a
- * signed-in account may read members (pickers, mentions) and create its own
- * profile, but never edit or delete — workspace grants are admin territory.
+ * Members: profile directory. Auth on: install-admin manages everything. A
+ * signed-in account may read members (pickers, mentions), create its own
+ * profile, and complete its OWN profile row with safe profile fields only —
+ * the grant fields (projects, projectRole) are install-admin territory at
+ * collection AND field level: the account holder can never widen their own
+ * grants, not even on their own row.
  */
 export const membersAccess: Record<string, Access> = {
   read: async ({ req }) => (requireAuthEnabled() ? Boolean(req.user) : true),
@@ -415,10 +430,21 @@ export const membersAccess: Record<string, Access> = {
     // profile carries no grants until an admin assigns them.
     return refId(data?.user) === String(user.id)
   },
-  update: async ({ req }) => {
+  update: async (args) => {
     if (!requireAuthEnabled()) return true
+    const { req, data, originalDoc } = args as {
+      req: PayloadRequest
+      data?: Record<string, unknown>
+      originalDoc?: { user?: unknown } | null
+    }
     const user = req.user as TypedUser | undefined
-    return Boolean(user && isInstallAdmin(user))
+    if (!user) return false
+    if (isInstallAdmin(user)) return true
+    // Grant fields are admin-only no matter whose row is being edited.
+    if (data !== undefined && ['projects', 'projectRole'].some((f) => f in data)) return false
+    // Self-service completion of one's own profile row (safe fields only):
+    // the edited row must be the account's own linked Member document.
+    return refId(originalDoc?.user) === String(user.id)
   },
   delete: async ({ req }) => {
     if (!requireAuthEnabled()) return true
@@ -442,7 +468,10 @@ export const initiativesAccess: Record<string, Access> = {
 }
 
 // Backwards-compatible named exports (Activity's read, Users' rules and any
-// external consumer). Under auth-off they behave exactly as before.
+// external consumer). Under auth-off they behave exactly as before. Under
+// auth-on every operation requires a signed-in account — the old
+// "Boolean(req.user) may write" shape is deliberately NOT preserved, because
+// it is the exact grant this task set out to close.
 export const readAccess: Access = ({ req }) => {
   if (!requireAuthEnabled()) return true
   return Boolean(req.user)

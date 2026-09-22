@@ -4,7 +4,7 @@ import config from '@payload-config'
 import { resolveWorkflow } from '@/lib/workflow'
 import type { Where } from 'payload'
 import { ticketSearchWhere } from '@/lib/ticket-search'
-import { accessOpen, requireUser, projectScopeWhere } from '@/lib/rbac'
+import { requireUser, projectScopeWhere, authRequired, scopedLocalArgs } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Board · local-pm' }
@@ -30,8 +30,8 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
   const query = (params.q || '').trim()
 
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
-  const scope = await projectScopeWhere(user)
+  const user = authRequired() ? await requireUser() : null
+  const scope = authRequired() ? await projectScopeWhere(user) : null
 
   // A deep link into a project outside this membership resolves to nothing,
   // not to a leak: the scope narrows whatever the URL asked for.
@@ -65,7 +65,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
           sort: 'sortOrder',
           depth: 2,
           where: buildWhere(status.id),
-          ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+          ...scopedLocalArgs(user),
         }),
       ),
     ),
@@ -73,7 +73,7 @@ export default async function BoardPage({ searchParams }: BoardPageProps) {
       collection: 'projects',
       limit: 0,
       depth: 0,
-      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+      ...scopedLocalArgs(user),
     }),
   ])
 

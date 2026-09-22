@@ -4,7 +4,7 @@ import config from '@payload-config'
 import { ProjectDetail } from '@/components/projects/ProjectDetail'
 import { StatusType } from '@/types/enums'
 import { resolveWorkflow } from '@/lib/workflow'
-import { accessOpen, requireUser } from '@/lib/rbac'
+import { requireUser, authRequired, scopedLocalArgs } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +28,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const { id } = await params
   const { tab } = await searchParams
   const payload = await getPayload({ config })
-  const user = accessOpen() ? await requireUser() : null
+  const user = authRequired() ? await requireUser() : null
 
   try {
     // With auth on, collectionAccess on projects runs (overrideAccess false):
@@ -38,7 +38,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
       collection: 'projects',
       id,
       depth: 0,
-      ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+      ...scopedLocalArgs(user),
     })
     if (!project) notFound()
 
@@ -66,7 +66,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
         limit: 20,
         depth: 0,
         sort: 'name',
-        ...(accessOpen() ? {} : { user: user ?? undefined, overrideAccess: false as const }),
+        ...scopedLocalArgs(user),
       }),
     ])
 
